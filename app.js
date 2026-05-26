@@ -1,6 +1,5 @@
 // --- 定数・グローバル変数 ---
-const DEFAULT_CONFIG_URL = "templates_config.json";
-const FONT_URL = "ipaexm.ttf"; // カレントディレクトリにダウンロード済みのフォントを参照
+const FONT_URL = "hgrgy.ttc"; // カレントディレクトリのHGS行書体を参照
 
 let currentTemplate = "10000en";
 let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
@@ -275,9 +274,14 @@ async function generatePDF() {
         // 3. 日本語フォントの読み込みと埋め込み
         let fontToUse = null;
         if (loadedFontBytes) {
-            pdfDoc.registerFontkit(window.fontkit); // 必要な場合はfontkitを使用。通常TrueTypeの埋め込みで不要な場合もあるが、日本語TTFはregisterFontkitが必要。
-            // ※ pdf-lib.min.js に標準の日本語フォントは含まれていないため、TTFを埋め込みます
-            fontToUse = await pdfDoc.embedFont(loadedFontBytes, { subset: true });
+            pdfDoc.registerFontkit(window.fontkit); // 必要な場合はfontkitを使用
+            
+            // TTC (TrueType Collection) のパースとフォント抽出対応
+            const fontkit = window.fontkit;
+            const parsedFont = fontkit.create(new Uint8Array(loadedFontBytes));
+            const font = parsedFont.fonts ? parsedFont.fonts[0] : parsedFont;
+            
+            fontToUse = await pdfDoc.embedFont(font, { subset: true });
         } else {
             // フォールバック: 標準フォント (日本語文字化けする可能性大)
             fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
@@ -302,25 +306,65 @@ async function generatePDF() {
             const y_pt = mmToPt(fieldVal.y);
             const fontSize = fieldVal.font_size;
             
-            // アライメント（中央揃えなど）の計算
-            let drawX = x_pt;
-            const textWidth = fontToUse.widthOfTextAtSize(textValue, fontSize);
-            const alignment = config.templates[currentTemplate].fields[fieldKey].alignment || "left";
-            
-            if (alignment === "center") {
-                drawX = x_pt - (textWidth / 2);
-            } else if (alignment === "right") {
-                drawX = x_pt - textWidth;
-            }
+            const fieldConfig = config.templates[currentTemplate].fields[fieldKey];
+            const alignment = fieldConfig.alignment || "left";
+            const isVertical = fieldConfig.vertical || false;
 
-            // 文字描画
-            firstPage.drawText(textValue, {
-                x: drawX,
-                y: y_pt,
-                size: fontSize,
-                font: fontToUse,
-                color: PDFLib.rgb(0.1, 0.1, 0.1) // ほぼ黒
-            });
+            if (isVertical) {
+                // 縦書きの描画処理
+                const chars = Array.from(textValue);
+                let currentY = y_pt;
+                // 縦書き時の文字間隔（フォントサイズに少しゆとりを持たせる）
+                const spacing = fontSize * 1.02;
+                
+                for (const char of chars) {
+                    let drawX = x_pt;
+                    const charWidth = fontToUse.widthOfTextAtSize(char, fontSize);
+                    
+                    if (alignment === "center") {
+                        drawX = x_pt - (charWidth / 2);
+                    } else if (alignment === "right") {
+                        drawX = x_pt - charWidth;
+                    }
+                    
+                    // 縦書き用の記号変換
+                    let charToDraw = char;
+                    if (char === "ー" || char === "─" || char === "―" || char === "-") {
+                        charToDraw = "丨"; // 縦書き用の長音
+                    } else if (char === "（") {
+                        charToDraw = "︵";
+                    } else if (char === "）") {
+                        charToDraw = "︶";
+                    }
+                    
+                    firstPage.drawText(charToDraw, {
+                        x: drawX,
+                        y: currentY,
+                        size: fontSize,
+                        font: fontToUse,
+                        color: PDFLib.rgb(0.1, 0.1, 0.1)
+                    });
+                    currentY -= spacing; // 縦書きなので下に下げる
+                }
+            } else {
+                // 通常の横書き描画処理
+                let drawX = x_pt;
+                const textWidth = fontToUse.widthOfTextAtSize(textValue, fontSize);
+                
+                if (alignment === "center") {
+                    drawX = x_pt - (textWidth / 2);
+                } else if (alignment === "right") {
+                    drawX = x_pt - textWidth;
+                }
+
+                firstPage.drawText(textValue, {
+                    x: drawX,
+                    y: y_pt,
+                    size: fontSize,
+                    font: fontToUse,
+                    color: PDFLib.rgb(0.1, 0.1, 0.1) // ほぼ黒
+                });
+            }
         }
 
         // 4. PDFを保存してBlobを生成
