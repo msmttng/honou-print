@@ -1,0 +1,44 @@
+{
+  "default_font": "IPAexMincho",
+  "templates": {
+    "10000en": {
+      "template_file": "奉納ビラ縦.pdf",
+      "fields": {
+        "name": {
+          "x_mm": 105,
+          "y_mm": 120,
+          "font_size": 28,
+          "alignment": "center"
+        }
+      }
+    },
+    "1000en": {
+      "template_file": "奉納ビラ縦阡.pdf",
+      "fields": {
+        "name": {
+          "x_mm": 105,
+          "y_mm": 120,
+          "font_size": 28,
+          "alignment": "center"
+        }
+      }
+    },
+    "free": {
+      "template_file": "奉納ビラフリー.pdf",
+      "fields": {
+        "name": {
+          "x_mm": 105,
+          "y_mm": 160,
+          "font_size": 28,
+          "alignment": "center"
+        },
+        "amount": {
+          "x_mm": 105,
+          "y_mm": 90,
+          "font_size": 24,
+          "alignment": "center"
+        }
+      }
+    }
+  }
+}
