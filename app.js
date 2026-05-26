@@ -140,7 +140,7 @@ async function getTemplateBytes(templateKey) {
     const filename = config.templates[templateKey].template_file;
     showStatus("テンプレートPDF読み込み中...", true);
     
-    const response = await fetch(filename);
+    const response = await fetch(encodeURI(filename));
     if (!response.ok) {
         throw new Error(`テンプレートファイルが見つかりません: ${filename}`);
     }
