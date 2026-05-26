@@ -5,8 +5,8 @@
       "template_file": "奉納ビラ縦.pdf",
       "fields": {
         "name": {
-          "x_mm": 105,
-          "y_mm": 120,
+          "x_mm": 60.5,
+          "y_mm": 150,
           "font_size": 28,
           "alignment": "center"
         }
@@ -16,8 +16,8 @@
       "template_file": "奉納ビラ縦阡.pdf",
       "fields": {
         "name": {
-          "x_mm": 105,
-          "y_mm": 120,
+          "x_mm": 60.5,
+          "y_mm": 150,
           "font_size": 28,
           "alignment": "center"
         }
@@ -27,14 +27,14 @@
       "template_file": "奉納ビラフリー.pdf",
       "fields": {
         "name": {
-          "x_mm": 105,
-          "y_mm": 160,
+          "x_mm": 60.5,
+          "y_mm": 180,
           "font_size": 28,
           "alignment": "center"
         },
         "amount": {
-          "x_mm": 105,
-          "y_mm": 90,
+          "x_mm": 60.5,
+          "y_mm": 100,
           "font_size": 24,
           "alignment": "center"
         }
