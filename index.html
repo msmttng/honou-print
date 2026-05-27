@@ -1189,9 +1189,14 @@
             <div class="card" style="height: 100%; display: flex; flex-direction: column;">
                 <div class="card-title" style="margin-bottom: 12px;">
                     <span><i class="fa-solid fa-eye"></i> リアルタイムPDFプレビュー</span>
-                    <button class="btn btn-primary btn-success" onclick="printPDF()" style="padding: 6px 14px; font-size: 13px;">
-                        <i class="fa-solid fa-print"></i> 印刷 / PDF保存
-                    </button>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <label style="font-size: 13px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" id="includeBackground" checked onchange="triggerAutoUpdate()"> 背景を含める
+                        </label>
+                        <button class="btn btn-primary btn-success" onclick="printPDF()" style="padding: 6px 14px; font-size: 13px;">
+                            <i class="fa-solid fa-print"></i> 印刷 / PDF保存
+                        </button>
+                    </div>
                 </div>
 
                 <div class="preview-container">

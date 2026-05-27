@@ -602,9 +602,23 @@ async function generatePDF(isPrinting = false) {
         if (!templateBytes) {
             throw new Error(`テンプレートデータが見つかりません: ${currentTemplate}`);
         }
-        
-        // 2. pdf-libでPDFをロード
-        const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+        // 2. pdf-libでPDFをロードまたは新規作成
+        let pdfDoc;
+        let firstPage;
+        const includeBackground = document.getElementById("includeBackground") ? document.getElementById("includeBackground").checked : true;
+
+        if (includeBackground) {
+            pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+            firstPage = pdfDoc.getPages()[0];
+        } else {
+            // 背景なしの場合は、寸法を取得するためだけに一時ロード
+            const tempDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const { width, height } = tempDoc.getPages()[0].getSize();
+            
+            // 白紙のPDFを新規作成
+            pdfDoc = await PDFLib.PDFDocument.create();
+            firstPage = pdfDoc.addPage([width, height]);
+        }
         
         // 3. 日本語フォントの読み込みと埋め込み
         let fontToUse = null;
@@ -619,9 +633,6 @@ async function generatePDF(isPrinting = false) {
         } else {
             fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
         }
-
-        const pages = pdfDoc.getPages();
-        const firstPage = pages[0];
         
         // デザイン調整値の読み出し
         const settings = designSettings[currentTemplate];
