@@ -906,11 +906,11 @@ function renderTable() {
         }
 
         tr.innerHTML = `
-            <td>${dateStr}</td>
-            <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-            <td style="font-weight: 500;">${escapeHTML(r.name)}</td>
-            <td>${escapeHTML(r.amount)}</td>
-            <td>
+            <td data-label="日時">${dateStr}</td>
+            <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
+            <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
+            <td data-label="金額/物品">${escapeHTML(r.amount)}</td>
+            <td data-label="">
                 <div class="action-btns">
                     <button class="btn-table btn-table-edit" onclick="loadRecordToForm('${r.id}')">
                         <i class="fa-solid fa-arrows-spin"></i>呼び出す
@@ -970,6 +970,76 @@ function toggleAccordion() {
         arrow.className = "fa-solid fa-chevron-down";
     }
 }
+
+// #8 スマホでは微調整アコーディオンをデフォルトで開く
+if (window.innerWidth <= 768) {
+    window.addEventListener("DOMContentLoaded", () => {
+        const accordion = document.getElementById("calibrationAccordion");
+        const arrow = document.getElementById("accordionArrow");
+        if (accordion && !accordion.classList.contains("open")) {
+            accordion.classList.add("open");
+            if (arrow) arrow.className = "fa-solid fa-chevron-up";
+        }
+    });
+}
+
+// #9 スマホ用PDF保存（直接ダウンロード）
+async function mobilePrintPDF() {
+    const nameInput = document.getElementById("nameInput").value.trim();
+    if (!nameInput) {
+        showToast("氏名を入力してから保存してください", "error");
+        return;
+    }
+
+    showStatus("PDF生成中...", true);
+    const pdfBlob = await generatePDF(true);
+    
+    if (pdfBlob) {
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.download = `奉納ビラ_${nameInput}.pdf`;
+        link.click();
+        URL.revokeObjectURL(pdfUrl);
+        showToast("PDFを保存しました");
+        showStatus("PDF保存完了", false);
+        saveRecord(false);
+    }
+}
+
+// #7 長押しリピート機能（+/-ボタン）
+(function setupLongPressRepeat() {
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".calib-btn").forEach(btn => {
+            let intervalId = null;
+            let timeoutId = null;
+
+            const startRepeat = (e) => {
+                e.preventDefault();
+                // 初回は通常のクリックで処理済み
+                timeoutId = setTimeout(() => {
+                    intervalId = setInterval(() => {
+                        btn.click();
+                    }, 80);
+                }, 400);
+            };
+
+            const stopRepeat = () => {
+                clearTimeout(timeoutId);
+                clearInterval(intervalId);
+                intervalId = null;
+                timeoutId = null;
+            };
+
+            btn.addEventListener("touchstart", startRepeat, { passive: false });
+            btn.addEventListener("touchend", stopRepeat);
+            btn.addEventListener("touchcancel", stopRepeat);
+            btn.addEventListener("mousedown", startRepeat);
+            btn.addEventListener("mouseup", stopRepeat);
+            btn.addEventListener("mouseleave", stopRepeat);
+        });
+    });
+})();
 
 // --- フォームのクリア ---
 function clearForm() {

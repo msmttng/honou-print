@@ -66,27 +66,59 @@
         /* モバイル最適化（スマホ用） */
         @media (max-width: 768px) {
             body {
-                padding: 10px;
+                padding: 8px;
+                padding-bottom: 80px; /* 下部固定バーの分 */
             }
             .container {
                 display: flex;
                 flex-direction: column;
-                gap: 12px;
+                gap: 10px;
+            }
+            /* #2 ヘッダーのコンパクト化 */
+            header {
+                padding: 8px 14px;
+                margin-bottom: 4px;
             }
             header h1 {
-                font-size: 18px;
+                font-size: 14px;
+                gap: 6px;
             }
+            header .status {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+            /* #1 プレビューの高さ縮小 + Sticky */
             .right-panel {
                 order: -1;
                 position: sticky;
-                top: 8px;
+                top: 0;
                 z-index: 100;
             }
-            .preview-container {
-                min-height: 40vh !important;
-                height: 45vh !important;
-                box-shadow: 0 8px 16px -8px rgba(0,0,0,0.2);
+            .right-panel .card {
+                padding: 10px;
             }
+            .right-panel .card-title {
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+            .preview-container {
+                min-height: 32vh !important;
+                height: 35vh !important;
+                box-shadow: 0 4px 12px -4px rgba(0,0,0,0.15);
+            }
+            /* #3 プレビュー内の印刷ボタンを非表示（下部固定バーに移動） */
+            .right-panel .card-title .btn {
+                display: none !important;
+            }
+            /* カード内余白縮小 */
+            .left-panel .card {
+                padding: 16px;
+            }
+            .card-title {
+                font-size: 15px;
+                margin-bottom: 14px;
+            }
+            /* ボタンのタッチ対応 */
             .calib-btn {
                 width: 44px !important;
                 height: 44px !important;
@@ -97,7 +129,95 @@
                 font-size: 16px !important;
             }
             .template-btn {
-                padding: 16px 10px;
+                padding: 14px 8px;
+            }
+            .template-btn i {
+                font-size: 16px;
+            }
+            /* #6 検索バーのレスポンシブ対応 */
+            .db-header {
+                flex-wrap: wrap;
+            }
+            .db-header > div {
+                width: 100% !important;
+                justify-content: stretch !important;
+            }
+            .db-search {
+                max-width: 100% !important;
+                flex: 1;
+            }
+            /* #5 名簿テーブルのカード化 */
+            .table-responsive table thead {
+                display: none;
+            }
+            .table-responsive table,
+            .table-responsive table tbody,
+            .table-responsive table tr,
+            .table-responsive table td {
+                display: block;
+                width: 100%;
+            }
+            .table-responsive table tr {
+                padding: 12px;
+                margin-bottom: 8px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                background: #fff;
+            }
+            .table-responsive table td {
+                padding: 4px 0;
+                border: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 14px;
+            }
+            .table-responsive table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+                font-size: 12px;
+                min-width: 80px;
+            }
+            .table-responsive table td:last-child {
+                justify-content: flex-end;
+                padding-top: 8px;
+                margin-top: 4px;
+                border-top: 1px solid #e2e8f0;
+            }
+            /* トースト位置調整 */
+            .toast {
+                bottom: 90px !important;
+                left: 16px;
+                right: 16px;
+            }
+        }
+
+        /* #3 下部固定アクションバー（スマホ専用） */
+        .mobile-action-bar {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .mobile-action-bar {
+                display: flex;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                z-index: 200;
+                background: rgba(255,255,255,0.95);
+                backdrop-filter: blur(12px);
+                border-top: 1px solid #cbd5e1;
+                padding: 10px 16px;
+                gap: 10px;
+                box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+            }
+            .mobile-action-bar .btn {
+                flex: 1;
+                padding: 14px;
+                font-size: 15px;
+                font-weight: 600;
+                border-radius: 10px;
             }
         }
 
@@ -585,7 +705,7 @@
             border-radius: 8px;
             color: #fff;
             background: var(--success);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -645,11 +765,11 @@
         }
         }
         
-        /* 初期セットアップ用オーバーレイ */
+        /* #10 初期セットアップ用オーバーレイ（ライトテーマ対応） */
         #setupOverlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(241, 245, 249, 0.97);
             z-index: 9999;
             display: flex;
             justify-content: center;
@@ -660,14 +780,14 @@
             display: none;
         }
         .setup-card {
-            background: var(--surface);
+            background: #ffffff;
             padding: 40px;
             border-radius: var(--card-radius);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
             max-width: 600px;
             width: 90%;
             text-align: center;
-            border: 1px solid var(--glass-border);
+            border: 1px solid #e2e8f0;
         }
         .setup-card h2 {
             color: var(--text-primary);
@@ -699,7 +819,7 @@
         }
         .file-list {
             text-align: left;
-            background: rgba(0,0,0,0.2);
+            background: #f1f5f9;
             padding: 16px;
             border-radius: 8px;
             margin-bottom: 24px;
@@ -709,7 +829,7 @@
             align-items: center;
             gap: 10px;
             margin-bottom: 8px;
-            color: #d1d5db;
+            color: var(--text-secondary);
         }
         .file-item:last-child { margin-bottom: 0; }
         .file-item i.success { color: var(--success); }
@@ -834,7 +954,7 @@
                         <div class="calibration-grid">
                             
                             <div class="form-group" style="margin-bottom: 0;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #fbbf24;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--warning);">
                                     <input type="checkbox" id="showBoundingBox" onchange="triggerAutoUpdate()">
                                     プレビューに印字枠線を表示する
                                 </label>
@@ -1029,6 +1149,16 @@
     <div id="toast" class="toast">
         <i class="fa-solid fa-circle-check"></i>
         <span id="toastMessage">完了しました</span>
+    </div>
+
+    <!-- #3 スマホ用下部固定アクションバー -->
+    <div class="mobile-action-bar">
+        <button class="btn btn-success" onclick="mobilePrintPDF()">
+            <i class="fa-solid fa-download"></i> PDFを保存
+        </button>
+        <button class="btn btn-primary" onclick="saveRecord()">
+            <i class="fa-solid fa-user-plus"></i> 名簿登録
+        </button>
     </div>
 
     <!-- 差し込み印刷制御JavaScript -->
