@@ -1161,89 +1161,184 @@ function showToast(message, type = "success") {
     }, 3000);
 }
 
-// --- スプレッドシート連携（オートコンプリート） ---
+// --- スプレッドシート連携（GAS）設定と制御 ---
 
-// CSVテキストをパース（シンプルなCSVパーサー）
-function parseCSV(text) {
-    const lines = text.split("\n").filter(l => l.trim());
-    if (lines.length < 2) return [];
-    const results = [];
-    for (let i = 1; i < lines.length; i++) {
-        // カンマ区切り（ダブルクォート対応）
-        const row = [];
-        let current = "";
-        let inQuotes = false;
-        for (const ch of lines[i]) {
-            if (ch === '"') {
-                inQuotes = !inQuotes;
-            } else if (ch === ',' && !inQuotes) {
-                row.push(current.trim());
-                current = "";
-            } else {
-                current += ch;
-            }
-        }
-        row.push(current.trim());
-        if (row[0]) {
-            results.push({ name: row[0], detail: row[1] || "" });
-        }
+// GAS アコーディオンの開閉トグル
+function toggleGasAccordion() {
+    const accordion = document.getElementById("gasAccordion");
+    const arrow = document.getElementById("gasAccordionArrow");
+    
+    accordion.classList.toggle("open");
+    if (accordion.classList.contains("open")) {
+        arrow.className = "fa-solid fa-chevron-up";
+    } else {
+        arrow.className = "fa-solid fa-chevron-down";
     }
-    return results;
 }
 
-// スプレッドシートからデータを取得
-async function syncFromSpreadsheet() {
-    const btn = document.getElementById("btnSyncSheet");
-    btn.classList.add("syncing");
-    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 同期中...';
-
-    try {
-        const response = await fetch(SHEET_CSV_URL);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const csvText = await response.text();
-        sheetData = parseCSV(csvText);
-
-        // LocalStorageにキャッシュ
+// GAS URLの入力時保存
+function saveGasUrl() {
+    const input = document.getElementById("gasUrlInput");
+    if (input) {
+        gasUrl = input.value.trim();
         try {
-            localStorage.setItem("sheetDataCache", JSON.stringify(sheetData));
-            localStorage.setItem("sheetDataCacheTime", new Date().toISOString());
-        } catch (e) { /* localStorageエラーは無視 */ }
-
-        showToast(`奉納者データ ${sheetData.length}件を同期しました`);
-    } catch (e) {
-        console.error("スプレッドシート同期エラー:", e);
-        showToast("スプレッドシートの取得に失敗しました", "error");
-    } finally {
-        btn.classList.remove("syncing");
-        btn.innerHTML = '<i class="fa-solid fa-rotate"></i> スプレッドシートから同期';
+            localStorage.setItem("pdf_mail_merge_gas_url", gasUrl);
+        } catch (e) {
+            console.warn("GAS URL保存失敗:", e);
+        }
     }
 }
 
-// 起動時にキャッシュから復元し、バックグラウンドで同期
-function loadSheetDataCache() {
+// 起動時のGAS設定とキャッシュの読み込み
+function loadGasSettings() {
     try {
-        const cached = localStorage.getItem("sheetDataCache");
-        if (cached) {
-            sheetData = JSON.parse(cached);
+        // GAS URLの復元
+        const savedUrl = localStorage.getItem("pdf_mail_merge_gas_url");
+        if (savedUrl) {
+            gasUrl = savedUrl;
+            const input = document.getElementById("gasUrlInput");
+            if (input) input.value = gasUrl;
         }
-    } catch (e) { /* 無視 */ }
-    // バックグラウンドで最新を取得
-    syncFromSpreadsheet().catch(() => {});
+
+        // サジェストデータのキャッシュ復元
+        const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
+        if (cachedSuggests) {
+            suggestData = JSON.parse(cachedSuggests);
+        }
+    } catch (e) {
+        console.error("GAS設定の復元失敗:", e);
+    }
+
+    // GAS URLが設定されていれば、バックグラウンドで同期を実行
+    if (gasUrl) {
+        syncFromGAS(true).catch(() => {});
+    }
 }
 
-// オートコンプリート表示
+// GASからサジェストデータを取得（GET）
+async function syncFromGAS(isBackground = false) {
+    if (!gasUrl) {
+        if (!isBackground) showToast("GASのウェブアプリURLを設定してください", "error");
+        return;
+    }
+
+    const btn = document.getElementById("btnSyncGAS");
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 同期中...';
+        btn.style.opacity = "0.7";
+        btn.disabled = true;
+    }
+
+    try {
+        // キャッシュクリアのためのタイムスタンプを追加
+        const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
+        const response = await fetch(fetchUrl, {
+            method: "GET",
+            mode: "cors"
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // サジェストデータを更新
+        suggestData = {
+            "10000en_names": data["10000en_names"] || [],
+            "1000en_names": data["1000en_names"] || [],
+            "free_names": data["free_names"] || [],
+            "free_items": data["free_items"] || []
+        };
+
+        // LocalStorageに保存
+        try {
+            localStorage.setItem("pdf_mail_merge_suggests", JSON.stringify(suggestData));
+            localStorage.setItem("pdf_mail_merge_suggests_time", new Date().toISOString());
+        } catch (e) { /* 無視 */ }
+
+        if (!isBackground) {
+            const totalCount = suggestData["10000en_names"].length + suggestData["1000en_names"].length + suggestData["free_names"].length + suggestData["free_items"].length;
+            showToast(`スプレッドシートからサジェストデータ ${totalCount}件を同期しました`);
+        }
+    } catch (e) {
+        console.error("GAS同期エラー:", e);
+        if (!isBackground) showToast("サジェストデータの同期に失敗しました: " + e.message, "error");
+    } finally {
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> スプレッドシートから同期';
+            btn.style.opacity = "1";
+            btn.disabled = false;
+        }
+    }
+}
+
+// 履歴データをスプレッドシートへ自動追記（POST）
+async function sendToGAS(record) {
+    if (!gasUrl) return; // GAS URLが未設定ならスキップ
+
+    let templateTypeStr = "フリー用";
+    if (record.template === "10000en") {
+        templateTypeStr = "萬圓用";
+    } else if (record.template === "1000en") {
+        templateTypeStr = "阡圓用";
+    }
+
+    const payload = {
+        timestamp: new Date(record.date).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+        templateType: templateTypeStr,
+        name: record.name,
+        amount: record.amount
+    };
+
+    try {
+        console.log("GASへのPOST送信を開始します...", payload);
+        const response = await fetch(gasUrl, {
+            method: "POST",
+            mode: "no-cors", // CORS制約（リダイレクトや異なるオリジンへのPOST制限）を回避するため no-cors モードで送信
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        // no-cors の場合、response.ok や status は取得できませんが、送信自体はGASに届きます
+        console.log("GASへのデータ送信要求を送信しました");
+    } catch (e) {
+        console.error("GASへの履歴追記エラー:", e);
+    }
+}
+
+// 氏名入力のオートコンプリート表示
 function showAutoComplete() {
     const input = document.getElementById("nameInput");
     const list = document.getElementById("autocompleteList");
-    const query = input.value.trim();
+    const query = input.value.trim().toLowerCase();
 
-    if (!query || sheetData.length === 0) {
+    if (!query) {
         list.classList.remove("show");
         return;
     }
 
-    const matches = sheetData.filter(d =>
-        d.name.includes(query) || d.detail.includes(query)
+    // 現在のテンプレートに対応した氏名サジェストリストを決定
+    let targetList = [];
+    if (currentTemplate === "10000en") {
+        targetList = suggestData["10000en_names"];
+    } else if (currentTemplate === "1000en") {
+        targetList = suggestData["1000en_names"];
+    } else if (currentTemplate === "free") {
+        targetList = suggestData["free_names"];
+    }
+
+    if (!targetList || targetList.length === 0) {
+        list.classList.remove("show");
+        return;
+    }
+
+    // クエリと部分一致する候補をフィルタリング
+    const matches = targetList.filter(name =>
+        name.toLowerCase().includes(query)
     ).slice(0, 8);
 
     if (matches.length === 0) {
@@ -1251,39 +1346,86 @@ function showAutoComplete() {
         return;
     }
 
-    list.innerHTML = matches.map((m, i) => `
+    list.innerHTML = matches.map((name, i) => `
         <div class="autocomplete-item" onclick="selectAutoComplete(${i})" data-index="${i}">
-            <span class="ac-name">${escapeHTML(m.name)}</span>
-            <span class="ac-detail">${escapeHTML(m.detail)}</span>
+            <span class="ac-name">${escapeHTML(name)}</span>
         </div>
     `).join("");
     list.classList.add("show");
 
-    // 一時的にマッチ結果を保存（選択用）
+    // マッチ結果を一時保存（選択用）
     list._matches = matches;
 }
 
-// オートコンプリート選択時
+// 氏名のオートコンプリート選択
 function selectAutoComplete(index) {
     const list = document.getElementById("autocompleteList");
     const match = list._matches[index];
     if (!match) return;
 
-    // 氏名のみセット
-    document.getElementById("nameInput").value = match.name;
+    document.getElementById("nameInput").value = match;
     triggerAutoUpdate();
     list.classList.remove("show");
 }
 
-// リスト外クリックで閉じる
-document.addEventListener("click", (e) => {
-    const list = document.getElementById("autocompleteList");
-    if (list && !e.target.closest(".autocomplete-wrapper")) {
-        list.classList.remove("show");
-    }
-});
+// フリー用金額・物品名のオートコンプリート表示
+function showAutoCompleteAmount() {
+    const input = document.getElementById("amountInput");
+    const list = document.getElementById("autocompleteListAmount");
+    const query = input.value.trim().toLowerCase();
 
-// 起動時にスプレッドシートデータをロード
-window.addEventListener("DOMContentLoaded", () => {
-    loadSheetDataCache();
+    // フリー用以外、またはクエリが空、またはサジェストデータがない場合は表示しない
+    if (currentTemplate !== "free" || !query) {
+        list.classList.remove("show");
+        return;
+    }
+
+    const targetList = suggestData["free_items"];
+    if (!targetList || targetList.length === 0) {
+        list.classList.remove("show");
+        return;
+    }
+
+    const matches = targetList.filter(item =>
+        item.toLowerCase().includes(query)
+    ).slice(0, 8);
+
+    if (matches.length === 0) {
+        list.classList.remove("show");
+        return;
+    }
+
+    list.innerHTML = matches.map((item, i) => `
+        <div class="autocomplete-item" onclick="selectAutoCompleteAmount(${i})" data-index="${i}">
+            <span class="ac-name">${escapeHTML(item)}</span>
+        </div>
+    `).join("");
+    list.classList.add("show");
+
+    // マッチ結果を一時保存（選択用）
+    list._matches = matches;
+}
+
+// フリー用金額・物品名のオートコンプリート選択
+function selectAutoCompleteAmount(index) {
+    const list = document.getElementById("autocompleteListAmount");
+    const match = list._matches[index];
+    if (!match) return;
+
+    document.getElementById("amountInput").value = match;
+    triggerAutoUpdate();
+    list.classList.remove("show");
+}
+
+// リスト外クリックでオートコンプリートを閉じる
+document.addEventListener("click", (e) => {
+    const nameList = document.getElementById("autocompleteList");
+    if (nameList && !e.target.closest(".autocomplete-wrapper")) {
+        nameList.classList.remove("show");
+    }
+
+    const amountList = document.getElementById("autocompleteListAmount");
+    if (amountList && !e.target.closest("#amountAutocompleteWrapper")) {
+        amountList.classList.remove("show");
+    }
 });
