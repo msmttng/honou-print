@@ -38,6 +38,7 @@ let loadedFontBytes = null;    // キャッシュされたフォントデータ�
 let loadedTemplateBytes = {};  // キャッシュされたテンプレートPDFのArrayBuffer
 let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存用)
 let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
+let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
 
 // --- IndexedDB ストレージ管理 ---
 const DB_NAME = "PdfMailMergeDB";
@@ -132,7 +133,11 @@ window.addEventListener("DOMContentLoaded", async () => {
         await loadAppFromDB();
     } else {
         // 足りないファイルがある場合、自動ダウンロードを試行
-        showStatus("初回セットアップ中...（フォント等ダウンロードに数秒かかります）", true);
+        showStatus("初回セットアップ中...（通信環境により数秒かかります）", true);
+        const placeholder = document.getElementById("previewPlaceholder");
+        if (placeholder) {
+            placeholder.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i><p>初期ファイルをダウンロードしています...<br>少々お待ちください</p><p style="font-size:11px;opacity:0.7">（初回のみ8MB程度の通信が発生します）</p>';
+        }
         try {
             const fetchFile = async (url, key) => {
                 const response = await fetch(encodeURI(url));
@@ -169,6 +174,7 @@ async function loadAppFromDB() {
         loadedTemplateBytes["free"] = await getFileFromDB("pdf_free");
         
         showStatus("準備完了", false);
+        isAppReady = true;
         selectTemplate("10000en"); // プレビュー更新開始
     } catch (e) {
         logError("データベースからの読み込みに失敗しました: " + e);
@@ -504,6 +510,10 @@ function mmToPt(mm) {
 
 // --- PDFの動的合成処理（コア機能） ---
 async function generatePDF(isPrinting = false) {
+    if (!isAppReady) {
+        return null;
+    }
+
     const nameInput = document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
     const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
