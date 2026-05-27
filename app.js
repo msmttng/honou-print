@@ -27,6 +27,12 @@ function copyDebugLog() {
     }
 }
 
+// --- PDF.js 初期設定 ---
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+if (pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 // --- 定数・グローバル変数 ---
 const FONT_URL = "yuji_syuku.ttf"; // 代替の美しい毛筆行書体（TTF形式）を使用
 const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標設定ファイル
@@ -849,21 +855,58 @@ async function generatePDF(isPrinting = false) {
 
 // --- リアルタイムプレビュー更新 ---
 async function updatePreview() {
-    const pdfPreview = document.getElementById("pdfPreview");
+    const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
     
     showStatus("PDF生成中...", true);
     const pdfBlob = await generatePDF(false);
     
-    if (pdfBlob) {
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-        pdfPreview.src = pdfUrl + "#view=Fit";
-        pdfPreview.style.display = "block";
-        previewPlaceholder.style.display = "none";
-        showStatus("プレビュー更新完了", false);
+    if (pdfBlob && pdfjsLib) {
+        try {
+            const arrayBuffer = await pdfBlob.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
+            const page = await pdf.getPage(1);
+            
+            const context = pdfCanvas.getContext('2d');
+            const container = pdfCanvas.parentElement;
+            
+            const containerWidth = container.clientWidth - 40; 
+            const containerHeight = container.clientHeight - 40;
+            
+            const unscaledViewport = page.getViewport({ scale: 1.0 });
+            const scale = Math.min(containerWidth / unscaledViewport.width, containerHeight / unscaledViewport.height);
+            
+            const viewport = page.getViewport({ scale: scale });
+            
+            const outputScale = window.devicePixelRatio || 1;
+            
+            pdfCanvas.width = Math.floor(viewport.width * outputScale);
+            pdfCanvas.height = Math.floor(viewport.height * outputScale);
+            pdfCanvas.style.width = Math.floor(viewport.width) + "px";
+            pdfCanvas.style.height =  Math.floor(viewport.height) + "px";
+            
+            const transform = outputScale !== 1 
+              ? [outputScale, 0, 0, outputScale, 0, 0] 
+              : null;
+
+            const renderContext = {
+              canvasContext: context,
+              transform: transform,
+              viewport: viewport
+            };
+            
+            await page.render(renderContext).promise;
+            
+            pdfCanvas.style.display = "block";
+            previewPlaceholder.style.display = "none";
+            showStatus("プレビュー更新完了", false);
+        } catch (error) {
+            logError("PDF.js Render Error: " + error);
+            showStatus("プレビュー表示エラー", false);
+        }
     } else {
-        // 氏名未入力等の場合は初期表示へ
-        pdfPreview.style.display = "none";
+        pdfCanvas.style.display = "none";
         previewPlaceholder.style.display = "flex";
         showStatus("準備完了", false);
     }

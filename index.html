@@ -16,6 +16,7 @@
     <!-- pdf-lib -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <style>
         :root {
@@ -1240,7 +1241,7 @@
                 </div>
 
                 <div class="preview-container">
-                    <iframe id="pdfPreview" class="preview-iframe" style="display: none;"></iframe>
+                    <canvas id="pdfCanvas" style="display: none; max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"></canvas>
                     <div id="previewPlaceholder" class="preview-placeholder">
                         <i class="fa-regular fa-file-pdf"></i>
                         <p>氏名を入力すると、ここにリアルタイムで<br>合成されたPDFプレビューが表示されます。</p>
