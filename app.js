@@ -1260,20 +1260,9 @@ function selectAutoComplete(index) {
     const match = list._matches[index];
     if (!match) return;
 
-    // 氏名をセット
+    // 氏名のみセット
     document.getElementById("nameInput").value = match.name;
-
-    // 奉納内容があればフリーテンプレートに切り替えて自動入力
-    if (match.detail) {
-        selectTemplate("free");
-        setTimeout(() => {
-            document.getElementById("amountInput").value = match.detail;
-            triggerAutoUpdate();
-        }, 100);
-    } else {
-        triggerAutoUpdate();
-    }
-
+    triggerAutoUpdate();
     list.classList.remove("show");
 }
 
