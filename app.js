@@ -1,5 +1,35 @@
+// --- エラー収集ロジック ---
+window.addEventListener("error", function(e) {
+    logError("Global Error: " + e.message + " at " + e.filename + ":" + e.lineno);
+});
+window.addEventListener("unhandledrejection", function(e) {
+    logError("Unhandled Promise Rejection: " + (e.reason && e.reason.stack ? e.reason.stack : e.reason));
+});
+
+function logError(msg) {
+    console.error("LOG:", msg);
+    const debugLog = document.getElementById("debugLog");
+    const container = document.getElementById("debugLogContainer");
+    if (debugLog && container) {
+        debugLog.textContent += new Date().toLocaleTimeString() + " - " + msg + "\n";
+        container.style.display = "block";
+    }
+}
+
+function copyDebugLog() {
+    const debugLog = document.getElementById("debugLog");
+    if (debugLog) {
+        navigator.clipboard.writeText(debugLog.textContent).then(() => {
+            alert("ログをクリップボードにコピーしました！");
+        }).catch(err => {
+            alert("コピーに失敗しました。直接選択してコピーしてください。");
+        });
+    }
+}
+
 // --- 定数・グローバル変数 ---
-const FONT_URL = "hgrgy.ttc"; // カレントディレクトリのHGS行書体を参照
+const FONT_URL = "yuji_syuku.ttf"; // 代替の美しい毛筆行書体（TTF形式）を使用
+const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標設定ファイル
 
 let currentTemplate = "10000en";
 let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
@@ -9,8 +39,59 @@ let loadedTemplateBytes = {};  // キャッシュされたテンプレートPDF�
 let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存用)
 let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
 
+// --- IndexedDB ストレージ管理 ---
+const DB_NAME = "PdfMailMergeDB";
+const STORE_NAME = "files";
+
+async function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function saveFileToDB(key, arrayBuffer) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        store.put(arrayBuffer, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function getFileFromDB(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function checkRequiredFiles() {
+    const required = ["font", "pdf_10000en", "pdf_1000en", "pdf_free"];
+    const results = {};
+    for (const key of required) {
+        results[key] = (await getFileFromDB(key)) !== undefined;
+    }
+    return results;
+}
+
 // --- 起動時の初期化処理 ---
 window.addEventListener("DOMContentLoaded", async () => {
+    // file:// プロトコルの警告は起動用ブラウザ（--allow-file-access-from-files）を使用することで回避するため削除
+
     showStatus("システム初期化中...", true);
     
     // 1. デザイン設定および名簿DBの復元
@@ -18,59 +99,159 @@ window.addEventListener("DOMContentLoaded", async () => {
     loadDbRecords();
     renderTable();
 
-    // 2. 設定ファイルの読み込み
-    try {
-        const response = await fetch(DEFAULT_CONFIG_URL);
-        if (!response.ok) throw new Error("設定ファイルの読み込みに失敗しました");
-        config = await response.ok ? await response.json() : getFallbackConfig();
-    } catch (e) {
-        console.warn("設定ファイル fetch 失敗。内蔵フォールバック設定を使用します:", e);
-        config = getFallbackConfig();
+    // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
+    config = getFallbackConfig();
+
+    // 3. バージョンチェックによるLocalStorageキャッシュクリア (新設定強制適用)
+    const currentVersion = config.config_version || 1;
+    const savedVersion = localStorage.getItem("pdf_mail_merge_config_version");
+    if (savedVersion !== String(currentVersion)) {
+        console.log(`設定バージョンが更新されました (${savedVersion} -> ${currentVersion})。キャッシュをリセットします。`);
+        localStorage.removeItem("pdf_mail_merge_design_settings");
+        localStorage.setItem("pdf_mail_merge_config_version", currentVersion);
+        designSettings = {}; // キャッシュをクリア
+        // 再度ロードして空の状態に初期化
+        loadDesignSettings();
     }
 
-    // 3. デザイン設定の初期座標マージ
+    // 4. デザイン設定の初期座標マージ
     initDesignSettings();
     updateCalibrationUI();
 
-    // 4. 日本語フォントのプリロード (バックグラウンドでキャッシュ)
-    try {
-        showStatus("日本語フォントロード中...", true);
-        const fontResponse = await fetch(FONT_URL);
-        if (!fontResponse.ok) throw new Error("フォントファイルの読み込みに失敗しました");
-        loadedFontBytes = await fontResponse.arrayBuffer();
-        showStatus("準備完了", false);
-    } catch (e) {
-        console.error("フォントのロードに失敗しました:", e);
-        showStatus("フォントロード失敗 (システムフォント使用)", false);
-        showToast("フォントの読み込みに失敗しました。標準フォントで描画します。", "error");
-    }
+    // --- ここからローカルファイルチェッカー ---
+    showStatus("ローカルファイル確認中...", true);
+    const fileStatus = await checkRequiredFiles();
+    const allFilesReady = fileStatus.font && fileStatus.pdf_10000en && fileStatus.pdf_1000en && fileStatus.pdf_free;
 
-    // 5. 初回プレビュー更新
-    updatePreview();
+    if (allFilesReady) {
+        // 全てのファイルがDBにある場合、フォントをメモリに読み込んでアプリ起動
+        await loadAppFromDB();
+    } else {
+        // 足りないファイルがある場合、セットアップ画面を表示
+        showSetupOverlay(fileStatus);
+    }
 });
+
+// アプリ本体の起動プロセス
+async function loadAppFromDB() {
+    try {
+        showStatus("フォント読み込み中...", true);
+        loadedFontBytes = await getFileFromDB("font");
+        loadedTemplateBytes["10000en"] = await getFileFromDB("pdf_10000en");
+        loadedTemplateBytes["1000en"] = await getFileFromDB("pdf_1000en");
+        loadedTemplateBytes["free"] = await getFileFromDB("pdf_free");
+        
+        showStatus("準備完了", false);
+        selectTemplate("10000en"); // プレビュー更新開始
+    } catch (e) {
+        logError("データベースからの読み込みに失敗しました: " + e);
+    }
+}
+
+// セットアップオーバーレイ制御
+function showSetupOverlay(status) {
+    const overlay = document.getElementById("setupOverlay");
+    overlay.classList.remove("hidden");
+    
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const btnComplete = document.getElementById("btnCompleteSetup");
+    
+    // UI初期化
+    updateSetupUI(status);
+
+    // ドラッグ＆ドロップイベント
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", e => { e.preventDefault(); dropZone.classList.remove("dragover"); });
+    dropZone.addEventListener("drop", async e => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        if (e.dataTransfer.files) {
+            await handleSetupFiles(e.dataTransfer.files, status);
+        }
+    });
+
+    // クリックでファイル選択
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async e => {
+        if (e.target.files) {
+            await handleSetupFiles(e.target.files, status);
+        }
+    });
+
+    // 保存して開始ボタン
+    btnComplete.addEventListener("click", async () => {
+        if (btnComplete.classList.contains("ready")) {
+            overlay.classList.add("hidden");
+            await loadAppFromDB();
+        }
+    });
+}
+
+function updateSetupUI(status) {
+    const updateItem = (id, isReady) => {
+        const el = document.getElementById(id);
+        if (isReady) {
+            el.innerHTML = '<i class="fa-solid fa-circle-check success"></i> ' + el.innerText.trim();
+        }
+    };
+    if (status.font) updateItem("status-font", true);
+    if (status.pdf_10000en) updateItem("status-pdf-10000", true);
+    if (status.pdf_1000en) updateItem("status-pdf-1000", true);
+    if (status.pdf_free) updateItem("status-pdf-free", true);
+
+    if (status.font && status.pdf_10000en && status.pdf_1000en && status.pdf_free) {
+        document.getElementById("btnCompleteSetup").classList.add("ready");
+    }
+}
+
+async function handleSetupFiles(files, status) {
+    for (const file of files) {
+        const name = file.name.toLowerCase();
+        const buffer = await file.arrayBuffer();
+        
+        if (name.endsWith(".ttf") || name.endsWith(".ttc")) {
+            await saveFileToDB("font", buffer);
+            status.font = true;
+        } else if (name.includes("縦") && !name.includes("阡")) {
+            await saveFileToDB("pdf_10000en", buffer);
+            status.pdf_10000en = true;
+        } else if (name.includes("阡")) {
+            await saveFileToDB("pdf_1000en", buffer);
+            status.pdf_1000en = true;
+        } else if (name.includes("フリー")) {
+            await saveFileToDB("pdf_free", buffer);
+            status.pdf_free = true;
+        }
+    }
+    updateSetupUI(status);
+}
 
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "default_font": "IPAexMincho",
+        "config_version": 8,
+        "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
                 "template_file": "奉納ビラ縦.pdf",
                 "fields": {
-                    "name": { "x_mm": 105, "y_mm": 120, "font_size": 28, "alignment": "center" }
+                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
+                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 131, "alignment": "center", "width_mm": 80, "height_mm": 50 }
                 }
             },
             "1000en": {
                 "template_file": "奉納ビラ縦阡.pdf",
                 "fields": {
-                    "name": { "x_mm": 105, "y_mm": 120, "font_size": 28, "alignment": "center" }
+                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
+                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 131, "alignment": "center", "width_mm": 80, "height_mm": 50 }
                 }
             },
             "free": {
                 "template_file": "奉納ビラフリー.pdf",
                 "fields": {
-                    "name": { "x_mm": 105, "y_mm": 160, "font_size": 28, "alignment": "center" },
-                    "amount": { "x_mm": 105, "y_mm": 90, "font_size": 24, "alignment": "center" }
+                    "name": { "x_mm": 21.5, "y_mm": 132, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 25, "height_mm": 126 },
+                    "amount": { "x_mm": 62.5, "y_mm": 264, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 45, "height_mm": 190 }
                 }
             }
         }
@@ -86,12 +267,14 @@ function initDesignSettings() {
         }
         for (const [fKey, fVal] of Object.entries(tVal.fields)) {
             if (!designSettings[tKey][fKey]) {
-                designSettings[tKey][fKey] = {
-                    x: fVal.x_mm,
-                    y: fVal.y_mm,
-                    font_size: fVal.font_size
-                };
+                designSettings[tKey][fKey] = {};
             }
+            if (designSettings[tKey][fKey].x === undefined) designSettings[tKey][fKey].x = fVal.x_mm;
+            if (designSettings[tKey][fKey].y === undefined) designSettings[tKey][fKey].y = fVal.y_mm;
+            if (designSettings[tKey][fKey].font_size === undefined) designSettings[tKey][fKey].font_size = fVal.font_size;
+            if (designSettings[tKey][fKey].width_mm === undefined) designSettings[tKey][fKey].width_mm = fVal.width_mm || 30;
+            if (designSettings[tKey][fKey].height_mm === undefined) designSettings[tKey][fKey].height_mm = fVal.height_mm || 150;
+            if (designSettings[tKey][fKey].valign === undefined) designSettings[tKey][fKey].valign = fVal.valign || "top";
         }
     }
     saveDesignSettings();
@@ -139,7 +322,8 @@ async function getTemplateBytes(templateKey) {
     const filename = config.templates[templateKey].template_file;
     showStatus("テンプレートPDF読み込み中...", true);
     
-    const response = await fetch(encodeURI(filename));
+    // ブラウザのキャッシュを回避するため、クエリパラメータを付与
+    const response = await fetch(encodeURI(filename) + "?t=" + new Date().getTime());
     if (!response.ok) {
         throw new Error(`テンプレートファイルが見つかりません: ${filename}`);
     }
@@ -174,15 +358,26 @@ function selectTemplate(templateKey) {
     document.querySelectorAll(".template-btn").forEach(btn => btn.classList.remove("active"));
     document.getElementById(`btn-${templateKey}`).classList.add("active");
     
-    // フリー用の金額フィールド表示切替
+    // すべてのテンプレートで金額を印字・微調整可能にするため、常に金額フィールドを表示
     const amountField = document.getElementById("amountField");
     const amountCalibSection = document.getElementById("amountCalibSection");
-    if (templateKey === "free") {
-        amountField.style.display = "block";
-        amountCalibSection.style.display = "block";
+    amountField.style.display = "block";
+    amountCalibSection.style.display = "block";
+
+    // 選択されたテンプレートに応じて自動的に金額の初期値・ラベル・プレースホルダーを設定
+    const amountLabel = document.getElementById("amountLabel") || document.querySelector("label[for='amountInput']");
+    const amountInput = document.getElementById("amountInput");
+    const amountSelect = document.getElementById("amountSelect");
+    
+    if (templateKey === "10000en" || templateKey === "1000en") {
+        amountLabel.textContent = "任意の金額の数字一文字 (例: 一, 二, 五)";
+        amountInput.style.display = "none";
+        if(amountSelect) amountSelect.style.display = "block";
     } else {
-        amountField.style.display = "none";
-        amountCalibSection.style.display = "none";
+        amountLabel.textContent = "任意の金額 または 物品名";
+        amountInput.placeholder = "例: 金 五阡圓也、お神酒 二升";
+        amountInput.style.display = "block";
+        if(amountSelect) amountSelect.style.display = "none";
     }
     
     // 微調整UIの値を現在のテンプレートのデータに更新
@@ -201,10 +396,16 @@ function updateCalibrationUI() {
         const valX = document.getElementById(`val-${fieldKey}-x`);
         const valY = document.getElementById(`val-${fieldKey}-y`);
         const valFontSize = document.getElementById(`val-${fieldKey}-font_size`);
+        const valWidth = document.getElementById(`val-${fieldKey}-width_mm`);
+        const valHeight = document.getElementById(`val-${fieldKey}-height_mm`);
+        const valValign = document.getElementById(`val-${fieldKey}-valign`);
         
         if (valX) valX.textContent = fieldVal.x;
         if (valY) valY.textContent = fieldVal.y;
         if (valFontSize) valFontSize.textContent = fieldVal.font_size;
+        if (valWidth) valWidth.textContent = fieldVal.width_mm;
+        if (valHeight) valHeight.textContent = fieldVal.height_mm;
+        if (valValign) valValign.value = fieldVal.valign || "top";
     }
 }
 
@@ -225,6 +426,15 @@ function adjustValue(fieldKey, param, change) {
     triggerAutoUpdate();
 }
 
+function changeValign(fieldKey, value) {
+    const settings = designSettings[currentTemplate];
+    if (!settings || !settings[fieldKey]) return;
+    
+    settings[fieldKey].valign = value;
+    saveDesignSettings();
+    triggerAutoUpdate();
+}
+
 // --- デザイン調整の初期値リセット ---
 function resetCalibration() {
     const defaultFields = config.templates[currentTemplate].fields;
@@ -232,7 +442,10 @@ function resetCalibration() {
         designSettings[currentTemplate][fieldKey] = {
             x: fieldVal.x_mm,
             y: fieldVal.y_mm,
-            font_size: fieldVal.font_size
+            font_size: fieldVal.font_size,
+            width_mm: fieldVal.width_mm || 30,
+            height_mm: fieldVal.height_mm || 150,
+            valign: fieldVal.valign || "top"
         };
     }
     saveDesignSettings();
@@ -255,9 +468,10 @@ function mmToPt(mm) {
 }
 
 // --- PDFの動的合成処理（コア機能） ---
-async function generatePDF() {
+async function generatePDF(isPrinting = false) {
     const nameInput = document.getElementById("nameInput").value.trim();
-    const amountInput = document.getElementById("amountInput").value.trim();
+    const amountSelect = document.getElementById("amountSelect");
+    const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
     
     // 氏名がない場合は合成処理をスキップ (プレビュークリア状態に)
     if (!nameInput) {
@@ -265,8 +479,11 @@ async function generatePDF() {
     }
 
     try {
-        // 1. テンプレートPDFの取得
-        const templateBytes = await getTemplateBytes(currentTemplate);
+        // 1. テンプレートPDFの取得（IndexedDBから事前にロード済み）
+        const templateBytes = loadedTemplateBytes[currentTemplate];
+        if (!templateBytes) {
+            throw new Error(`テンプレートデータが見つかりません: ${currentTemplate}`);
+        }
         
         // 2. pdf-libでPDFをロード
         const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
@@ -274,16 +491,14 @@ async function generatePDF() {
         // 3. 日本語フォントの読み込みと埋め込み
         let fontToUse = null;
         if (loadedFontBytes) {
-            pdfDoc.registerFontkit(window.fontkit); // 必要な場合はfontkitを使用
-            
-            // TTC (TrueType Collection) のパースとフォント抽出対応
-            const fontkit = window.fontkit;
-            const parsedFont = fontkit.create(new Uint8Array(loadedFontBytes));
-            const font = parsedFont.fonts ? parsedFont.fonts[0] : parsedFont;
-            
-            fontToUse = await pdfDoc.embedFont(font, { subset: true });
+            try {
+                pdfDoc.registerFontkit(window.fontkit);
+                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
+            } catch (fontError) {
+                console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
+                fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
+            }
         } else {
-            // フォールバック: 標準フォント (日本語文字化けする可能性大)
             fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
         }
 
@@ -304,22 +519,65 @@ async function generatePDF() {
 
             const x_pt = mmToPt(fieldVal.x);
             const y_pt = mmToPt(fieldVal.y);
-            const fontSize = fieldVal.font_size;
+            const baseFontSize = fieldVal.font_size;
+            const width_pt = mmToPt(fieldVal.width_mm || 30);
+            const height_pt = mmToPt(fieldVal.height_mm || 150);
             
             const fieldConfig = config.templates[currentTemplate].fields[fieldKey];
+            if (!fieldConfig) {
+                console.warn(`フィールド設定が見つかりません: ${fieldKey}`);
+                continue;
+            }
             const alignment = fieldConfig.alignment || "left";
             const isVertical = fieldConfig.vertical || false;
+
+            let currentFontSize = baseFontSize;
+            const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
                 // 縦書きの描画処理
                 const chars = Array.from(textValue);
-                let currentY = y_pt;
-                // 縦書き時の文字間隔（フォントサイズに少しゆとりを持たせる）
-                const spacing = fontSize * 1.02;
+                // 枠の高さに収まるようにフォントサイズを縮小
+                const currentHeight_pt = chars.length * (currentFontSize * 1.02);
+                if (currentHeight_pt > height_pt) {
+                    currentFontSize = height_pt / (chars.length * 1.02);
+                }
+                // 枠の幅（1文字の横幅）にも収まるように縮小
+                if (currentFontSize > width_pt) {
+                    currentFontSize = width_pt;
+                }
+
+                // ボックスの上端を計算（元々のフォントサイズを基準に固定）
+                const boxTop = y_pt + baseFontSize;
+
+                // 枠線の描画
+                if (showBoundingBox && !isPrinting) {
+                    firstPage.drawRectangle({
+                        x: x_pt - (width_pt / 2),
+                        y: boxTop - height_pt,
+                        width: width_pt,
+                        height: height_pt,
+                        borderColor: PDFLib.rgb(1, 0, 0),
+                        borderWidth: 1,
+                    });
+                }
+
+                // テキストの上端が boxTop に合うように最初の文字の baseline を設定 (top)
+                const spacing = currentFontSize * 1.02;
+                let currentY = boxTop - currentFontSize;
+                const valign = fieldVal.valign || "top";
+                if (valign !== "top") {
+                    const textHeight_pt = (chars.length - 1) * spacing + currentFontSize;
+                    if (valign === "center") {
+                        currentY = boxTop - (height_pt / 2) + (textHeight_pt / 2) - currentFontSize;
+                    } else if (valign === "bottom") {
+                        currentY = boxTop - height_pt + textHeight_pt - currentFontSize;
+                    }
+                }
                 
                 for (const char of chars) {
                     let drawX = x_pt;
-                    const charWidth = fontToUse.widthOfTextAtSize(char, fontSize);
+                    const charWidth = fontToUse.widthOfTextAtSize(char, currentFontSize);
                     
                     if (alignment === "center") {
                         drawX = x_pt - (charWidth / 2);
@@ -327,10 +585,9 @@ async function generatePDF() {
                         drawX = x_pt - charWidth;
                     }
                     
-                    // 縦書き用の記号変換
                     let charToDraw = char;
                     if (char === "ー" || char === "─" || char === "―" || char === "-") {
-                        charToDraw = "丨"; // 縦書き用の長音
+                        charToDraw = "丨";
                     } else if (char === "（") {
                         charToDraw = "︵";
                     } else if (char === "）") {
@@ -340,29 +597,68 @@ async function generatePDF() {
                     firstPage.drawText(charToDraw, {
                         x: drawX,
                         y: currentY,
-                        size: fontSize,
+                        size: currentFontSize,
                         font: fontToUse,
                         color: PDFLib.rgb(0.1, 0.1, 0.1)
                     });
-                    currentY -= spacing; // 縦書きなので下に下げる
+                    currentY -= spacing;
                 }
             } else {
                 // 通常の横書き描画処理
+                // 枠の幅に収まるようにフォントサイズを縮小
+                const currentWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
+                if (currentWidth_pt > width_pt) {
+                    currentFontSize = currentFontSize * (width_pt / currentWidth_pt);
+                }
+                // 枠の高さ（1文字の高さ）にも収まるように縮小
+                if (currentFontSize > height_pt) {
+                    currentFontSize = height_pt;
+                }
+
+                if (showBoundingBox && !isPrinting) {
+                    let boxX = x_pt;
+                    if (alignment === "center") boxX = x_pt - (width_pt / 2);
+                    else if (alignment === "right") boxX = x_pt - width_pt;
+                    
+                    // ベースラインの少し下を枠の下端とする
+                    const boxY = y_pt - (baseFontSize * 0.2);
+
+                    firstPage.drawRectangle({
+                        x: boxX,
+                        y: boxY, 
+                        width: width_pt,
+                        height: height_pt,
+                        borderColor: PDFLib.rgb(1, 0, 0),
+                        borderWidth: 1,
+                    });
+                }
+
                 let drawX = x_pt;
-                const textWidth = fontToUse.widthOfTextAtSize(textValue, fontSize);
+                // 縮小後のフォントサイズで再計算
+                const newTextWidth = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
                 
+                let drawY = y_pt; // default: top/baseline
+                const valign = fieldVal.valign || "top";
+                const boxY = y_pt - (baseFontSize * 0.2);
+                
+                if (valign === "center") {
+                    drawY = boxY + (height_pt / 2) - (currentFontSize / 2) + (currentFontSize * 0.2);
+                } else if (valign === "bottom") {
+                    drawY = boxY + (currentFontSize * 0.2);
+                }
+
                 if (alignment === "center") {
-                    drawX = x_pt - (textWidth / 2);
+                    drawX = x_pt - (newTextWidth / 2);
                 } else if (alignment === "right") {
-                    drawX = x_pt - textWidth;
+                    drawX = x_pt - newTextWidth;
                 }
 
                 firstPage.drawText(textValue, {
                     x: drawX,
-                    y: y_pt,
-                    size: fontSize,
+                    y: drawY,
+                    size: currentFontSize,
                     font: fontToUse,
-                    color: PDFLib.rgb(0.1, 0.1, 0.1) // ほぼ黒
+                    color: PDFLib.rgb(0.1, 0.1, 0.1)
                 });
             }
         }
@@ -373,7 +669,8 @@ async function generatePDF() {
 
     } catch (e) {
         console.error("PDF合成エラー:", e);
-        showToast("PDF合成中にエラーが発生しました", "error");
+        logError("PDF合成エラーのキャッチ: " + (e.stack || e.message));
+        showToast("PDF合成中にエラーが発生しました: " + e.message, "error");
         showStatus("PDF生成エラー", false);
         return null;
     }
@@ -385,7 +682,7 @@ async function updatePreview() {
     const previewPlaceholder = document.getElementById("previewPlaceholder");
     
     showStatus("PDF生成中...", true);
-    const pdfBlob = await generatePDF();
+    const pdfBlob = await generatePDF(false);
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
@@ -410,7 +707,7 @@ async function printPDF() {
     }
 
     showStatus("印刷用データを準備中...", true);
-    const pdfBlob = await generatePDF();
+    const pdfBlob = await generatePDF(true);
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
@@ -440,7 +737,8 @@ async function printPDF() {
 // --- データベース（履歴登録・表示）処理 ---
 function saveRecord(showNotice = true) {
     const nameInput = document.getElementById("nameInput").value.trim();
-    const amountInput = document.getElementById("amountInput").value.trim();
+    const amountSelect = document.getElementById("amountSelect");
+    const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
     
     if (!nameInput) {
         if (showNotice) showToast("氏名を入力してください", "error");
@@ -457,12 +755,19 @@ function saveRecord(showNotice = true) {
     
     if (isDuplicate) return;
 
+    let dbAmount = amountInput;
+    if (currentTemplate === "10000en") {
+        dbAmount = `金${amountInput || "一"}萬圓也`;
+    } else if (currentTemplate === "1000en") {
+        dbAmount = `金${amountInput || "一"}阡圓也`;
+    }
+
     const newRecord = {
         id: "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
         date: new Date().toISOString(),
         template: currentTemplate,
         name: nameInput,
-        amount: currentTemplate === "free" ? amountInput : (currentTemplate === "10000en" ? "金萬圓也" : "金阡圆也")
+        amount: dbAmount
     };
 
     dbRecords.unshift(newRecord); // 先頭に追加
@@ -493,10 +798,25 @@ function loadRecordToForm(id) {
     
     // 2. フォーム入力値の設定
     document.getElementById("nameInput").value = record.name;
-    if (record.template === "free") {
-        document.getElementById("amountInput").value = record.amount;
+    
+    if (record.template === "10000en" || record.template === "1000en") {
+        // 履歴DBの "金五萬圓也" から "五" を抽出してUIに入力
+        let val = record.amount;
+        if (val.startsWith("金")) {
+            val = val.substring(1);
+        }
+        if (val.endsWith("萬圓也")) {
+            val = val.substring(0, val.length - 3);
+        } else if (val.endsWith("阡圓也")) {
+            val = val.substring(0, val.length - 3);
+        } else if (val.endsWith("阡圆也")) {
+            val = val.substring(0, val.length - 3);
+        }
+        const amountSelect = document.getElementById("amountSelect");
+        if (amountSelect) amountSelect.value = val;
+        document.getElementById("amountInput").value = val;
     } else {
-        document.getElementById("amountInput").value = "";
+        document.getElementById("amountInput").value = record.amount;
     }
 
     // 3. プレビューの再描画
@@ -610,6 +930,8 @@ function toggleAccordion() {
 function clearForm() {
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
+    const amountSelect = document.getElementById("amountSelect");
+    if (amountSelect) amountSelect.value = "一";
     updatePreview();
     showToast("フォームをクリアしました");
 }

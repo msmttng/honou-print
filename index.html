@@ -19,16 +19,16 @@
 
     <style>
         :root {
-            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            --glass-bg: rgba(30, 41, 59, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --accent: #6366f1;
-            --accent-hover: #4f46e5;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
+            --bg-gradient: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+            --success: #059669;
+            --danger: #dc2626;
+            --warning: #d97706;
             --card-radius: 16px;
             --font-main: 'Noto Sans JP', sans-serif;
             --font-title: 'Outfit', 'Noto Sans JP', sans-serif;
@@ -72,17 +72,17 @@
             padding: 16px 24px;
             background: var(--glass-bg);
             backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            border: 1px solid rgba(255,255,255,0.7);
             border-radius: var(--card-radius);
             margin-bottom: 8px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.05);
         }
 
         header h1 {
             font-family: var(--font-title);
             font-size: 24px;
             font-weight: 800;
-            background: linear-gradient(to right, #818cf8, #c084fc);
+            background: linear-gradient(to right, #4f46e5, #c026d3);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
@@ -95,11 +95,11 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            background: rgba(99, 102, 241, 0.15);
+            background: rgba(79, 70, 229, 0.08);
             padding: 6px 12px;
             border-radius: 20px;
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #a5b4fc;
+            border: 1px solid rgba(79, 70, 229, 0.2);
+            color: #4338ca;
         }
 
         .status i.fa-circle-notch {
@@ -122,10 +122,10 @@
         .card {
             background: var(--glass-bg);
             backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            border: 1px solid rgba(255,255,255,0.7);
             border-radius: var(--card-radius);
             padding: 24px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.05);
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
@@ -156,8 +156,8 @@
         .form-control {
             width: 100%;
             padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #cbd5e1;
             border-radius: 8px;
             color: var(--text-primary);
             font-size: 15px;
@@ -168,8 +168,8 @@
         .form-control:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
-            background: rgba(15, 23, 42, 0.8);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+            background: #ffffff;
         }
 
         /* テンプレートセレクター (グリッドボタン) */
@@ -181,8 +181,8 @@
         }
 
         .template-btn {
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #cbd5e1;
             border-radius: 10px;
             padding: 14px;
             color: var(--text-secondary);
@@ -201,10 +201,10 @@
         }
 
         .template-btn.active {
-            background: rgba(99, 102, 241, 0.2);
+            background: rgba(79, 70, 229, 0.06);
             border-color: var(--accent);
-            color: var(--text-primary);
-            box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+            color: var(--accent);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
         }
 
         /* ボタン群 */
@@ -249,13 +249,13 @@
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.8);
             color: var(--text-primary);
-            border: 1px solid var(--glass-border);
+            border: 1px solid #cbd5e1;
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
+            background: #f1f5f9;
         }
 
         /* 微調整アコーディオン */
@@ -264,8 +264,8 @@
         }
 
         .accordion-header {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #cbd5e1;
             padding: 14px 18px;
             border-radius: 8px;
             display: flex;
@@ -277,21 +277,21 @@
         }
 
         .accordion-header:hover {
-            background: rgba(255, 255, 255, 0.06);
+            background: #f8fafc;
         }
 
         .accordion-content {
             display: none;
             padding: 18px;
-            background: rgba(15, 23, 42, 0.3);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid #cbd5e1;
             border-top: none;
             border-radius: 0 0 8px 8px;
         }
 
         .accordion.open .accordion-header {
             border-radius: 8px 8px 0 0;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(248, 250, 252, 0.9);
         }
 
         .accordion.open .accordion-content {
@@ -306,10 +306,10 @@
         }
 
         .calib-section {
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(255, 255, 255, 0.7);
             padding: 16px;
             border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            border: 1px solid #e2e8f0;
         }
 
         .calib-section h4 {
@@ -341,8 +341,8 @@
         .calib-btn-wrap {
             display: flex;
             align-items: center;
-            background: rgba(15, 23, 42, 0.7);
-            border: 1px solid var(--glass-border);
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
             border-radius: 6px;
             overflow: hidden;
             width: 100%;
@@ -351,16 +351,17 @@
         .calib-btn {
             background: transparent;
             border: none;
-            color: var(--text-primary);
+            color: var(--text-secondary);
             padding: 8px 12px;
             cursor: pointer;
-            transition: background 0.15s;
+            transition: background 0.15s, color 0.15s;
             font-size: 12px;
             width: 32px;
         }
 
         .calib-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
+            background: #e2e8f0;
+            color: var(--accent);
         }
 
         .calib-value {
@@ -369,7 +370,7 @@
             font-size: 13px;
             font-family: var(--font-title);
             font-weight: 600;
-            color: #fff;
+            color: var(--text-primary);
         }
 
         /* プレビューパネル */
@@ -384,13 +385,14 @@
             flex: 1;
             min-height: 500px;
             position: relative;
-            background: rgba(15, 23, 42, 0.4);
+            background: #f1f5f9;
             border-radius: 8px;
-            border: 1px solid var(--glass-border);
+            border: 1px solid #cbd5e1;
             overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.03);
         }
 
         @media (max-width: 1024px) {
@@ -444,7 +446,8 @@
             width: 100%;
             overflow-x: auto;
             border-radius: 8px;
-            border: 1px solid var(--glass-border);
+            border: 1px solid #cbd5e1;
+            background: rgba(255,255,255,0.8);
         }
 
         table {
@@ -455,21 +458,21 @@
         }
 
         th {
-            background: rgba(15, 23, 42, 0.8);
+            background: #f8fafc;
             color: var(--text-secondary);
             font-weight: 600;
             padding: 14px 16px;
-            border-bottom: 1px solid var(--glass-border);
+            border-bottom: 1px solid #cbd5e1;
         }
 
         td {
             padding: 12px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid #e2e8f0;
             color: var(--text-primary);
         }
 
         tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
+            background: #f1f5f9;
         }
 
         .badge {
@@ -481,21 +484,21 @@
         }
 
         .badge-10000 {
-            background: rgba(245, 158, 11, 0.2);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.3);
+            background: #fef3c7;
+            color: #d97706;
+            border: 1px solid #fde68a;
         }
 
         .badge-1000 {
-            background: rgba(16, 185, 129, 0.2);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            background: #d1fae5;
+            color: #059669;
+            border: 1px solid #a7f3d0;
         }
 
         .badge-free {
-            background: rgba(99, 102, 241, 0.2);
-            color: #a5b4fc;
-            border: 1px solid rgba(99, 102, 241, 0.3);
+            background: #e0e7ff;
+            color: #4f46e5;
+            border: 1px solid #c7d2fe;
         }
 
         .action-btns {
@@ -562,10 +565,158 @@
         .toast-error {
             background: var(--danger);
         }
+
+        /* デバッグログ用スタイル */
+        #debugLogContainer {
+            grid-column: 1 / -1;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #ef4444;
+            margin-top: 20px;
+            display: none;
+            font-family: monospace;
+        }
+        #debugLogContainer h3 {
+            color: #ef4444;
+            margin-bottom: 8px;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #debugLog {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .btn-copy-log {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        }
+        
+        /* 初期セットアップ用オーバーレイ */
+        #setupOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+        #setupOverlay.hidden {
+            display: none;
+        }
+        .setup-card {
+            background: var(--surface);
+            padding: 40px;
+            border-radius: var(--card-radius);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+            border: 1px solid var(--glass-border);
+        }
+        .setup-card h2 {
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .setup-card p {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .file-drop-zone {
+            border: 2px dashed var(--accent);
+            border-radius: 12px;
+            padding: 40px 20px;
+            background: rgba(99, 102, 241, 0.1);
+            transition: all 0.3s ease;
+            margin-bottom: 24px;
+        }
+        .file-drop-zone.dragover {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #818cf8;
+            transform: scale(1.02);
+        }
+        .file-drop-zone i {
+            font-size: 48px;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .file-list {
+            text-align: left;
+            background: rgba(0,0,0,0.2);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            color: #d1d5db;
+        }
+        .file-item:last-child { margin-bottom: 0; }
+        .file-item i.success { color: var(--success); }
+        .file-item i.pending { color: var(--text-secondary); opacity: 0.5; }
+        
+        #btnCompleteSetup {
+            background: var(--success);
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #btnCompleteSetup.ready {
+            opacity: 1;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+        }
     </style>
 </head>
 <body>
 
+    <!-- 初期セットアップ用オーバーレイ -->
+    <div id="setupOverlay" class="hidden">
+        <div class="setup-card">
+            <h2><i class="fa-solid fa-download"></i> 初回セットアップ</h2>
+            <p>ブラウザのセキュリティ制限を回避するため、必要なファイルを一度だけブラウザ内に取り込みます。<br>以下の枠内に、フォントとPDFをドラッグ＆ドロップしてください。</p>
+            
+            <div id="dropZone" class="file-drop-zone">
+                <i class="fa-solid fa-file-arrow-up"></i>
+                <h3>ここにファイルをドロップ</h3>
+                <p style="font-size: 14px; margin-top: 8px;">またはクリックしてファイルを選択</p>
+                <input type="file" id="fileInput" multiple accept=".ttf,.pdf" style="display: none;">
+            </div>
+
+            <div class="file-list">
+                <div class="file-item" id="status-font"><i class="fa-solid fa-circle-check pending"></i> フォント (yuji_syuku.ttf または hgrgy.ttf)</div>
+                <div class="file-item" id="status-pdf-10000"><i class="fa-solid fa-circle-check pending"></i> 萬圓用 (奉納ビラ縦.pdf)</div>
+                <div class="file-item" id="status-pdf-1000"><i class="fa-solid fa-circle-check pending"></i> 阡圓用 (奉納ビラ縦阡.pdf)</div>
+                <div class="file-item" id="status-pdf-free"><i class="fa-solid fa-circle-check pending"></i> フリー (奉納ビラフリー.pdf)</div>
+            </div>
+
+            <button type="button" id="btnCompleteSetup" class="btn"><i class="fa-solid fa-rocket"></i> 保存して開始する</button>
+        </div>
+    </div>
     <div class="container">
         
         <!-- ヘッダー -->
@@ -610,8 +761,19 @@
                 </div>
 
                 <div class="form-group" id="amountField" style="display: none;">
-                    <label for="amountInput">任意の金額 または 物品名</label>
+                    <label id="amountLabel" for="amountInput">任意の金額 または 物品名</label>
                     <input type="text" id="amountInput" class="form-control" placeholder="例: 金 五阡圓也、お神酒 二升" oninput="triggerAutoUpdate()">
+                    <select id="amountSelect" class="form-control" style="display: none;" onchange="triggerAutoUpdate()">
+                        <option value="一">一</option>
+                        <option value="二">二</option>
+                        <option value="三">三</option>
+                        <option value="四">四</option>
+                        <option value="五">五</option>
+                        <option value="六">六</option>
+                        <option value="七">七</option>
+                        <option value="八">八</option>
+                        <option value="九">九</option>
+                    </select>
                 </div>
 
                 <div class="btn-group">
@@ -633,6 +795,13 @@
                     <div class="accordion-content">
                         <div class="calibration-grid">
                             
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #fbbf24;">
+                                    <input type="checkbox" id="showBoundingBox" onchange="triggerAutoUpdate()">
+                                    プレビューに印字枠線を表示する
+                                </label>
+                            </div>
+
                             <!-- 氏名のデザイン微調整 -->
                             <div class="calib-section">
                                 <h4><i class="fa-solid fa-user"></i> 氏名印字エリア</h4>
@@ -660,6 +829,30 @@
                                             <span class="calib-value" id="val-name-font_size">28</span>
                                             <button class="calib-btn" onclick="adjustValue('name', 'font_size', 1)"><i class="fa-solid fa-plus"></i></button>
                                         </div>
+                                    </div>
+                                    <div class="calib-control-group" style="margin-top: 8px;">
+                                        <label>枠の幅 (W mm)</label>
+                                        <div class="calib-btn-wrap">
+                                            <button class="calib-btn" onclick="adjustValue('name', 'width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span class="calib-value" id="val-name-width_mm">30</span>
+                                            <button class="calib-btn" onclick="adjustValue('name', 'width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="calib-control-group" style="margin-top: 8px;">
+                                        <label>枠の高さ (H mm)</label>
+                                        <div class="calib-btn-wrap">
+                                            <button class="calib-btn" onclick="adjustValue('name', 'height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span class="calib-value" id="val-name-height_mm">150</span>
+                                            <button class="calib-btn" onclick="adjustValue('name', 'height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
+                                        <label>枠内の縦位置合わせ</label>
+                                        <select id="val-name-valign" onchange="changeValign('name', this.value)" style="width: 100%; padding: 6px; background: rgba(255, 255, 255, 0.9); color: var(--text-primary); border: 1px solid #cbd5e1; border-radius: 4px;">
+                                            <option value="top">上合わせ</option>
+                                            <option value="center">中央合わせ</option>
+                                            <option value="bottom">下合わせ</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -691,6 +884,30 @@
                                             <span class="calib-value" id="val-amount-font_size">24</span>
                                             <button class="calib-btn" onclick="adjustValue('amount', 'font_size', 1)"><i class="fa-solid fa-plus"></i></button>
                                         </div>
+                                    </div>
+                                    <div class="calib-control-group" style="margin-top: 8px;">
+                                        <label>枠の幅 (W mm)</label>
+                                        <div class="calib-btn-wrap">
+                                            <button class="calib-btn" onclick="adjustValue('amount', 'width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span class="calib-value" id="val-amount-width_mm">80</span>
+                                            <button class="calib-btn" onclick="adjustValue('amount', 'width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="calib-control-group" style="margin-top: 8px;">
+                                        <label>枠の高さ (H mm)</label>
+                                        <div class="calib-btn-wrap">
+                                            <button class="calib-btn" onclick="adjustValue('amount', 'height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span class="calib-value" id="val-amount-height_mm">50</span>
+                                            <button class="calib-btn" onclick="adjustValue('amount', 'height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
+                                        <label>枠内の縦位置合わせ</label>
+                                        <select id="val-amount-valign" onchange="changeValign('amount', this.value)" style="width: 100%; padding: 6px; background: rgba(255, 255, 255, 0.9); color: var(--text-primary); border: 1px solid #cbd5e1; border-radius: 4px;">
+                                            <option value="top">上合わせ</option>
+                                            <option value="center">中央合わせ</option>
+                                            <option value="bottom">下合わせ</option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
@@ -757,6 +974,15 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- デバッグログ表示エリア -->
+        <div id="debugLogContainer">
+            <h3>
+                <span><i class="fa-solid fa-bug"></i> エラーログ（この内容をコピーして開発者に教えてください）</span>
+                <button class="btn-copy-log" onclick="copyDebugLog()"><i class="fa-solid fa-copy"></i> ログをコピー</button>
+            </h3>
+            <pre id="debugLog"></pre>
         </div>
 
     </div>
