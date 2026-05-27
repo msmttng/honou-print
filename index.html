@@ -63,6 +63,44 @@
             }
         }
 
+        /* モバイル最適化（スマホ用） */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            header h1 {
+                font-size: 18px;
+            }
+            .right-panel {
+                order: -1;
+                position: sticky;
+                top: 8px;
+                z-index: 100;
+            }
+            .preview-container {
+                min-height: 40vh !important;
+                height: 45vh !important;
+                box-shadow: 0 8px 16px -8px rgba(0,0,0,0.2);
+            }
+            .calib-btn {
+                width: 44px !important;
+                height: 44px !important;
+                font-size: 16px;
+            }
+            /* iOSでのズームを防ぐためフォントサイズを16px以上に */
+            .form-control, .btn, .template-btn, .accordion-header, select {
+                font-size: 16px !important;
+            }
+            .template-btn {
+                padding: 16px 10px;
+            }
+        }
+
         /* ヘッダーデザイン */
         header {
             grid-column: 1 / -1;

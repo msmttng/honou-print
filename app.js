@@ -127,8 +127,31 @@ window.addEventListener("DOMContentLoaded", async () => {
         // 全てのファイルがDBにある場合、フォントをメモリに読み込んでアプリ起動
         await loadAppFromDB();
     } else {
-        // 足りないファイルがある場合、セットアップ画面を表示
-        showSetupOverlay(fileStatus);
+        // 足りないファイルがある場合、自動ダウンロードを試行
+        showStatus("初回セットアップ中...（フォント等ダウンロードに数秒かかります）", true);
+        try {
+            const fetchFile = async (url, key) => {
+                const response = await fetch(encodeURI(url));
+                if (!response.ok) throw new Error(`ファイルが見つかりません: ${url}`);
+                const buffer = await response.arrayBuffer();
+                await saveFileToDB(key, buffer);
+            };
+
+            const promises = [];
+            if (!fileStatus.font) promises.push(fetchFile("hgrgy.ttc", "font"));
+            if (!fileStatus.pdf_10000en) promises.push(fetchFile("奉納ビラ縦.pdf", "pdf_10000en"));
+            if (!fileStatus.pdf_1000en) promises.push(fetchFile("奉納ビラ縦阡.pdf", "pdf_1000en"));
+            if (!fileStatus.pdf_free) promises.push(fetchFile("奉納ビラフリー.pdf", "pdf_free"));
+
+            await Promise.all(promises);
+            
+            // ダウンロード成功後、アプリを起動
+            await loadAppFromDB();
+        } catch (e) {
+            // 自動ダウンロードに失敗した場合のみ、手動セットアップ画面を表示
+            logError("自動ダウンロード失敗: " + e.message);
+            showSetupOverlay(fileStatus);
+        }
     }
 });
 
