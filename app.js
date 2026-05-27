@@ -537,22 +537,20 @@ async function generatePDF(isPrinting = false) {
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
-                pdfDoc.registerFontkit(window.fontkit);
-                const fontData = new Uint8Array(loadedFontBytes);
-                // TTC（TrueType Collection）かどうかを判定し、最初のフォントを抽出
-                let fontBytesToEmbed = fontData;
-                try {
-                    const parsed = window.fontkit.create(Buffer.from ? Buffer.from(fontData) : fontData);
-                    if (parsed && parsed.fonts && parsed.fonts.length > 0) {
-                        // TTC: コレクション内の最初のフォントのストリームを取得
-                        const firstFont = parsed.fonts[0];
-                        fontBytesToEmbed = firstFont.stream ? new Uint8Array(firstFont.stream.buffer) : fontData;
+                // fontkitラッパー: TTC（複数フォント入りファイル）の場合、
+                // 自動的にコレクション内の最初のフォントを返すようにする
+                const fontkitWrapper = {
+                    create(buffer) {
+                        const result = window.fontkit.create(buffer);
+                        if (result && result.fonts && result.fonts.length > 0) {
+                            console.log("TTC検出: コレクション内の最初のフォントを使用します");
+                            return result.fonts[0];
+                        }
+                        return result;
                     }
-                } catch (parseErr) {
-                    // TTFの場合はfontkitのcreateで単体フォントが返るのでそのまま使用
-                    console.log("フォントはTTF形式です（TTC分解不要）");
-                }
-                fontToUse = await pdfDoc.embedFont(fontBytesToEmbed, { subset: false });
+                };
+                pdfDoc.registerFontkit(fontkitWrapper);
+                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
