@@ -1136,13 +1136,13 @@
                     
                     <div class="dpad" style="display: grid; grid-template-columns: repeat(3, 55px); grid-template-rows: repeat(3, 55px); gap: 10px;">
                         <div></div>
-                        <button class="dpad-btn" onmousedown="startDpad('up')" onmouseup="stopDpad()" onmouseleave="stopDpad()" ontouchstart="startDpad('up'); event.preventDefault()" ontouchend="stopDpad()"><i class="fa-solid fa-chevron-up"></i></button>
+                        <button type="button" class="dpad-btn" onpointerdown="startDpad('up'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-up"></i></button>
                         <div></div>
-                        <button class="dpad-btn" onmousedown="startDpad('left')" onmouseup="stopDpad()" onmouseleave="stopDpad()" ontouchstart="startDpad('left'); event.preventDefault()" ontouchend="stopDpad()"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button type="button" class="dpad-btn" onpointerdown="startDpad('left'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-left"></i></button>
                         <div style="display: flex; justify-content: center; align-items: center; color: #cbd5e1;"><i class="fa-solid fa-circle" style="font-size: 12px;"></i></div>
-                        <button class="dpad-btn" onmousedown="startDpad('right')" onmouseup="stopDpad()" onmouseleave="stopDpad()" ontouchstart="startDpad('right'); event.preventDefault()" ontouchend="stopDpad()"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button type="button" class="dpad-btn" onpointerdown="startDpad('right'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-right"></i></button>
                         <div></div>
-                        <button class="dpad-btn" onmousedown="startDpad('down')" onmouseup="stopDpad()" onmouseleave="stopDpad()" ontouchstart="startDpad('down'); event.preventDefault()" ontouchend="stopDpad()"><i class="fa-solid fa-chevron-down"></i></button>
+                        <button type="button" class="dpad-btn" onpointerdown="startDpad('down'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-down"></i></button>
                         <div></div>
                     </div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px; margin-bottom: 24px;">※長押しで連続移動できます</div>
