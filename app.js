@@ -197,7 +197,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // 4. デザイン設定の初期座標マージ
     initDesignSettings();
-    updateCalibrationUI();
+    updateDpadUI();
     
     // 5. GAS設定の復元
     loadGasSettings();
@@ -501,35 +501,14 @@ function selectTemplate(templateKey) {
     }
     
     // 微調整UIの値を現在のテンプレートのデータに更新
-    updateCalibrationUI();
+    updateDpadUI();
     
     // プレビュー再描画
     updatePreview();
 }
 
 // --- 微調整UI数値の更新 ---
-function updateCalibrationUI() {
-    const settings = designSettings[currentTemplate];
-    if (!settings) return;
 
-    for (const [fieldKey, fieldVal] of Object.entries(settings)) {
-        const valX = document.getElementById(`val-${fieldKey}-x`);
-        const valY = document.getElementById(`val-${fieldKey}-y`);
-        const valFontSize = document.getElementById(`val-${fieldKey}-font_size`);
-        const valWidth = document.getElementById(`val-${fieldKey}-width_mm`);
-        const valHeight = document.getElementById(`val-${fieldKey}-height_mm`);
-        const valValign = document.getElementById(`val-${fieldKey}-valign`);
-        
-        if (valX) valX.textContent = fieldVal.x;
-        if (valY) valY.textContent = fieldVal.y;
-        if (valFontSize) valFontSize.textContent = fieldVal.font_size;
-        if (valWidth) valWidth.textContent = fieldVal.width_mm;
-        if (valHeight) valHeight.textContent = fieldVal.height_mm;
-        if (valValign) valValign.value = fieldVal.valign || "top";
-    }
-    
-    updateDpadBadge();
-}
 
 // --- 画面上での数値調整処理 ---
 function adjustValue(fieldKey, param, change) {
@@ -538,18 +517,15 @@ function adjustValue(fieldKey, param, change) {
 
     settings[fieldKey][param] = parseFloat((settings[fieldKey][param] + change).toFixed(1));
     
-    // UI数値を即時更新
-    document.getElementById(`val-${fieldKey}-${param}`).textContent = settings[fieldKey][param];
-    
     // LocalStorage保存
     saveDesignSettings();
     
     // プレビューの自動更新（デバウンスで実行）
     triggerAutoUpdate();
-    updateDpadBadge();
+    updateDpadUI();
 }
 
-function updateDpadBadge() {
+function updateDpadUI() {
     const badge = document.getElementById("dpadCoordinates");
     if (!badge) return;
     
@@ -565,7 +541,41 @@ function updateDpadBadge() {
     const settings = designSettings[currentTemplate];
     if (settings && settings[targetKey]) {
         badge.textContent = `X: ${settings[targetKey].x.toFixed(1)} / Y: ${settings[targetKey].y.toFixed(1)}`;
+        
+        const elFontSize = document.getElementById("dpad-val-font_size");
+        const elWidth = document.getElementById("dpad-val-width_mm");
+        const elHeight = document.getElementById("dpad-val-height_mm");
+        const elValign = document.getElementById("dpad-val-valign");
+        
+        if (elFontSize) elFontSize.textContent = settings[targetKey].font_size;
+        if (elWidth) elWidth.textContent = settings[targetKey].width_mm;
+        if (elHeight) elHeight.textContent = settings[targetKey].height_mm;
+        if (elValign) elValign.value = settings[targetKey].valign || "top";
     }
+}
+
+function adjustTargetValue(param, change) {
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) {
+            targetKey = targetRadios[i].value;
+            break;
+        }
+    }
+    adjustValue(targetKey, param, change);
+}
+
+function changeTargetValign(value) {
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) {
+            targetKey = targetRadios[i].value;
+            break;
+        }
+    }
+    changeValign(targetKey, value);
 }
 
 function changeValign(fieldKey, value) {
@@ -575,6 +585,7 @@ function changeValign(fieldKey, value) {
     settings[fieldKey].valign = value;
     saveDesignSettings();
     triggerAutoUpdate();
+    updateDpadUI();
 }
 
 // --- デザイン調整の初期値リセット ---
@@ -591,7 +602,7 @@ function resetCalibration() {
         };
     }
     saveDesignSettings();
-    updateCalibrationUI();
+    updateDpadUI();
     updatePreview();
     showToast("デザイン調整を初期値にリセットしました");
 }

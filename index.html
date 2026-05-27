@@ -1086,141 +1086,6 @@
                     </div>
                 </div>
 
-                <!-- 位置＆フォント微調整アコーディオン -->
-                <div class="accordion" id="calibrationAccordion" style="margin-top: 10px;">
-                    <div class="accordion-header" onclick="toggleAccordion()">
-                        <span><i class="fa-solid fa-sliders"></i> 高度な印字位置・フォントサイズ微調整</span>
-                        <i class="fa-solid fa-chevron-down" id="accordionArrow"></i>
-                    </div>
-                    
-                    <div class="accordion-content">
-                        <div class="calibration-grid">
-                            
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--warning);">
-                                    <input type="checkbox" id="showBoundingBox" onchange="triggerAutoUpdate()">
-                                    プレビューに印字枠線を表示する
-                                </label>
-                            </div>
-
-                            <!-- 氏名のデザイン微調整 -->
-                            <div class="calib-section">
-                                <h4><i class="fa-solid fa-user"></i> 氏名印字エリア</h4>
-                                <div class="calib-controls">
-                                    <div class="calib-control-group">
-                                        <label>X座標 (横位置 mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('name', 'x', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-name-x">105</span>
-                                            <button class="calib-btn" onclick="adjustValue('name', 'x', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group">
-                                        <label>Y座標 (縦位置 mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('name', 'y', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-name-y">120</span>
-                                            <button class="calib-btn" onclick="adjustValue('name', 'y', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
-                                        <label>フォントサイズ (pt)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('name', 'font_size', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-name-font_size">28</span>
-                                            <button class="calib-btn" onclick="adjustValue('name', 'font_size', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="margin-top: 8px;">
-                                        <label>枠の幅 (W mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('name', 'width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-name-width_mm">30</span>
-                                            <button class="calib-btn" onclick="adjustValue('name', 'width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="margin-top: 8px;">
-                                        <label>枠の高さ (H mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('name', 'height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-name-height_mm">150</span>
-                                            <button class="calib-btn" onclick="adjustValue('name', 'height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
-                                        <label>枠内の縦位置合わせ</label>
-                                        <select id="val-name-valign" onchange="changeValign('name', this.value)" style="width: 100%; padding: 6px; background: rgba(255, 255, 255, 0.9); color: var(--text-primary); border: 1px solid #cbd5e1; border-radius: 4px;">
-                                            <option value="top">上合わせ</option>
-                                            <option value="center">中央合わせ</option>
-                                            <option value="bottom">下合わせ</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 金額・物品名のデザイン微調整 (フリー用) -->
-                            <div class="calib-section" id="amountCalibSection" style="display: none;">
-                                <h4><i class="fa-solid fa-yen-sign"></i> 金額・物品名印字エリア</h4>
-                                <div class="calib-controls">
-                                    <div class="calib-control-group">
-                                        <label>X座標 (横位置 mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'x', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-amount-x">105</span>
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'x', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group">
-                                        <label>Y座標 (縦位置 mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'y', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-amount-y">90</span>
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'y', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
-                                        <label>フォントサイズ (pt)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'font_size', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-amount-font_size">24</span>
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'font_size', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="margin-top: 8px;">
-                                        <label>枠の幅 (W mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-amount-width_mm">80</span>
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="margin-top: 8px;">
-                                        <label>枠の高さ (H mm)</label>
-                                        <div class="calib-btn-wrap">
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                            <span class="calib-value" id="val-amount-height_mm">50</span>
-                                            <button class="calib-btn" onclick="adjustValue('amount', 'height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
-                                        </div>
-                                    </div>
-                                    <div class="calib-control-group" style="grid-column: span 2; margin-top: 8px;">
-                                        <label>枠内の縦位置合わせ</label>
-                                        <select id="val-amount-valign" onchange="changeValign('amount', this.value)" style="width: 100%; padding: 6px; background: rgba(255, 255, 255, 0.9); color: var(--text-primary); border: 1px solid #cbd5e1; border-radius: 4px;">
-                                            <option value="top">上合わせ</option>
-                                            <option value="center">中央合わせ</option>
-                                            <option value="bottom">下合わせ</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 設定初期化ボタン -->
-                            <button class="btn btn-secondary" onclick="resetCalibration()" style="width: 100%; margin-top: 8px;">
-                                <i class="fa-solid fa-rotate-left"></i> デザイン調整を初期値に戻す
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
         </div>
@@ -1276,7 +1141,60 @@
                         <button class="dpad-btn" onmousedown="startDpad('down')" onmouseup="stopDpad()" onmouseleave="stopDpad()" ontouchstart="startDpad('down'); event.preventDefault()" ontouchend="stopDpad()"><i class="fa-solid fa-chevron-down"></i></button>
                         <div></div>
                     </div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px;">※長押しで連続移動できます</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px; margin-bottom: 24px;">※長押しで連続移動できます</div>
+                    
+                    <div style="width: 100%; border-top: 1px solid #cbd5e1; margin: 16px 0;"></div>
+
+                    <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+                        <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary);"><i class="fa-solid fa-text-height"></i> サイズ・レイアウト微調整</div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 12px; color: var(--text-secondary);">フォントサイズ (pt)</label>
+                                <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('font_size', -1)"><i class="fa-solid fa-minus"></i></button>
+                                    <span id="dpad-val-font_size" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('font_size', 1)"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 12px; color: var(--text-secondary);">枠内の縦位置</label>
+                                <select id="dpad-val-valign" onchange="changeTargetValign(this.value)" style="width: 100%; height: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px; background: white; font-size: 13px; min-height: 38px;">
+                                    <option value="top">上合わせ</option>
+                                    <option value="center">中央合わせ</option>
+                                    <option value="bottom">下合わせ</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 12px; color: var(--text-secondary);">赤枠の幅 (W mm)</label>
+                                <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                    <span id="dpad-val-width_mm" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 12px; color: var(--text-secondary);">赤枠の高さ (H mm)</label>
+                                <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
+                                    <span id="dpad-val-height_mm" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <label style="display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; color: var(--warning); margin-top: 8px; font-size: 13px; font-weight: 600; background: #fff5f5; padding: 10px; border-radius: 8px; border: 1px solid #fecaca;">
+                            <input type="checkbox" id="showBoundingBox" onchange="triggerAutoUpdate()" style="transform: scale(1.2);">
+                            プレビューに印字枠線を表示する
+                        </label>
+
+                        <button type="button" class="btn btn-secondary" onclick="resetCalibration()" style="width: 100%; margin-top: 8px;">
+                            <i class="fa-solid fa-rotate-left"></i> デザイン調整を初期値に戻す
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
