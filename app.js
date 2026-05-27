@@ -40,6 +40,12 @@ let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存�
 let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
 let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
 
+// --- スプレッドシート連携（奉納者データベース） ---
+const SHEET_ID = "1Ar-HSbG_5dVPJEforaEBfc0jy1Ip2A202QH_RMPexSA";
+const SHEET_GID = "39958101";
+const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+let sheetData = [];            // スプレッドシートから取得した奉納者データ [{name, detail}]
+
 // --- IndexedDB ストレージ管理 ---
 const DB_NAME = "PdfMailMergeDB";
 const STORE_NAME = "files";
@@ -1145,3 +1151,141 @@ function showToast(message, type = "success") {
         toast.classList.remove("show");
     }, 3000);
 }
+
+// --- スプレッドシート連携（オートコンプリート） ---
+
+// CSVテキストをパース（シンプルなCSVパーサー）
+function parseCSV(text) {
+    const lines = text.split("\n").filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const results = [];
+    for (let i = 1; i < lines.length; i++) {
+        // カンマ区切り（ダブルクォート対応）
+        const row = [];
+        let current = "";
+        let inQuotes = false;
+        for (const ch of lines[i]) {
+            if (ch === '"') {
+                inQuotes = !inQuotes;
+            } else if (ch === ',' && !inQuotes) {
+                row.push(current.trim());
+                current = "";
+            } else {
+                current += ch;
+            }
+        }
+        row.push(current.trim());
+        if (row[0]) {
+            results.push({ name: row[0], detail: row[1] || "" });
+        }
+    }
+    return results;
+}
+
+// スプレッドシートからデータを取得
+async function syncFromSpreadsheet() {
+    const btn = document.getElementById("btnSyncSheet");
+    btn.classList.add("syncing");
+    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 同期中...';
+
+    try {
+        const response = await fetch(SHEET_CSV_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const csvText = await response.text();
+        sheetData = parseCSV(csvText);
+
+        // LocalStorageにキャッシュ
+        try {
+            localStorage.setItem("sheetDataCache", JSON.stringify(sheetData));
+            localStorage.setItem("sheetDataCacheTime", new Date().toISOString());
+        } catch (e) { /* localStorageエラーは無視 */ }
+
+        showToast(`奉納者データ ${sheetData.length}件を同期しました`);
+    } catch (e) {
+        console.error("スプレッドシート同期エラー:", e);
+        showToast("スプレッドシートの取得に失敗しました", "error");
+    } finally {
+        btn.classList.remove("syncing");
+        btn.innerHTML = '<i class="fa-solid fa-rotate"></i> スプレッドシートから同期';
+    }
+}
+
+// 起動時にキャッシュから復元し、バックグラウンドで同期
+function loadSheetDataCache() {
+    try {
+        const cached = localStorage.getItem("sheetDataCache");
+        if (cached) {
+            sheetData = JSON.parse(cached);
+        }
+    } catch (e) { /* 無視 */ }
+    // バックグラウンドで最新を取得
+    syncFromSpreadsheet().catch(() => {});
+}
+
+// オートコンプリート表示
+function showAutoComplete() {
+    const input = document.getElementById("nameInput");
+    const list = document.getElementById("autocompleteList");
+    const query = input.value.trim();
+
+    if (!query || sheetData.length === 0) {
+        list.classList.remove("show");
+        return;
+    }
+
+    const matches = sheetData.filter(d =>
+        d.name.includes(query) || d.detail.includes(query)
+    ).slice(0, 8);
+
+    if (matches.length === 0) {
+        list.classList.remove("show");
+        return;
+    }
+
+    list.innerHTML = matches.map((m, i) => `
+        <div class="autocomplete-item" onclick="selectAutoComplete(${i})" data-index="${i}">
+            <span class="ac-name">${escapeHTML(m.name)}</span>
+            <span class="ac-detail">${escapeHTML(m.detail)}</span>
+        </div>
+    `).join("");
+    list.classList.add("show");
+
+    // 一時的にマッチ結果を保存（選択用）
+    list._matches = matches;
+}
+
+// オートコンプリート選択時
+function selectAutoComplete(index) {
+    const list = document.getElementById("autocompleteList");
+    const match = list._matches[index];
+    if (!match) return;
+
+    // 氏名をセット
+    document.getElementById("nameInput").value = match.name;
+
+    // 奉納内容があればフリーテンプレートに切り替えて自動入力
+    if (match.detail) {
+        selectTemplate("free");
+        setTimeout(() => {
+            document.getElementById("amountInput").value = match.detail;
+            triggerAutoUpdate();
+        }, 100);
+    } else {
+        triggerAutoUpdate();
+    }
+
+    list.classList.remove("show");
+}
+
+// リスト外クリックで閉じる
+document.addEventListener("click", (e) => {
+    const list = document.getElementById("autocompleteList");
+    if (list && !e.target.closest(".autocomplete-wrapper")) {
+        list.classList.remove("show");
+    }
+});
+
+// 起動時にスプレッドシートデータをロード
+window.addEventListener("DOMContentLoaded", () => {
+    loadSheetDataCache();
+});

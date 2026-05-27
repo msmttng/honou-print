@@ -221,6 +221,81 @@
             }
         }
 
+        /* オートコンプリート（スプレッドシート連携） */
+        .autocomplete-wrapper {
+            position: relative;
+        }
+        .autocomplete-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 300;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        .autocomplete-list.show {
+            display: block;
+        }
+        .autocomplete-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            transition: background 0.1s;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-item:hover,
+        .autocomplete-item.active {
+            background: #eff6ff;
+        }
+        .autocomplete-item .ac-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .autocomplete-item .ac-detail {
+            font-size: 12px;
+            color: var(--text-secondary);
+            max-width: 55%;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .btn-sync {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--accent);
+            cursor: pointer;
+            border: none;
+            background: none;
+            padding: 2px 0;
+            margin-top: 4px;
+        }
+        .btn-sync:hover {
+            text-decoration: underline;
+        }
+        .btn-sync.syncing i {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         /* ヘッダーデザイン */
         header {
             grid-column: 1 / -1;
@@ -915,7 +990,13 @@
 
                 <div class="form-group">
                     <label for="nameInput">奉納者氏名</label>
-                    <input type="text" id="nameInput" class="form-control" placeholder="例: 山田 太郎" oninput="triggerAutoUpdate()">
+                    <div class="autocomplete-wrapper">
+                        <input type="text" id="nameInput" class="form-control" placeholder="例: 山田 太郎" oninput="triggerAutoUpdate(); showAutoComplete()" autocomplete="off">
+                        <div id="autocompleteList" class="autocomplete-list"></div>
+                    </div>
+                    <button type="button" class="btn-sync" id="btnSyncSheet" onclick="syncFromSpreadsheet()">
+                        <i class="fa-solid fa-rotate"></i> スプレッドシートから同期
+                    </button>
                 </div>
 
                 <div class="form-group" id="amountField" style="display: none;">
