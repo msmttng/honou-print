@@ -480,9 +480,7 @@ function selectTemplate(templateKey) {
     
     // すべてのテンプレートで金額を印字・微調整可能にするため、常に金額フィールドを表示
     const amountField = document.getElementById("amountField");
-    const amountCalibSection = document.getElementById("amountCalibSection");
-    amountField.style.display = "block";
-    amountCalibSection.style.display = "block";
+    if (amountField) amountField.style.display = "block";
 
     // 選択されたテンプレートに応じて自動的に金額の初期値・ラベル・プレースホルダーを設定
     const amountLabel = document.getElementById("amountLabel") || document.querySelector("label[for='amountInput']");
