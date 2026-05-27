@@ -104,14 +104,18 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // 3. バージョンチェックによるLocalStorageキャッシュクリア (新設定強制適用)
     const currentVersion = config.config_version || 1;
-    const savedVersion = localStorage.getItem("pdf_mail_merge_config_version");
-    if (savedVersion !== String(currentVersion)) {
-        console.log(`設定バージョンが更新されました (${savedVersion} -> ${currentVersion})。キャッシュをリセットします。`);
-        localStorage.removeItem("pdf_mail_merge_design_settings");
-        localStorage.setItem("pdf_mail_merge_config_version", currentVersion);
-        designSettings = {}; // キャッシュをクリア
-        // 再度ロードして空の状態に初期化
-        loadDesignSettings();
+    try {
+        const savedVersion = localStorage.getItem("pdf_mail_merge_config_version");
+        if (savedVersion !== String(currentVersion)) {
+            console.log(`設定バージョンが更新されました (${savedVersion} -> ${currentVersion})。キャッシュをリセットします。`);
+            localStorage.removeItem("pdf_mail_merge_design_settings");
+            localStorage.setItem("pdf_mail_merge_config_version", currentVersion);
+            designSettings = {}; // キャッシュをクリア
+            // 再度ロードして空の状態に初期化
+            loadDesignSettings();
+        }
+    } catch (e) {
+        console.warn("LocalStorageアクセスエラー(バージョンチェック):", e);
     }
 
     // 4. デザイン設定の初期座標マージ
@@ -304,36 +308,44 @@ function initDesignSettings() {
 }
 
 function loadDesignSettings() {
-    const saved = localStorage.getItem("pdf_mail_merge_design_settings");
-    if (saved) {
-        try {
+    try {
+        const saved = localStorage.getItem("pdf_mail_merge_design_settings");
+        if (saved) {
             designSettings = JSON.parse(saved);
-        } catch (e) {
-            console.error("LocalStorageデザイン設定パースエラー:", e);
-            designSettings = {};
         }
+    } catch (e) {
+        console.error("LocalStorageデザイン設定アクセスエラー:", e);
+        designSettings = {};
     }
 }
 
 function saveDesignSettings() {
-    localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
+    try {
+        localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
+    } catch (e) {
+        console.warn("LocalStorage保存エラー:", e);
+    }
 }
 
 // --- 名簿データベース（履歴）のLocalStorage連携 ---
 function loadDbRecords() {
-    const saved = localStorage.getItem("pdf_mail_merge_db");
-    if (saved) {
-        try {
+    try {
+        const saved = localStorage.getItem("pdf_mail_merge_db");
+        if (saved) {
             dbRecords = JSON.parse(saved);
-        } catch (e) {
-            console.error("LocalStorage名簿DBパースエラー:", e);
-            dbRecords = [];
         }
+    } catch (e) {
+        console.error("LocalStorage名簿DBアクセスエラー:", e);
+        dbRecords = [];
     }
 }
 
 function saveDbRecords() {
-    localStorage.setItem("pdf_mail_merge_db", JSON.stringify(dbRecords));
+    try {
+        localStorage.setItem("pdf_mail_merge_db", JSON.stringify(dbRecords));
+    } catch (e) {
+        console.warn("LocalStorage保存エラー:", e);
+    }
 }
 
 // --- テンプレートPDFの取得 (キャッシュ対応) ---
