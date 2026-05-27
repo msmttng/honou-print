@@ -81,7 +81,7 @@ async function getFileFromDB(key) {
 }
 
 async function checkRequiredFiles() {
-    const required = ["font_v2", "pdf_10000en", "pdf_1000en", "pdf_free"];
+    const required = ["font", "pdf_10000en", "pdf_1000en", "pdf_free"];
     const results = {};
     for (const key of required) {
         results[key] = (await getFileFromDB(key)) !== undefined;
@@ -147,7 +147,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             };
 
             const promises = [];
-            if (!fileStatus.font_v2) promises.push(fetchFile("yuji_syuku.ttf", "font_v2"));
+            if (!fileStatus.font) promises.push(fetchFile("hgrgy.ttc", "font"));
             if (!fileStatus.pdf_10000en) promises.push(fetchFile("奉納ビラ縦.pdf", "pdf_10000en"));
             if (!fileStatus.pdf_1000en) promises.push(fetchFile("奉納ビラ縦阡.pdf", "pdf_1000en"));
             if (!fileStatus.pdf_free) promises.push(fetchFile("奉納ビラフリー.pdf", "pdf_free"));
@@ -168,7 +168,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 async function loadAppFromDB() {
     try {
         showStatus("フォント読み込み中...", true);
-        loadedFontBytes = await getFileFromDB("font_v2");
+        loadedFontBytes = await getFileFromDB("font");
         loadedTemplateBytes["10000en"] = await getFileFromDB("pdf_10000en");
         loadedTemplateBytes["1000en"] = await getFileFromDB("pdf_1000en");
         loadedTemplateBytes["free"] = await getFileFromDB("pdf_free");
@@ -228,12 +228,12 @@ function updateSetupUI(status) {
             el.innerHTML = '<i class="fa-solid fa-circle-check success"></i> ' + el.innerText.trim();
         }
     };
-    if (status.font_v2) updateItem("status-font", true);
+    if (status.font) updateItem("status-font", true);
     if (status.pdf_10000en) updateItem("status-pdf-10000", true);
     if (status.pdf_1000en) updateItem("status-pdf-1000", true);
     if (status.pdf_free) updateItem("status-pdf-free", true);
 
-    if (status.font_v2 && status.pdf_10000en && status.pdf_1000en && status.pdf_free) {
+    if (status.font && status.pdf_10000en && status.pdf_1000en && status.pdf_free) {
         document.getElementById("btnCompleteSetup").classList.add("ready");
     }
 }
@@ -244,8 +244,8 @@ async function handleSetupFiles(files, status) {
         const buffer = await file.arrayBuffer();
         
         if (name.endsWith(".ttf") || name.endsWith(".ttc")) {
-            await saveFileToDB("font_v2", buffer);
-            status.font_v2 = true;
+            await saveFileToDB("font", buffer);
+            status.font = true;
         } else if (name.includes("縦") && !name.includes("阡")) {
             await saveFileToDB("pdf_10000en", buffer);
             status.pdf_10000en = true;
@@ -533,12 +533,26 @@ async function generatePDF(isPrinting = false) {
         // 2. pdf-libでPDFをロード
         const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
         
-        // 3. 日本語フォントの読み込みと埋め込み
+        // 3. 日本語フォントの読み込みと埋め込み（TTC対応）
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
                 pdfDoc.registerFontkit(window.fontkit);
-                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
+                const fontData = new Uint8Array(loadedFontBytes);
+                // TTC（TrueType Collection）かどうかを判定し、最初のフォントを抽出
+                let fontBytesToEmbed = fontData;
+                try {
+                    const parsed = window.fontkit.create(Buffer.from ? Buffer.from(fontData) : fontData);
+                    if (parsed && parsed.fonts && parsed.fonts.length > 0) {
+                        // TTC: コレクション内の最初のフォントのストリームを取得
+                        const firstFont = parsed.fonts[0];
+                        fontBytesToEmbed = firstFont.stream ? new Uint8Array(firstFont.stream.buffer) : fontData;
+                    }
+                } catch (parseErr) {
+                    // TTFの場合はfontkitのcreateで単体フォントが返るのでそのまま使用
+                    console.log("フォントはTTF形式です（TTC分解不要）");
+                }
+                fontToUse = await pdfDoc.embedFont(fontBytesToEmbed, { subset: false });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
