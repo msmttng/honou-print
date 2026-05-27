@@ -527,6 +527,8 @@ function updateCalibrationUI() {
         if (valHeight) valHeight.textContent = fieldVal.height_mm;
         if (valValign) valValign.value = fieldVal.valign || "top";
     }
+    
+    updateDpadBadge();
 }
 
 // --- 画面上での数値調整処理 ---
@@ -544,6 +546,26 @@ function adjustValue(fieldKey, param, change) {
     
     // プレビューの自動更新（デバウンスで実行）
     triggerAutoUpdate();
+    updateDpadBadge();
+}
+
+function updateDpadBadge() {
+    const badge = document.getElementById("dpadCoordinates");
+    if (!badge) return;
+    
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) {
+            targetKey = targetRadios[i].value;
+            break;
+        }
+    }
+    
+    const settings = designSettings[currentTemplate];
+    if (settings && settings[targetKey]) {
+        badge.textContent = `X: ${settings[targetKey].x.toFixed(1)} / Y: ${settings[targetKey].y.toFixed(1)}`;
+    }
 }
 
 function changeValign(fieldKey, value) {
