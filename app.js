@@ -41,7 +41,7 @@ let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウ�
 let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
 
 // --- スプレッドシート連携（GAS） ---
-let gasUrl = "";               // GAS ウェブアプリの URL (LocalStorage保存用)
+let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS ウェブアプリの URL (LocalStorage保存用・デフォルト値あり)
 let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
     "10000en_names": [],
     "1000en_names": [],
