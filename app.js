@@ -615,8 +615,8 @@ function moveDpad(direction) {
     let amount = 0;
     
     switch (direction) {
-        case 'up': param = 'y'; amount = -change; break;
-        case 'down': param = 'y'; amount = change; break;
+        case 'up': param = 'y'; amount = change; break;
+        case 'down': param = 'y'; amount = -change; break;
         case 'left': param = 'x'; amount = -change; break;
         case 'right': param = 'x'; amount = change; break;
     }
