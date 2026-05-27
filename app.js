@@ -857,7 +857,7 @@ async function updatePreview() {
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        pdfPreview.src = pdfUrl;
+        pdfPreview.src = pdfUrl + "#view=Fit";
         pdfPreview.style.display = "block";
         previewPlaceholder.style.display = "none";
         showStatus("プレビュー更新完了", false);
