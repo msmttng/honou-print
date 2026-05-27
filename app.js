@@ -40,11 +40,14 @@ let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存�
 let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
 let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
 
-// --- スプレッドシート連携（奉納者データベース） ---
-const SHEET_ID = "1Ar-HSbG_5dVPJEforaEBfc0jy1Ip2A202QH_RMPexSA";
-const SHEET_GID = "39958101";
-const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
-let sheetData = [];            // スプレッドシートから取得した奉納者データ [{name, detail}]
+// --- スプレッドシート連携（GAS） ---
+let gasUrl = "";               // GAS ウェブアプリの URL (LocalStorage保存用)
+let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
+    "10000en_names": [],
+    "1000en_names": [],
+    "free_names": [],
+    "free_items": []
+};
 
 // --- IndexedDB ストレージ管理 ---
 const DB_NAME = "PdfMailMergeDB";
@@ -128,6 +131,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     // 4. デザイン設定の初期座標マージ
     initDesignSettings();
     updateCalibrationUI();
+    
+    // 5. GAS設定の復元
+    loadGasSettings();
 
     // --- ここからローカルファイルチェッカー ---
     showStatus("ローカルファイル確認中...", true);
@@ -824,6 +830,9 @@ function saveRecord(showNotice = true) {
     dbRecords.unshift(newRecord); // 先頭に追加
     saveDbRecords();
     renderTable();
+    
+    // スプレッドシート連携（GAS）へ非同期で履歴を送信
+    sendToGAS(newRecord);
     
     if (showNotice) {
         showToast("名簿に正常に登録しました！");
