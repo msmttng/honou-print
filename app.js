@@ -576,6 +576,48 @@ function triggerAutoUpdate() {
     }, 300); // 300ms 入力が止まったらリレンダリング
 }
 
+// --- D-Pad (十字キー) 制御 ---
+let dpadInterval = null;
+
+function startDpad(direction) {
+    if (dpadInterval) return;
+    moveDpad(direction); // 初回移動
+    dpadInterval = setInterval(() => {
+        moveDpad(direction);
+    }, 120); // 長押し時の連続移動
+}
+
+function stopDpad() {
+    if (dpadInterval) {
+        clearInterval(dpadInterval);
+        dpadInterval = null;
+    }
+}
+
+function moveDpad(direction) {
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) {
+            targetKey = targetRadios[i].value;
+            break;
+        }
+    }
+    
+    const change = 0.5; // 0.5mm単位で移動
+    let param = "";
+    let amount = 0;
+    
+    switch (direction) {
+        case 'up': param = 'y'; amount = -change; break;
+        case 'down': param = 'y'; amount = change; break;
+        case 'left': param = 'x'; amount = -change; break;
+        case 'right': param = 'x'; amount = change; break;
+    }
+    
+    adjustValue(targetKey, param, amount);
+}
+
 // --- 単位変換: mm -> pt ---
 function mmToPt(mm) {
     return mm * 72 / 25.4;
