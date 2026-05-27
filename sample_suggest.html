@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>スマホ向け ボトムシート型サジェストUI サンプル</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+            color: #334155;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        h2 { font-size: 18px; margin-bottom: 20px; }
+        
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #475569; }
+        
+        /* モックアップ用の入力欄 */
+        .mock-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 16px;
+            background: #fff;
+            cursor: pointer;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #94a3b8;
+        }
+        .mock-input.has-value {
+            color: #0f172a;
+            border-color: #4f46e5;
+            font-weight: bold;
+        }
+        
+        /* ボトムシート（半画面モーダル） */
+        .bottom-sheet-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .bottom-sheet-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+        .bottom-sheet {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: 85vh; /* 画面の85%の高さ */
+            background: #fff;
+            border-radius: 20px 20px 0 0;
+            z-index: 1001;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        }
+        .bottom-sheet.active {
+            transform: translateY(0);
+        }
+        
+        /* シートのヘッダー部分 */
+        .sheet-header {
+            padding: 16px 20px 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .sheet-handle {
+            width: 40px;
+            height: 5px;
+            background: #cbd5e1;
+            border-radius: 3px;
+            margin: 0 auto 16px;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 16px; /* 16px以上でiOSズーム防止 */
+            background: #f8fafc;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #4f46e5;
+            background: #fff;
+        }
+        .btn-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #64748b;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        
+        /* タブ部分 */
+        .tabs {
+            display: flex;
+            overflow-x: auto;
+            border-bottom: 1px solid #e2e8f0;
+            background: #fff;
+            padding: 0 10px;
+            /* スクロールバー非表示 */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+        .tab-btn {
+            padding: 12px 16px;
+            background: none;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            white-space: nowrap;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active {
+            color: #4f46e5;
+            border-bottom-color: #4f46e5;
+        }
+        
+        /* リスト部分 */
+        .sheet-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+            background: #f8fafc;
+        }
+        .list-item {
+            padding: 16px 20px;
+            background: #fff;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .list-item:active {
+            background: #e2e8f0;
+        }
+        .list-item-sub {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: normal;
+        }
+        
+        /* 新規入力決定ボタン */
+        .btn-confirm-new {
+            margin: 16px 20px;
+            padding: 14px;
+            background: #4f46e5;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            width: calc(100% - 40px);
+            display: none;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+        }
+        .btn-confirm-new.show {
+            display: block;
+        }
+        .empty-message {
+            text-align: center;
+            padding: 30px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>入力テスト画面</h2>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 24px;">入力欄をタップすると、スマホアプリ風のボトムシートが開きます。</p>
+        
+        <div class="form-group">
+            <label>奉納者氏名</label>
+            <!-- 実際のinputではなく、divをボタンのように見立ててシートを開く -->
+            <div class="mock-input" id="nameTrigger" onclick="openSheet()">
+                <span id="nameDisplay">タップして入力・選択...</span>
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+        </div>
+        <p style="font-size: 12px; color: #94a3b8; margin-top: 50px;">※これはデザイン確認用のモックアップ（デモ）です。実際のシステムにはまだ組み込まれていません。</p>
+    </div>
+
+    <!-- ボトムシート -->
+    <div class="bottom-sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+    <div class="bottom-sheet" id="bottomSheet">
+        <div class="sheet-header">
+            <div class="sheet-handle"></div>
+            <div class="search-box">
+                <input type="text" id="searchInput" class="search-input" placeholder="氏名を直接入力 または 検索..." oninput="handleSearch()">
+                <button class="btn-close" onclick="closeSheet()"><i class="fa-solid fa-circle-xmark"></i></button>
+            </div>
+        </div>
+        
+        <!-- タブ（検索文字が入力されていない時だけ表示） -->
+        <div class="tabs" id="tabsContainer">
+            <button class="tab-btn active" onclick="switchTab('recent', this)">最近</button>
+            <button class="tab-btn" onclick="switchTab('a', this)">あ行</button>
+            <button class="tab-btn" onclick="switchTab('ka', this)">か行</button>
+            <button class="tab-btn" onclick="switchTab('sa', this)">さ行</button>
+            <button class="tab-btn" onclick="switchTab('corp', this)">法人</button>
+        </div>
+        
+        <div class="sheet-content" id="listContent">
+            <!-- リストがここに自動生成されます -->
+        </div>
+        
+        <button class="btn-confirm-new" id="btnConfirmNew" onclick="confirmNewInput()">
+            「<span id="newInputText"></span>」で決定する
+        </button>
+    </div>
+
+    <script>
+        // ダミーデータ
+        const dummyData = [
+            { name: "山田 太郎", kana: "やまだ たろう", type: "recent", date: "2023-10-01" },
+            { name: "田中 一郎", kana: "たなか いちろう", type: "recent", date: "2023-09-15" },
+            { name: "佐藤 花子", kana: "さとう はなこ", type: "sa", date: "2023-08-20" },
+            { name: "伊藤 健太", kana: "いとう けんた", type: "a", date: "" },
+            { name: "加藤 翔", kana: "かとう しょう", type: "ka", date: "" },
+            { name: "株式会社 テスト", kana: "かぶしきがいしゃ てすと", type: "corp", date: "" },
+            { name: "木村 拓哉", kana: "きむら たくや", type: "ka", date: "" },
+            { name: "鈴木 次郎", kana: "すずき じろう", type: "sa", date: "" }
+        ];
+
+        let currentTab = 'recent';
+
+        function openSheet() {
+            document.getElementById('sheetOverlay').classList.add('active');
+            document.getElementById('bottomSheet').classList.add('active');
+            document.getElementById('searchInput').value = '';
+            
+            // 少し遅らせてフォーカス（キーボード表示）するかどうかは運用次第
+            // setTimeout(() => document.getElementById('searchInput').focus(), 300);
+            
+            renderList();
+        }
+
+        function closeSheet() {
+            document.getElementById('sheetOverlay').classList.remove('active');
+            document.getElementById('bottomSheet').classList.remove('active');
+        }
+
+        function switchTab(tab, btnElement) {
+            currentTab = tab;
+            // タブの見た目変更
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+            
+            // リスト再描画
+            renderList();
+        }
+
+        function handleSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            const tabsContainer = document.getElementById('tabsContainer');
+            const btnConfirm = document.getElementById('btnConfirmNew');
+            const newTextSpan = document.getElementById('newInputText');
+            
+            if (query.length > 0) {
+                // 検索中はタブを隠す
+                tabsContainer.style.display = 'none';
+                
+                // 完全一致がない場合、「新規決定ボタン」を表示
+                const exactMatch = dummyData.some(item => item.name === query);
+                if (!exactMatch) {
+                    newTextSpan.textContent = query;
+                    btnConfirm.classList.add('show');
+                } else {
+                    btnConfirm.classList.remove('show');
+                }
+            } else {
+                // 検索が空ならタブを表示、新規ボタン隠す
+                tabsContainer.style.display = 'flex';
+                btnConfirm.classList.remove('show');
+            }
+            
+            renderList();
+        }
+
+        function renderList() {
+            const query = document.getElementById('searchInput').value.trim();
+            const content = document.getElementById('listContent');
+            content.innerHTML = '';
+            
+            let filtered = [];
+            
+            if (query.length > 0) {
+                // 検索時：全データから部分一致検索（ひらがな・漢字）
+                filtered = dummyData.filter(item => 
+                    item.name.includes(query) || item.kana.includes(query)
+                );
+            } else {
+                // 通常時：タブで絞り込み
+                filtered = dummyData.filter(item => item.type === currentTab);
+            }
+            
+            if (filtered.length === 0) {
+                content.innerHTML = '<div class="empty-message">該当する候補がありません。<br>上の入力欄にそのまま入力して決定できます。</div>';
+                return;
+            }
+            
+            filtered.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerHTML = `
+                    <span>${item.name}</span>
+                    <span class="list-item-sub">${item.date ? '履歴: ' + item.date : item.kana}</span>
+                `;
+                div.onclick = () => selectItem(item.name);
+                content.appendChild(div);
+            });
+        }
+
+        function selectItem(val) {
+            const trigger = document.getElementById('nameTrigger');
+            const display = document.getElementById('nameDisplay');
+            
+            display.textContent = val;
+            trigger.classList.add('has-value');
+            
+            closeSheet();
+        }
+
+        function confirmNewInput() {
+            const val = document.getElementById('searchInput').value.trim();
+            if(val) {
+                selectItem(val);
+            }
+        }
+    </script>
+</body>
+</html>
