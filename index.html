@@ -1153,11 +1153,14 @@
 
     <!-- #3 スマホ用下部固定アクションバー -->
     <div class="mobile-action-bar">
-        <button class="btn btn-success" onclick="mobilePrintPDF()">
-            <i class="fa-solid fa-download"></i> PDFを保存
+        <button class="btn btn-success" onclick="mobilePrintAirPrint()" style="flex: 1.2;">
+            <i class="fa-solid fa-print"></i> 印刷
+        </button>
+        <button class="btn btn-secondary" onclick="mobilePrintPDF()">
+            <i class="fa-solid fa-download"></i> 保存
         </button>
         <button class="btn btn-primary" onclick="saveRecord()">
-            <i class="fa-solid fa-user-plus"></i> 名簿登録
+            <i class="fa-solid fa-user-plus"></i> 名簿
         </button>
     </div>
 

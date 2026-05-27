@@ -1007,6 +1007,54 @@ async function mobilePrintPDF() {
     }
 }
 
+// iPhone AirPrint用の印刷機能
+async function mobilePrintAirPrint() {
+    const nameInput = document.getElementById("nameInput").value.trim();
+    if (!nameInput) {
+        showToast("氏名を入力してから印刷してください", "error");
+        return;
+    }
+
+    showStatus("印刷データ準備中...", true);
+    const pdfBlob = await generatePDF(true);
+    
+    if (pdfBlob) {
+        const fileName = `奉納ビラ_${nameInput}.pdf`;
+
+        // iOS Safari の navigator.share でPDFファイルを共有シートに送る
+        // → 共有シートから「プリント」を選ぶとAirPrintが起動する
+        if (navigator.share && navigator.canShare) {
+            try {
+                const pdfFile = new File([pdfBlob], fileName, { type: "application/pdf" });
+                if (navigator.canShare({ files: [pdfFile] })) {
+                    await navigator.share({
+                        title: fileName,
+                        files: [pdfFile]
+                    });
+                    showToast("共有シートを表示しました");
+                    showStatus("印刷準備完了", false);
+                    saveRecord(false);
+                    return;
+                }
+            } catch (e) {
+                if (e.name === "AbortError") {
+                    // ユーザーが共有シートをキャンセルした場合
+                    showStatus("準備完了", false);
+                    return;
+                }
+                console.warn("Share API失敗、フォールバックします:", e);
+            }
+        }
+
+        // フォールバック: 別タブでPDFを開く（Safari内蔵ビューアから印刷可能）
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window.open(pdfUrl, "_blank");
+        showToast("PDFを別タブで開きました。共有ボタンから印刷できます。");
+        showStatus("印刷準備完了", false);
+        saveRecord(false);
+    }
+}
+
 // #7 長押しリピート機能（+/-ボタン）
 (function setupLongPressRepeat() {
     document.addEventListener("DOMContentLoaded", () => {
