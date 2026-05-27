@@ -147,7 +147,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             };
 
             const promises = [];
-            if (!fileStatus.font) promises.push(fetchFile("hgrgy.ttc", "font"));
+            if (!fileStatus.font) promises.push(fetchFile("ipaexm.ttf", "font"));
             if (!fileStatus.pdf_10000en) promises.push(fetchFile("奉納ビラ縦.pdf", "pdf_10000en"));
             if (!fileStatus.pdf_1000en) promises.push(fetchFile("奉納ビラ縦阡.pdf", "pdf_1000en"));
             if (!fileStatus.pdf_free) promises.push(fetchFile("奉納ビラフリー.pdf", "pdf_free"));
@@ -533,23 +533,11 @@ async function generatePDF(isPrinting = false) {
         // 2. pdf-libでPDFをロード
         const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
         
-        // 3. 日本語フォントの読み込みと埋め込み（TTC対応）
+        // 3. 日本語フォントの読み込みと埋め込み
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
-                // fontkitラッパー: TTC（複数フォント入りファイル）の場合、
-                // 自動的にコレクション内の最初のフォントを返すようにする
-                const fontkitWrapper = {
-                    create(buffer) {
-                        const result = window.fontkit.create(buffer);
-                        if (result && result.fonts && result.fonts.length > 0) {
-                            console.log("TTC検出: コレクション内の最初のフォントを使用します");
-                            return result.fonts[0];
-                        }
-                        return result;
-                    }
-                };
-                pdfDoc.registerFontkit(fontkitWrapper);
+                pdfDoc.registerFontkit(window.fontkit);
                 fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
