@@ -87,12 +87,11 @@
                 font-size: 11px;
                 padding: 4px 8px;
             }
-            /* #1 プレビューの高さ縮小 + Sticky */
+            /* #1 プレビューの高さ縮小 (Stickyは解除) */
             .right-panel {
                 order: -1;
-                position: sticky;
-                top: 0;
-                z-index: 100;
+                position: relative;
+                z-index: 10;
             }
             .right-panel .card {
                 padding: 10px;
