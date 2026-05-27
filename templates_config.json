@@ -1,5 +1,5 @@
 {
-  "config_version": 8,
+  "config_version": 9,
   "default_font": "HGSGyoshotai",
   "templates": {
     "10000en": {
@@ -55,17 +55,19 @@
           "font_size": 98,
           "alignment": "center",
           "vertical": true,
+          "valign": "top",
           "width_mm": 25,
           "height_mm": 126
         },
         "amount": {
           "x_mm": 62.5,
           "y_mm": 264,
-          "font_size": 98,
+          "font_size": 143,
           "alignment": "center",
           "vertical": true,
-          "width_mm": 45,
-          "height_mm": 190
+          "valign": "center",
+          "width_mm": 55,
+          "height_mm": 234
         }
       }
     }
