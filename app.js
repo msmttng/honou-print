@@ -1016,42 +1016,58 @@ async function mobilePrintAirPrint() {
     }
 
     showStatus("印刷データ準備中...", true);
-    const pdfBlob = await generatePDF(true);
     
-    if (pdfBlob) {
+    try {
+        const pdfBlob = await generatePDF(true);
+        
+        if (!pdfBlob) {
+            showToast("PDFの生成に失敗しました", "error");
+            showStatus("準備完了", false);
+            return;
+        }
+
         const fileName = `奉納ビラ_${nameInput}.pdf`;
 
-        // iOS Safari の navigator.share でPDFファイルを共有シートに送る
-        // → 共有シートから「プリント」を選ぶとAirPrintが起動する
-        if (navigator.share && navigator.canShare) {
+        // 方法1: iOS Web Share API でPDFを共有シートに送る
+        // 共有シートから「プリント」→ AirPrint
+        if (navigator.share) {
             try {
                 const pdfFile = new File([pdfBlob], fileName, { type: "application/pdf" });
-                if (navigator.canShare({ files: [pdfFile] })) {
-                    await navigator.share({
-                        title: fileName,
-                        files: [pdfFile]
-                    });
-                    showToast("共有シートを表示しました");
+                const shareData = { files: [pdfFile] };
+                
+                if (navigator.canShare && navigator.canShare(shareData)) {
+                    await navigator.share(shareData);
                     showStatus("印刷準備完了", false);
                     saveRecord(false);
                     return;
                 }
             } catch (e) {
                 if (e.name === "AbortError") {
-                    // ユーザーが共有シートをキャンセルした場合
                     showStatus("準備完了", false);
                     return;
                 }
-                console.warn("Share API失敗、フォールバックします:", e);
+                console.warn("Share API:", e);
             }
         }
 
-        // フォールバック: 別タブでPDFを開く（Safari内蔵ビューアから印刷可能）
+        // 方法2: 別タブでPDFを開く（共有ボタン→プリント）
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        window.open(pdfUrl, "_blank");
-        showToast("PDFを別タブで開きました。共有ボタンから印刷できます。");
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.target = "_blank";
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showToast("PDFを開きました。共有ボタン→「プリント」で印刷できます。");
         showStatus("印刷準備完了", false);
         saveRecord(false);
+        
+    } catch (e) {
+        logError("印刷エラー: " + e.message);
+        showToast("印刷に失敗しました: " + e.message, "error");
+        showStatus("準備完了", false);
     }
 }
 
