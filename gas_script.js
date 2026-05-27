@@ -59,9 +59,18 @@ function doGet(e) {
   
   for (let col = 0; col < lastColumn; col++) {
     const header = headers[col];
+    
+    // 【超強力後方互換マージ】新ヘッダー名（2列構成）でも旧ヘッダー名（4列構成）でも、自動判別してnames/itemsに統合します
+    const isName = header === "氏名サジェスト" || 
+                   header === "萬圓_氏名サジェスト" || 
+                   header === "阡圓_氏名サジェスト" || 
+                   header === "フリー_氏名サジェスト";
+    const isItem = header === "物品サジェスト" || 
+                   header === "フリー_物品サジェスト";
+    
     let key = "";
-    if (header === "氏名サジェスト") key = "names";
-    else if (header === "物品サジェスト") key = "items";
+    if (isName) key = "names";
+    else if (isItem) key = "items";
     
     if (key) {
       for (let row = 0; row < values.length; row++) {
@@ -72,6 +81,9 @@ function doGet(e) {
       }
     }
   }
+  
+  // 重複した氏名を綺麗に排除
+  data.names = data.names.filter((v, i, a) => a.indexOf(v) === i);
   
   return ContentService.createTextOutput(JSON.stringify(data))
                        .setMimeType(ContentService.MimeType.JSON);
