@@ -24,17 +24,22 @@
 // GETリクエスト: サジェストデータの取得
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("サジェスト");
+  let sheet = ss.getSheetByName("サジェスト");
   
+  // 【自動作成機能】もし「サジェスト」シートがなければ、自動的に作成して正しいヘッダーを書き込む
   if (!sheet) {
-    return ContentService.createTextOutput(JSON.stringify({ error: "「サジェスト」シートが見つかりません。シート名が「サジェスト」になっているかご確認ください。" }))
-                         .setMimeType(ContentService.MimeType.JSON);
+    sheet = ss.insertSheet("サジェスト");
+    // 1行目にヘッダーを書き込み
+    sheet.appendRow(["萬圓_氏名サジェスト", "阡圓_氏名サジェスト", "フリー_氏名サジェスト", "フリー_物品サジェスト"]);
+    // 2行目に動作テスト用のサンプルデータを1件ずつ自動追加
+    sheet.appendRow(["山田 太郎", "佐藤 花子", "鈴木 一郎", "ビール 1ケース"]);
+    SpreadsheetApp.flush();
   }
   
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
   
-  // データがない場合のフォールバック
+  // データがない（ヘッダーのみ）の場合
   if (lastRow < 2) {
     return ContentService.createTextOutput(JSON.stringify({ 
       "10000en_names": [], 
