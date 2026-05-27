@@ -49,6 +49,59 @@ let suggestData = {            // スプレッドシート（GAS）から取得�
     "free_items": []
 };
 
+// GAS アコーディオンの開閉トグル
+function toggleGasAccordion() {
+    const accordion = document.getElementById("gasAccordion");
+    const arrow = document.getElementById("gasAccordionArrow");
+    if (!accordion) return;
+    
+    accordion.classList.toggle("open");
+    if (accordion.classList.contains("open")) {
+        if (arrow) arrow.className = "fa-solid fa-chevron-up";
+    } else {
+        if (arrow) arrow.className = "fa-solid fa-chevron-down";
+    }
+}
+
+// GAS URLの入力時保存
+function saveGasUrl() {
+    const input = document.getElementById("gasUrlInput");
+    if (input) {
+        gasUrl = input.value.trim();
+        try {
+            localStorage.setItem("pdf_mail_merge_gas_url", gasUrl);
+        } catch (e) {
+            console.warn("GAS URL保存失敗:", e);
+        }
+    }
+}
+
+// 起動時のGAS設定とキャッシュの読み込み
+function loadGasSettings() {
+    try {
+        // GAS URLの復元
+        const savedUrl = localStorage.getItem("pdf_mail_merge_gas_url");
+        if (savedUrl) {
+            gasUrl = savedUrl;
+        }
+        const input = document.getElementById("gasUrlInput");
+        if (input) input.value = gasUrl;
+
+        // サジェストデータのキャッシュ復元
+        const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
+        if (cachedSuggests) {
+            suggestData = JSON.parse(cachedSuggests);
+        }
+    } catch (e) {
+        console.error("GAS設定の復元失敗:", e);
+    }
+
+    // GAS URLが設定されていれば、バックグラウンドで同期を実行
+    if (gasUrl) {
+        syncFromGAS(true).catch(() => {});
+    }
+}
+
 // --- IndexedDB ストレージ管理 ---
 const DB_NAME = "PdfMailMergeDB";
 const STORE_NAME = "files";
@@ -1161,59 +1214,7 @@ function showToast(message, type = "success") {
     }, 3000);
 }
 
-// --- スプレッドシート連携（GAS）設定と制御 ---
-
-// GAS アコーディオンの開閉トグル
-function toggleGasAccordion() {
-    const accordion = document.getElementById("gasAccordion");
-    const arrow = document.getElementById("gasAccordionArrow");
-    
-    accordion.classList.toggle("open");
-    if (accordion.classList.contains("open")) {
-        arrow.className = "fa-solid fa-chevron-up";
-    } else {
-        arrow.className = "fa-solid fa-chevron-down";
-    }
-}
-
-// GAS URLの入力時保存
-function saveGasUrl() {
-    const input = document.getElementById("gasUrlInput");
-    if (input) {
-        gasUrl = input.value.trim();
-        try {
-            localStorage.setItem("pdf_mail_merge_gas_url", gasUrl);
-        } catch (e) {
-            console.warn("GAS URL保存失敗:", e);
-        }
-    }
-}
-
-// 起動時のGAS設定とキャッシュの読み込み
-function loadGasSettings() {
-    try {
-        // GAS URLの復元
-        const savedUrl = localStorage.getItem("pdf_mail_merge_gas_url");
-        if (savedUrl) {
-            gasUrl = savedUrl;
-            const input = document.getElementById("gasUrlInput");
-            if (input) input.value = gasUrl;
-        }
-
-        // サジェストデータのキャッシュ復元
-        const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
-        if (cachedSuggests) {
-            suggestData = JSON.parse(cachedSuggests);
-        }
-    } catch (e) {
-        console.error("GAS設定の復元失敗:", e);
-    }
-
-    // GAS URLが設定されていれば、バックグラウンドで同期を実行
-    if (gasUrl) {
-        syncFromGAS(true).catch(() => {});
-    }
-}
+// --- スプレッドシート連携（GAS）API ---
 
 // GASからサジェストデータを取得（GET）
 async function syncFromGAS(isBackground = false) {
