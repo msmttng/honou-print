@@ -81,7 +81,7 @@ async function getFileFromDB(key) {
 }
 
 async function checkRequiredFiles() {
-    const required = ["font", "pdf_10000en", "pdf_1000en", "pdf_free"];
+    const required = ["font_yuji", "pdf_10000en", "pdf_1000en", "pdf_free"];
     const results = {};
     for (const key of required) {
         results[key] = (await getFileFromDB(key)) !== undefined;
@@ -126,7 +126,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     // --- ここからローカルファイルチェッカー ---
     showStatus("ローカルファイル確認中...", true);
     const fileStatus = await checkRequiredFiles();
-    const allFilesReady = fileStatus.font && fileStatus.pdf_10000en && fileStatus.pdf_1000en && fileStatus.pdf_free;
+    const allFilesReady = fileStatus.font_yuji && fileStatus.pdf_10000en && fileStatus.pdf_1000en && fileStatus.pdf_free;
 
     if (allFilesReady) {
         // 全てのファイルがDBにある場合、フォントをメモリに読み込んでアプリ起動
@@ -147,7 +147,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             };
 
             const promises = [];
-            if (!fileStatus.font) promises.push(fetchFile("ipaexm.ttf", "font"));
+            if (!fileStatus.font_yuji) promises.push(fetchFile("yuji_syuku.ttf", "font_yuji"));
             if (!fileStatus.pdf_10000en) promises.push(fetchFile("奉納ビラ縦.pdf", "pdf_10000en"));
             if (!fileStatus.pdf_1000en) promises.push(fetchFile("奉納ビラ縦阡.pdf", "pdf_1000en"));
             if (!fileStatus.pdf_free) promises.push(fetchFile("奉納ビラフリー.pdf", "pdf_free"));
@@ -168,7 +168,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 async function loadAppFromDB() {
     try {
         showStatus("フォント読み込み中...", true);
-        loadedFontBytes = await getFileFromDB("font");
+        loadedFontBytes = await getFileFromDB("font_yuji");
         loadedTemplateBytes["10000en"] = await getFileFromDB("pdf_10000en");
         loadedTemplateBytes["1000en"] = await getFileFromDB("pdf_1000en");
         loadedTemplateBytes["free"] = await getFileFromDB("pdf_free");
@@ -228,12 +228,12 @@ function updateSetupUI(status) {
             el.innerHTML = '<i class="fa-solid fa-circle-check success"></i> ' + el.innerText.trim();
         }
     };
-    if (status.font) updateItem("status-font", true);
+    if (status.font_yuji) updateItem("status-font", true);
     if (status.pdf_10000en) updateItem("status-pdf-10000", true);
     if (status.pdf_1000en) updateItem("status-pdf-1000", true);
     if (status.pdf_free) updateItem("status-pdf-free", true);
 
-    if (status.font && status.pdf_10000en && status.pdf_1000en && status.pdf_free) {
+    if (status.font_yuji && status.pdf_10000en && status.pdf_1000en && status.pdf_free) {
         document.getElementById("btnCompleteSetup").classList.add("ready");
     }
 }
@@ -244,8 +244,8 @@ async function handleSetupFiles(files, status) {
         const buffer = await file.arrayBuffer();
         
         if (name.endsWith(".ttf") || name.endsWith(".ttc")) {
-            await saveFileToDB("font", buffer);
-            status.font = true;
+            await saveFileToDB("font_yuji", buffer);
+            status.font_yuji = true;
         } else if (name.includes("縦") && !name.includes("阡")) {
             await saveFileToDB("pdf_10000en", buffer);
             status.pdf_10000en = true;
