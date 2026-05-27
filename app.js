@@ -1448,115 +1448,145 @@ async function sendToGAS(record) {
     }
 }
 
-// 氏名入力のオートコンプリート表示
-function showAutoComplete() {
-    const input = document.getElementById("nameInput");
-    const list = document.getElementById("autocompleteList");
-    const query = input.value.trim().toLowerCase();
+// ==========================================
+// ボトムシート（サジェストUI）制御ロジック
+// ==========================================
+let currentSheetTarget = 'name'; // 'name' or 'amount'
+let currentSheetTab = 'recent'; // 'recent' or 'cloud'
 
-    if (!query) {
-        list.classList.remove("show");
-        return;
+function openBottomSheet(target) {
+    currentSheetTarget = target;
+    const overlay = document.getElementById('sheetOverlay');
+    const sheet = document.getElementById('bottomSheet');
+    const searchInput = document.getElementById('sheetSearchInput');
+    
+    // プレースホルダーの切り替え
+    if (target === 'name') {
+        searchInput.placeholder = "氏名を直接入力 または 検索...";
+    } else {
+        searchInput.placeholder = "金額・物品名を直接入力 または 検索...";
     }
-
-    // 現在のテンプレートに関わらず、共通の氏名リストを使用
-    const targetList = suggestData.names || [];
-
-    if (!targetList || targetList.length === 0) {
-        list.classList.remove("show");
-        return;
-    }
-
-    // クエリと部分一致する候補をフィルタリング
-    const matches = targetList.filter(name =>
-        name.toLowerCase().includes(query)
-    ).slice(0, 8);
-
-    if (matches.length === 0) {
-        list.classList.remove("show");
-        return;
-    }
-
-    list.innerHTML = matches.map((name, i) => `
-        <div class="autocomplete-item" onclick="selectAutoComplete(${i})" data-index="${i}">
-            <span class="ac-name">${escapeHTML(name)}</span>
-        </div>
-    `).join("");
-    list.classList.add("show");
-
-    // マッチ結果を一時保存（選択用）
-    list._matches = matches;
+    
+    searchInput.value = '';
+    overlay.classList.add('active');
+    sheet.classList.add('active');
+    
+    // タブを初期化
+    switchSheetTab('recent');
 }
 
-// 氏名のオートコンプリート選択
-function selectAutoComplete(index) {
-    const list = document.getElementById("autocompleteList");
-    const match = list._matches[index];
-    if (!match) return;
+function closeBottomSheet() {
+    const overlay = document.getElementById('sheetOverlay');
+    const sheet = document.getElementById('bottomSheet');
+    overlay.classList.remove('active');
+    sheet.classList.remove('active');
+}
 
-    document.getElementById("nameInput").value = match;
+function switchSheetTab(tabId) {
+    currentSheetTab = tabId;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+    renderSheetList();
+}
+
+function handleSheetSearch() {
+    const query = document.getElementById('sheetSearchInput').value.trim();
+    const tabsContainer = document.getElementById('sheetTabsContainer');
+    const btnConfirm = document.getElementById('btnConfirmNew');
+    const newTextSpan = document.getElementById('newSheetInputText');
+    
+    if (query.length > 0) {
+        tabsContainer.style.display = 'none';
+        newTextSpan.textContent = query;
+        btnConfirm.classList.add('show');
+    } else {
+        tabsContainer.style.display = 'flex';
+        btnConfirm.classList.remove('show');
+    }
+    
+    renderSheetList();
+}
+
+function renderSheetList() {
+    const query = document.getElementById('sheetSearchInput').value.trim().toLowerCase();
+    const content = document.getElementById('sheetListContent');
+    content.innerHTML = '';
+    
+    let sourceData = [];
+    let isCloud = false;
+    
+    if (currentSheetTarget === 'name') {
+        if (currentSheetTab === 'recent' && !query) {
+            // 最近の履歴から重複排除して氏名を抽出
+            sourceData = [...new Set(dbRecords.map(r => r.name))];
+        } else {
+            // クラウドまたは検索時は全クラウドデータ
+            sourceData = suggestData.names || [];
+            isCloud = true;
+            // 検索時はローカル履歴もマージして検索対象にする
+            if (query) {
+                const localNames = dbRecords.map(r => r.name);
+                sourceData = [...new Set([...sourceData, ...localNames])];
+            }
+        }
+    } else {
+        if (currentSheetTab === 'recent' && !query) {
+            // 最近の履歴から金額/物品を抽出
+            sourceData = [...new Set(dbRecords.map(r => r.amount))];
+        } else {
+            sourceData = suggestData.items || [];
+            isCloud = true;
+            if (query) {
+                const localItems = dbRecords.map(r => r.amount);
+                sourceData = [...new Set([...sourceData, ...localItems])];
+            }
+        }
+    }
+    
+    let filtered = sourceData;
+    
+    if (query.length > 0) {
+        filtered = sourceData.filter(item => item.toLowerCase().includes(query));
+        
+        // 検索結果に完全一致がある場合は新規ボタンを隠す
+        const exactMatch = filtered.some(item => item.toLowerCase() === query);
+        const btnConfirm = document.getElementById('btnConfirmNew');
+        if (exactMatch) {
+            btnConfirm.classList.remove('show');
+        }
+    }
+    
+    if (filtered.length === 0) {
+        content.innerHTML = '<div class="empty-message">該当する候補がありません。<br>上の入力欄にそのまま入力して決定ボタンを押してください。</div>';
+        return;
+    }
+    
+    // 上限30件程度にする
+    filtered.slice(0, 30).forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
+            <span>${escapeHTML(item)}</span>
+            <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
+        `;
+        div.onclick = () => selectSheetItem(item);
+        content.appendChild(div);
+    });
+}
+
+function selectSheetItem(val) {
+    if (currentSheetTarget === 'name') {
+        document.getElementById("nameInput").value = val;
+    } else {
+        document.getElementById("amountInput").value = val;
+    }
+    closeBottomSheet();
     triggerAutoUpdate();
-    list.classList.remove("show");
 }
 
-// フリー用金額・物品名のオートコンプリート表示
-function showAutoCompleteAmount() {
-    const input = document.getElementById("amountInput");
-    const list = document.getElementById("autocompleteListAmount");
-    const query = input.value.trim().toLowerCase();
-
-    // フリー用以外、またはクエリが空、またはサジェストデータがない場合は表示しない
-    if (currentTemplate !== "free" || !query) {
-        list.classList.remove("show");
-        return;
+function confirmNewSheetInput() {
+    const val = document.getElementById('sheetSearchInput').value.trim();
+    if (val) {
+        selectSheetItem(val);
     }
-
-    const targetList = suggestData.items || [];
-    if (!targetList || targetList.length === 0) {
-        list.classList.remove("show");
-        return;
-    }
-
-    const matches = targetList.filter(item =>
-        item.toLowerCase().includes(query)
-    ).slice(0, 8);
-
-    if (matches.length === 0) {
-        list.classList.remove("show");
-        return;
-    }
-
-    list.innerHTML = matches.map((item, i) => `
-        <div class="autocomplete-item" onclick="selectAutoCompleteAmount(${i})" data-index="${i}">
-            <span class="ac-name">${escapeHTML(item)}</span>
-        </div>
-    `).join("");
-    list.classList.add("show");
-
-    // マッチ結果を一時保存（選択用）
-    list._matches = matches;
 }
-
-// フリー用金額・物品名のオートコンプリート選択
-function selectAutoCompleteAmount(index) {
-    const list = document.getElementById("autocompleteListAmount");
-    const match = list._matches[index];
-    if (!match) return;
-
-    document.getElementById("amountInput").value = match;
-    triggerAutoUpdate();
-    list.classList.remove("show");
-}
-
-// リスト外クリックでオートコンプリートを閉じる
-document.addEventListener("click", (e) => {
-    const nameList = document.getElementById("autocompleteList");
-    if (nameList && !e.target.closest(".autocomplete-wrapper")) {
-        nameList.classList.remove("show");
-    }
-
-    const amountList = document.getElementById("autocompleteListAmount");
-    if (amountList && !e.target.closest("#amountAutocompleteWrapper")) {
-        amountList.classList.remove("show");
-    }
-});
