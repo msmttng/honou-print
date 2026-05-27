@@ -77,7 +77,7 @@ function saveGasUrl() {
 // 起動時のGAS設定とキャッシュの読み込み
 function loadGasSettings() {
     try {
-        // GAS URLの復元
+        // GAS URL of recovery
         const savedUrl = localStorage.getItem("pdf_mail_merge_gas_url");
         if (savedUrl) {
             gasUrl = savedUrl;
@@ -85,10 +85,20 @@ function loadGasSettings() {
         const input = document.getElementById("gasUrlInput");
         if (input) input.value = gasUrl;
 
-        // サジェストデータのキャッシュ復元
+        // サジェストデータのキャッシュ復元と新方式への自動コンバート
         const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
         if (cachedSuggests) {
-            suggestData = JSON.parse(cachedSuggests);
+            const rawData = JSON.parse(cachedSuggests);
+            suggestData = {
+                names: rawData.names || [
+                    ...(rawData["10000en_names"] || []),
+                    ...(rawData["1000en_names"] || []),
+                    ...(rawData["free_names"] || [])
+                ],
+                items: rawData.items || rawData["free_items"] || []
+            };
+            // 重複排除
+            suggestData.names = [...new Set(suggestData.names)];
         }
     } catch (e) {
         console.error("GAS設定の復元失敗:", e);
@@ -1323,7 +1333,7 @@ function showAutoComplete() {
     }
 
     // 現在のテンプレートに関わらず、共通の氏名リストを使用
-    const targetList = suggestData.names;
+    const targetList = suggestData.names || [];
 
     if (!targetList || targetList.length === 0) {
         list.classList.remove("show");
@@ -1374,7 +1384,7 @@ function showAutoCompleteAmount() {
         return;
     }
 
-    const targetList = suggestData.items;
+    const targetList = suggestData.items || [];
     if (!targetList || targetList.length === 0) {
         list.classList.remove("show");
         return;
