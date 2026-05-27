@@ -43,10 +43,8 @@ let isAppReady = false;        // アプリケーション（DB等）の初期�
 // --- スプレッドシート連携（GAS） ---
 let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS ウェブアプリの URL (LocalStorage保存用・デフォルト値あり)
 let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
-    "10000en_names": [],
-    "1000en_names": [],
-    "free_names": [],
-    "free_items": []
+    "names": [],
+    "items": []
 };
 
 // GAS アコーディオンの開閉トグル
@@ -1245,13 +1243,15 @@ async function syncFromGAS(isBackground = false) {
             throw new Error(data.error);
         }
 
-        // サジェストデータを更新
-        suggestData = {
-            "10000en_names": data["10000en_names"] || [],
-            "1000en_names": data["1000en_names"] || [],
-            "free_names": data["free_names"] || [],
-            "free_items": data["free_items"] || []
-        };
+        // サジェストデータを更新（新方式のnames/itemsに対応し、旧方式の3列データもマージして統合する後方互換処理）
+        const rawNames = data.names || [
+            ...(data["10000en_names"] || []),
+            ...(data["1000en_names"] || []),
+            ...(data["free_names"] || [])
+        ];
+        // 重複排除して格納
+        suggestData.names = [...new Set(rawNames)];
+        suggestData.items = data.items || data["free_items"] || [];
 
         // LocalStorageに保存
         try {
@@ -1260,7 +1260,7 @@ async function syncFromGAS(isBackground = false) {
         } catch (e) { /* 無視 */ }
 
         if (!isBackground) {
-            const totalCount = suggestData["10000en_names"].length + suggestData["1000en_names"].length + suggestData["free_names"].length + suggestData["free_items"].length;
+            const totalCount = suggestData.names.length + suggestData.items.length;
             showToast(`スプレッドシートからサジェストデータ ${totalCount}件を同期しました`);
         }
     } catch (e) {
@@ -1322,15 +1322,8 @@ function showAutoComplete() {
         return;
     }
 
-    // 現在のテンプレートに対応した氏名サジェストリストを決定
-    let targetList = [];
-    if (currentTemplate === "10000en") {
-        targetList = suggestData["10000en_names"];
-    } else if (currentTemplate === "1000en") {
-        targetList = suggestData["1000en_names"];
-    } else if (currentTemplate === "free") {
-        targetList = suggestData["free_names"];
-    }
+    // 現在のテンプレートに関わらず、共通の氏名リストを使用
+    const targetList = suggestData.names;
 
     if (!targetList || targetList.length === 0) {
         list.classList.remove("show");
@@ -1381,7 +1374,7 @@ function showAutoCompleteAmount() {
         return;
     }
 
-    const targetList = suggestData["free_items"];
+    const targetList = suggestData.items;
     if (!targetList || targetList.length === 0) {
         list.classList.remove("show");
         return;

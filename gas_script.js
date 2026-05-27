@@ -29,10 +29,12 @@ function doGet(e) {
   // 【自動作成機能】もし「サジェスト」シートがなければ、自動的に作成して正しいヘッダーを書き込む
   if (!sheet) {
     sheet = ss.insertSheet("サジェスト");
-    // 1行目にヘッダーを書き込み
-    sheet.appendRow(["萬圓_氏名サジェスト", "阡圓_氏名サジェスト", "フリー_氏名サジェスト", "フリー_物品サジェスト"]);
-    // 2行目に動作テスト用のサンプルデータを1件ずつ自動追加
-    sheet.appendRow(["山田 太郎", "佐藤 花子", "鈴木 一郎", "ビール 1ケース"]);
+    // 1行目に統合したシンプルなヘッダーを書き込み (共通氏名サジェストとフリー物品サジェストの2列)
+    sheet.appendRow(["氏名サジェスト", "物品サジェスト"]);
+    // 2行目に動作テスト用のサンプルデータを自動追加
+    sheet.appendRow(["山田 太郎", "ビール 1ケース"]);
+    sheet.appendRow(["佐藤 花子", "お神酒 二升"]);
+    sheet.appendRow(["鈴木 一郎", "清酒 三本"]);
     SpreadsheetApp.flush();
   }
   
@@ -42,10 +44,8 @@ function doGet(e) {
   // データがない（ヘッダーのみ）の場合
   if (lastRow < 2) {
     return ContentService.createTextOutput(JSON.stringify({ 
-      "10000en_names": [], 
-      "1000en_names": [], 
-      "free_names": [], 
-      "free_items": [] 
+      "names": [], 
+      "items": [] 
     })).setMimeType(ContentService.MimeType.JSON);
   }
   
@@ -53,19 +53,15 @@ function doGet(e) {
   const values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
   
   const data = {
-    "10000en_names": [],
-    "1000en_names": [],
-    "free_names": [],
-    "free_items": []
+    "names": [],
+    "items": []
   };
   
   for (let col = 0; col < lastColumn; col++) {
     const header = headers[col];
     let key = "";
-    if (header === "萬圓_氏名サジェスト") key = "10000en_names";
-    else if (header === "阡圓_氏名サジェスト") key = "1000en_names";
-    else if (header === "フリー_氏名サジェスト") key = "free_names";
-    else if (header === "フリー_物品サジェスト") key = "free_items";
+    if (header === "氏名サジェスト") key = "names";
+    else if (header === "物品サジェスト") key = "items";
     
     if (key) {
       for (let row = 0; row < values.length; row++) {
