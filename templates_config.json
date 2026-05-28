@@ -6,8 +6,8 @@
       "template_file": "奉納ビラ縦.pdf",
       "fields": {
         "name": {
-          "x_mm": 21.5,
-          "y_mm": 151,
+          "x_mm": 20.0,
+          "y_mm": 151.5,
           "font_size": 98,
           "alignment": "center",
           "vertical": true,
@@ -15,8 +15,8 @@
           "height_mm": 150
         },
         "amount": {
-          "x_mm": 62.5,
-          "y_mm": 222,
+          "x_mm": 59.0,
+          "y_mm": 222.5,
           "font_size": 131,
           "alignment": "center",
           "width_mm": 80,
@@ -28,8 +28,8 @@
       "template_file": "奉納ビラ縦阡.pdf",
       "fields": {
         "name": {
-          "x_mm": 21.5,
-          "y_mm": 151,
+          "x_mm": 20.0,
+          "y_mm": 151.5,
           "font_size": 98,
           "alignment": "center",
           "vertical": true,
@@ -37,8 +37,8 @@
           "height_mm": 150
         },
         "amount": {
-          "x_mm": 62.5,
-          "y_mm": 222,
+          "x_mm": 59.0,
+          "y_mm": 222.5,
           "font_size": 131,
           "alignment": "center",
           "width_mm": 80,
@@ -50,8 +50,8 @@
       "template_file": "奉納ビラフリー.pdf",
       "fields": {
         "name": {
-          "x_mm": 21.5,
-          "y_mm": 132,
+          "x_mm": 20.0,
+          "y_mm": 132.5,
           "font_size": 98,
           "alignment": "center",
           "vertical": true,
@@ -60,8 +60,8 @@
           "height_mm": 126
         },
         "amount": {
-          "x_mm": 62.5,
-          "y_mm": 264,
+          "x_mm": 59.0,
+          "y_mm": 264.5,
           "font_size": 143,
           "alignment": "center",
           "vertical": true,
