@@ -40,6 +40,7 @@ const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標�
 let currentTemplate = "10000en";
 let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
 let designSettings = {};       // ユーザー調整後の座標・フォントサイズ (LocalStorage保存用)
+let paperSizeSettings = { width: 109, height: 399 }; // 用紙サイズ設定 (mm, 全テンプレート共通)
 let loadedFontBytes = null;    // キャッシュされたフォントデータのArrayBuffer
 let loadedTemplateBytes = {};  // キャッシュされたテンプレートPDFのArrayBuffer
 let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存用)
@@ -390,6 +391,7 @@ function initDesignSettings() {
         }
     }
     saveDesignSettings();
+    updatePaperSizeUI();
 }
 
 function loadDesignSettings() {
@@ -402,14 +404,55 @@ function loadDesignSettings() {
         console.error("LocalStorageデザイン設定アクセスエラー:", e);
         designSettings = {};
     }
+    // 用紙サイズ設定の読み込み
+    try {
+        const savedPaper = localStorage.getItem("pdf_mail_merge_paper_size");
+        if (savedPaper) {
+            paperSizeSettings = JSON.parse(savedPaper);
+        }
+    } catch (e) {
+        console.error("用紙サイズ設定アクセスエラー:", e);
+    }
 }
 
 function saveDesignSettings() {
     try {
         localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
+        localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
     } catch (e) {
         console.warn("LocalStorage保存エラー:", e);
     }
+}
+
+// --- 用紙サイズ調整 ---
+function adjustPaperSize(dimension, change) {
+    if (dimension === 'width') {
+        paperSizeSettings.width = parseFloat((paperSizeSettings.width + change).toFixed(1));
+        if (paperSizeSettings.width < 50) paperSizeSettings.width = 50;
+        if (paperSizeSettings.width > 300) paperSizeSettings.width = 300;
+    } else {
+        paperSizeSettings.height = parseFloat((paperSizeSettings.height + change).toFixed(1));
+        if (paperSizeSettings.height < 100) paperSizeSettings.height = 100;
+        if (paperSizeSettings.height > 600) paperSizeSettings.height = 600;
+    }
+    saveDesignSettings();
+    updatePaperSizeUI();
+    triggerAutoUpdate();
+}
+
+function resetPaperSize() {
+    paperSizeSettings = { width: 109, height: 399 };
+    saveDesignSettings();
+    updatePaperSizeUI();
+    triggerAutoUpdate();
+    showToast('用紙サイズをデフォルト（109 x 399mm）に戻しました');
+}
+
+function updatePaperSizeUI() {
+    const wEl = document.getElementById('paper-val-width');
+    const hEl = document.getElementById('paper-val-height');
+    if (wEl) wEl.textContent = paperSizeSettings.width.toFixed(1);
+    if (hEl) hEl.textContent = paperSizeSettings.height.toFixed(1);
 }
 
 // --- 名簿データベース（履歴）のLocalStorage連携 ---
@@ -550,6 +593,7 @@ function updateDpadUI() {
         if (elHeight) elHeight.textContent = settings[targetKey].height_mm;
         if (elValign) elValign.value = settings[targetKey].valign || "top";
     }
+    updatePaperSizeUI();
 }
 
 function adjustTargetValue(param, change) {
@@ -686,17 +730,26 @@ async function generatePDF(isPrinting = false) {
         let firstPage;
         const includeBackground = document.getElementById("includeBackground") ? document.getElementById("includeBackground").checked : true;
 
+        // 用紙サイズ変更の計算 (原本との差分で translateContent + setSize)
+        const origDoc = await PDFLib.PDFDocument.load(templateBytes);
+        const origPage = origDoc.getPages()[0];
+        const origWidthPt = origPage.getSize().width;
+        const origHeightPt = origPage.getSize().height;
+        const newWidthPt = mmToPt(paperSizeSettings.width);
+        const newHeightPt = mmToPt(paperSizeSettings.height);
+        const shiftXPt = (newWidthPt - origWidthPt) / 2;
+        const shiftYPt = (newHeightPt - origHeightPt) / 2;
+
         if (includeBackground) {
             pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
             firstPage = pdfDoc.getPages()[0];
+            // デザインをセンタリングしてからページサイズを変更
+            firstPage.translateContent(shiftXPt, shiftYPt);
+            firstPage.setSize(newWidthPt, newHeightPt);
         } else {
-            // 背景なしの場合は、寸法を取得するためだけに一時ロード
-            const tempDoc = await PDFLib.PDFDocument.load(templateBytes);
-            const { width, height } = tempDoc.getPages()[0].getSize();
-            
-            // 白紙のPDFを新規作成
+            // 白紙のPDFを新規作成（新しい用紙サイズで）
             pdfDoc = await PDFLib.PDFDocument.create();
-            firstPage = pdfDoc.addPage([width, height]);
+            firstPage = pdfDoc.addPage([newWidthPt, newHeightPt]);
         }
         
         // 3. 日本語フォントの読み込みと埋め込み
@@ -725,8 +778,9 @@ async function generatePDF(isPrinting = false) {
             const textValue = data[fieldKey];
             if (!textValue) continue;
 
-            const x_pt = mmToPt(fieldVal.x);
-            const y_pt = mmToPt(fieldVal.y);
+            // 用紙サイズ変更に伴うテキスト座標のオフセット適用
+            const x_pt = mmToPt(fieldVal.x) + shiftXPt;
+            const y_pt = mmToPt(fieldVal.y) + shiftYPt;
             const baseFontSize = fieldVal.font_size;
             const width_pt = mmToPt(fieldVal.width_mm || 30);
             const height_pt = mmToPt(fieldVal.height_mm || 150);
