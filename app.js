@@ -40,7 +40,7 @@ const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標�
 let currentTemplate = "10000en";
 let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
 let designSettings = {};       // ユーザー調整後の座標・フォントサイズ (LocalStorage保存用)
-let paperSizeSettings = { width: 109, height: 399 }; // 用紙サイズ設定 (mm, 全テンプレート共通)
+let paperSizeSettings = { width: 105, height: 390 }; // 用紙サイズ設定 (mm, 全テンプレート共通)
 let loadedFontBytes = null;    // キャッシュされたフォントデータのArrayBuffer
 let loadedTemplateBytes = {};  // キャッシュされたテンプレートPDFのArrayBuffer
 let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存用)
@@ -343,21 +343,21 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 8,
+        "config_version": 10,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
                 "template_file": "奉納ビラ縦.pdf",
                 "fields": {
-                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
-                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 131, "alignment": "center", "width_mm": 80, "height_mm": 50 }
+                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 100, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
+                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 137, "alignment": "center", "width_mm": 80, "height_mm": 50 }
                 }
             },
             "1000en": {
                 "template_file": "奉納ビラ縦阡.pdf",
                 "fields": {
-                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
-                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 131, "alignment": "center", "width_mm": 80, "height_mm": 50 }
+                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 100, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
+                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 137, "alignment": "center", "width_mm": 80, "height_mm": 50 }
                 }
             },
             "free": {
@@ -441,11 +441,11 @@ function adjustPaperSize(dimension, change) {
 }
 
 function resetPaperSize() {
-    paperSizeSettings = { width: 109, height: 399 };
+    paperSizeSettings = { width: 105, height: 390 };
     saveDesignSettings();
     updatePaperSizeUI();
     triggerAutoUpdate();
-    showToast('用紙サイズをデフォルト（109 x 399mm）に戻しました');
+    showToast('用紙サイズをデフォルト（105 x 390mm）に戻しました');
 }
 
 function updatePaperSizeUI() {
