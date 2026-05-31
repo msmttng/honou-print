@@ -618,6 +618,53 @@ function adjustTargetValue(param, change) {
     adjustValue(targetKey, param, change);
 }
 
+// --- フォントサイズ等の直接入力機能 ---
+function makeValueEditable(param) {
+    const span = document.getElementById(`dpad-val-${param}`);
+    if (!span) return;
+    const currentVal = parseInt(span.textContent);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = isNaN(currentVal) ? 0 : currentVal;
+    input.style.cssText = 'width: 60px; text-align: center; font-weight: 600; font-family: monospace; border: 2px solid var(--accent); border-radius: 4px; padding: 2px; font-size: 14px;';
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+    
+    const confirm = () => {
+        const newVal = parseInt(input.value);
+        // 現在選択中のフィールド(name/amount)の値を更新
+        const targetRadios = document.getElementsByName('dpadTarget');
+        let targetKey = 'name';
+        for (let i = 0; i < targetRadios.length; i++) {
+            if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
+        }
+        
+        if (!isNaN(newVal) && newVal > 0) {
+            const settings = designSettings[currentTemplate];
+            if (settings && settings[targetKey]) {
+                settings[targetKey][param] = newVal;
+                saveDesignSettings();
+                triggerAutoUpdate();
+            }
+        }
+        
+        const newSpan = document.createElement('span');
+        newSpan.id = `dpad-val-${param}`;
+        newSpan.style.cssText = 'font-weight: 600; font-family: monospace; cursor: pointer;';
+        newSpan.onclick = () => makeValueEditable(param);
+        newSpan.textContent = designSettings[currentTemplate]?.[targetKey]?.[param] ?? '--';
+        input.replaceWith(newSpan);
+        updateDpadUI();
+    };
+    
+    input.addEventListener('blur', confirm);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+        if (e.key === 'Escape') { input.blur(); }
+    });
+}
+
 function changeTargetValign(value) {
     const targetRadios = document.getElementsByName("dpadTarget");
     let targetKey = "name";

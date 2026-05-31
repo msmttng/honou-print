@@ -1246,7 +1246,7 @@
                                 <label style="font-size: 12px; color: var(--text-secondary);">フォントサイズ (pt)</label>
                                 <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('font_size', -1)"><i class="fa-solid fa-minus"></i></button>
-                                    <span id="dpad-val-font_size" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <span id="dpad-val-font_size" style="font-weight: 600; font-family: monospace; cursor: pointer;" onclick="makeValueEditable('font_size')">--</span>
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('font_size', 1)"><i class="fa-solid fa-plus"></i></button>
                                 </div>
                             </div>
@@ -1265,7 +1265,7 @@
                                 <label style="font-size: 12px; color: var(--text-secondary);">赤枠の幅 (W mm)</label>
                                 <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('width_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                    <span id="dpad-val-width_mm" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <span id="dpad-val-width_mm" style="font-weight: 600; font-family: monospace; cursor: pointer;" onclick="makeValueEditable('width_mm')">--</span>
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('width_mm', 1)"><i class="fa-solid fa-plus"></i></button>
                                 </div>
                             </div>
@@ -1273,7 +1273,7 @@
                                 <label style="font-size: 12px; color: var(--text-secondary);">赤枠の高さ (H mm)</label>
                                 <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('height_mm', -1)"><i class="fa-solid fa-minus"></i></button>
-                                    <span id="dpad-val-height_mm" style="font-weight: 600; font-family: monospace;">--</span>
+                                    <span id="dpad-val-height_mm" style="font-weight: 600; font-family: monospace; cursor: pointer;" onclick="makeValueEditable('height_mm')">--</span>
                                     <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('height_mm', 1)"><i class="fa-solid fa-plus"></i></button>
                                 </div>
                             </div>
