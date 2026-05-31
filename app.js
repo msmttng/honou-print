@@ -1,3 +1,14 @@
+// --- Service Worker 登録（PWA対応） ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      console.log('Service Worker registered:', reg.scope);
+    }).catch(err => {
+      console.warn('Service Worker registration failed:', err);
+    });
+  });
+}
+
 // --- エラー収集ロジック ---
 window.addEventListener("error", function(e) {
     logError("Global Error: " + e.message + " at " + e.filename + ":" + e.lineno);

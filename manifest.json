@@ -1,0 +1,18 @@
+{
+  "name": "奉納ビラ 印刷＆名簿管理",
+  "short_name": "奉納ビラ",
+  "description": "奉納ビラの差し込み印刷と名簿管理システム",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fdfbfb",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%234f46e5'/><text x='256' y='350' font-size='300' text-anchor='middle' fill='white' font-family='serif'>奉</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
