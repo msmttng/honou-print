@@ -1342,10 +1342,13 @@
                 <div class="card-title" style="margin-bottom: 0;">
                     <span><i class="fa-solid fa-users"></i> 奉納者名簿・印刷履歴一覧</span>
                 </div>
-                <div style="display: flex; gap: 12px; align-items: center; width: 60%; justify-content: flex-end;">
+                <div style="display: flex; gap: 12px; align-items: center; width: 60%; justify-content: flex-end; flex-wrap: wrap;">
                     <input type="text" id="searchInput" class="form-control db-search" placeholder="氏名や物品名で検索..." oninput="renderTable()">
                     <button class="btn btn-secondary" onclick="exportCSV()" style="padding: 10px 16px;">
                         <i class="fa-solid fa-file-csv"></i> CSV出力
+                    </button>
+                    <button class="btn btn-primary" id="btnBatchPrint" onclick="batchPrint()" style="padding: 10px 16px; display: none;">
+                        <i class="fa-solid fa-layer-group"></i> <span id="batchCount">0</span>件を一括印刷
                     </button>
                 </div>
             </div>
@@ -1354,11 +1357,12 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 15%">日時</th>
-                            <th style="width: 15%">台紙種類</th>
-                            <th style="width: 25%">奉納者氏名</th>
-                            <th style="width: 25%">金額 / 物品名</th>
-                            <th style="width: 20%">操作</th>
+                            <th style="width: 5%"><input type="checkbox" id="selectAllRecords" onchange="toggleSelectAll(this.checked)" style="transform: scale(1.3);"></th>
+                            <th style="width: 13%">日時</th>
+                            <th style="width: 13%">台紙種類</th>
+                            <th style="width: 24%">奉納者氏名</th>
+                            <th style="width: 24%">金額 / 物品名</th>
+                            <th style="width: 21%">操作</th>
                         </tr>
                     </thead>
                     <tbody id="historyTableBody">

@@ -1219,7 +1219,7 @@ function renderTable() {
     );
 
     if (filteredRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="no-data">登録されている名簿データはありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="no-data">登録されている名簿データはありません。</td></tr>`;
         return;
     }
 
@@ -1242,6 +1242,7 @@ function renderTable() {
         }
 
         tr.innerHTML = `
+            <td data-label=""><input type="checkbox" class="record-checkbox" value="${r.id}" onchange="updateBatchCount()" style="transform: scale(1.3);"></td>
             <td data-label="日時">${dateStr}</td>
             <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
             <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
@@ -1721,5 +1722,129 @@ function confirmNewSheetInput() {
     const val = document.getElementById('sheetSearchInput').value.trim();
     if (val) {
         selectSheetItem(val);
+    }
+}
+
+// ==========================================
+// 一括印刷機能
+// ==========================================
+
+// 一括選択/解除
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.record-checkbox').forEach(cb => cb.checked = checked);
+    updateBatchCount();
+}
+
+// 選択件数の更新
+function updateBatchCount() {
+    const count = document.querySelectorAll('.record-checkbox:checked').length;
+    const btn = document.getElementById('btnBatchPrint');
+    const countSpan = document.getElementById('batchCount');
+    if (countSpan) countSpan.textContent = count;
+    if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+
+// 一括印刷
+async function batchPrint() {
+    const checkedBoxes = document.querySelectorAll('.record-checkbox:checked');
+    const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+    
+    if (selectedIds.length === 0) {
+        showToast('印刷するレコードを選択してください', 'error');
+        return;
+    }
+    
+    showStatus(`一括印刷: ${selectedIds.length}件のPDFを生成中...`, true);
+    
+    // 現在のフォーム状態を保存
+    const origTemplate = currentTemplate;
+    const origName = document.getElementById('nameInput').value;
+    const origAmount = document.getElementById('amountInput').value;
+    const origSelect = document.getElementById('amountSelect') ? document.getElementById('amountSelect').value : '一';
+    
+    try {
+        const mergedPdf = await PDFLib.PDFDocument.create();
+        
+        for (let i = 0; i < selectedIds.length; i++) {
+            const record = dbRecords.find(r => r.id === selectedIds[i]);
+            if (!record) continue;
+            
+            showStatus(`一括印刷: ${i + 1}/${selectedIds.length} 件目を処理中...`, true);
+            
+            // レコードのテンプレートに切り替え（UIは更新せずに内部値のみ変更）
+            currentTemplate = record.template;
+            
+            // フォーム値を一時的に設定
+            document.getElementById('nameInput').value = record.name;
+            
+            // 金額をパース
+            if (record.template === '10000en' || record.template === '1000en') {
+                let val = record.amount;
+                if (val.startsWith('金')) val = val.substring(1);
+                if (val.endsWith('萬圓也')) val = val.substring(0, val.length - 3);
+                else if (val.endsWith('阡圓也')) val = val.substring(0, val.length - 3);
+                const amountSelect = document.getElementById('amountSelect');
+                if (amountSelect) amountSelect.value = val;
+                document.getElementById('amountInput').value = val;
+            } else {
+                document.getElementById('amountInput').value = record.amount;
+            }
+            
+            // PDF生成
+            const pdfBlob = await generatePDF(true);
+            if (pdfBlob) {
+                const pdfBytes = await pdfBlob.arrayBuffer();
+                const srcDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+                copiedPages.forEach(page => mergedPdf.addPage(page));
+            }
+        }
+        
+        // フォームの状態を元に戻す
+        currentTemplate = origTemplate;
+        document.getElementById('nameInput').value = origName;
+        document.getElementById('amountInput').value = origAmount;
+        const amountSelectRestore = document.getElementById('amountSelect');
+        if (amountSelectRestore) amountSelectRestore.value = origSelect;
+        
+        if (mergedPdf.getPageCount() === 0) {
+            showToast('PDFの生成に失敗しました', 'error');
+            showStatus('準備完了', false);
+            return;
+        }
+        
+        const mergedBytes = await mergedPdf.save();
+        const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        
+        // 印刷 or ダウンロード
+        const newWindow = window.open(url, '_blank');
+        if (newWindow) {
+            newWindow.onload = () => newWindow.print();
+            showToast(`${selectedIds.length}件のPDFを一括印刷します`);
+        } else {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `奉納ビラ一括_${selectedIds.length}件_${new Date().toISOString().slice(0,10)}.pdf`;
+            link.click();
+            showToast(`${selectedIds.length}件のPDFをダウンロードしました`);
+        }
+        
+        showStatus('一括印刷完了', false);
+        
+        // テンプレートUIを元に戻す
+        selectTemplate(currentTemplate);
+        
+    } catch (e) {
+        console.error('一括印刷エラー:', e);
+        showToast('一括印刷に失敗しました: ' + e.message, 'error');
+        showStatus('準備完了', false);
+        
+        // エラー時もフォームの状態を元に戻す
+        currentTemplate = origTemplate;
+        document.getElementById('nameInput').value = origName;
+        document.getElementById('amountInput').value = origAmount;
+        const amountSelectErr = document.getElementById('amountSelect');
+        if (amountSelectErr) amountSelectErr.value = origSelect;
     }
 }
