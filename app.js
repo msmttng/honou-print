@@ -814,7 +814,7 @@ async function generatePDF(isPrinting = false) {
         if (loadedFontBytes) {
             try {
                 pdfDoc.registerFontkit(window.fontkit);
-                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
+                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: true });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
@@ -995,7 +995,7 @@ async function generatePDF(isPrinting = false) {
     }
 }
 
-// --- リアルタイムプレビュー更新 ---
+// --- リアルタイムプレビュー更新（チラつき防止版） ---
 async function updatePreview() {
     const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
@@ -1010,7 +1010,6 @@ async function updatePreview() {
             const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
             
-            const context = pdfCanvas.getContext('2d');
             const container = pdfCanvas.parentElement;
             
             const containerWidth = container.clientWidth - 40; 
@@ -1023,22 +1022,31 @@ async function updatePreview() {
             
             const outputScale = window.devicePixelRatio || 1;
             
-            pdfCanvas.width = Math.floor(viewport.width * outputScale);
-            pdfCanvas.height = Math.floor(viewport.height * outputScale);
-            pdfCanvas.style.width = Math.floor(viewport.width) + "px";
-            pdfCanvas.style.height =  Math.floor(viewport.height) + "px";
+            // オフスクリーンcanvasで先にレンダリング（チラつき防止）
+            const offscreen = document.createElement('canvas');
+            offscreen.width = Math.floor(viewport.width * outputScale);
+            offscreen.height = Math.floor(viewport.height * outputScale);
             
+            const offCtx = offscreen.getContext('2d');
             const transform = outputScale !== 1 
               ? [outputScale, 0, 0, outputScale, 0, 0] 
               : null;
 
             const renderContext = {
-              canvasContext: context,
+              canvasContext: offCtx,
               transform: transform,
               viewport: viewport
             };
             
             await page.render(renderContext).promise;
+            
+            // レンダリング完了後にメインcanvasへ一括コピー
+            pdfCanvas.width = offscreen.width;
+            pdfCanvas.height = offscreen.height;
+            pdfCanvas.style.width = Math.floor(viewport.width) + "px";
+            pdfCanvas.style.height = Math.floor(viewport.height) + "px";
+            const mainCtx = pdfCanvas.getContext('2d');
+            mainCtx.drawImage(offscreen, 0, 0);
             
             pdfCanvas.style.display = "block";
             previewPlaceholder.style.display = "none";
@@ -1048,8 +1056,11 @@ async function updatePreview() {
             showStatus("プレビュー表示エラー", false);
         }
     } else {
-        pdfCanvas.style.display = "none";
-        previewPlaceholder.style.display = "flex";
+        // pdfBlobがnull（氏名未入力など）の場合のみcanvasをクリア
+        if (!pdfBlob) {
+            pdfCanvas.style.display = "none";
+            previewPlaceholder.style.display = "flex";
+        }
         showStatus("準備完了", false);
     }
 }
