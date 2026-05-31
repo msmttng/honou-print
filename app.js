@@ -1546,7 +1546,7 @@ async function syncFromGAS(isBackground = false) {
     }
 }
 
-// 履歴データをスプレッドシートへ自動追記（POST）
+// 履歴データをスプレッドシートへ自動追記（POST）- オフラインキュー対応
 async function sendToGAS(record) {
     if (!gasUrl) return; // GAS URLが未設定ならスキップ
 
@@ -1564,23 +1564,144 @@ async function sendToGAS(record) {
         amount: record.amount
     };
 
+    // オフラインの場合はキューに追加して終了
+    if (!navigator.onLine) {
+        addToOfflineQueue(payload);
+        console.log("オフラインのためキューに追加しました");
+        return;
+    }
+
     try {
         console.log("GASへのPOST送信を開始します...", payload);
-        const response = await fetch(gasUrl, {
+        await fetch(gasUrl, {
             method: "POST",
-            mode: "no-cors", // CORS制約（リダイレクトや異なるオリジンへのPOST制限）を回避するため no-cors モードで送信
-            headers: {
-                "Content-Type": "application/json"
-            },
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        
-        // no-cors の場合、response.ok や status は取得できませんが、送信自体はGASに届きます
         console.log("GASへのデータ送信要求を送信しました");
     } catch (e) {
-        console.error("GASへの履歴追記エラー:", e);
+        // ネットワークエラー時はキューに追加
+        console.warn("GAS送信失敗、オフラインキューに追加:", e.message);
+        addToOfflineQueue(payload);
     }
 }
+
+// --- オフラインキュー管理 ---
+const OFFLINE_QUEUE_KEY = "pdf_mail_merge_offline_queue";
+
+// キューにペイロードを追加
+function addToOfflineQueue(payload) {
+    try {
+        const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+        queue.push({ payload, queuedAt: new Date().toISOString() });
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        updateOfflineQueueBadge();
+    } catch (e) {
+        console.error("オフラインキュー保存エラー:", e);
+    }
+}
+
+// キューの件数を取得
+function getOfflineQueueCount() {
+    try {
+        const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+        return queue.length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+// 未送信バッジの更新
+function updateOfflineQueueBadge() {
+    const count = getOfflineQueueCount();
+    let badge = document.getElementById("offlineQueueBadge");
+    
+    if (count === 0) {
+        if (badge) badge.style.display = "none";
+        return;
+    }
+    
+    if (!badge) {
+        // バッジ要素がなければ動的に作成（ステータスバー横に配置）
+        badge = document.createElement("div");
+        badge.id = "offlineQueueBadge";
+        badge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; border: 1px solid #fde68a; cursor: pointer; font-weight: 600;";
+        badge.title = "クリックして未送信データを再送信";
+        badge.onclick = () => flushOfflineQueue();
+        const header = document.querySelector("header");
+        if (header) header.appendChild(badge);
+    }
+    
+    badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> 未送信 ${count}件`;
+    badge.style.display = "inline-flex";
+}
+
+// キューの一括送信（オンライン復帰時に自動実行）
+async function flushOfflineQueue() {
+    if (!gasUrl || !navigator.onLine) return;
+    
+    let queue;
+    try {
+        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+    } catch (e) {
+        return;
+    }
+    
+    if (queue.length === 0) return;
+    
+    console.log(`オフラインキュー: ${queue.length}件の未送信データを送信開始...`);
+    showToast(`未送信データ ${queue.length}件をスプレッドシートに送信中...`);
+    
+    const failedItems = [];
+    
+    for (const item of queue) {
+        try {
+            await fetch(gasUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(item.payload)
+            });
+            console.log("キューアイテム送信成功:", item.payload.name);
+        } catch (e) {
+            console.warn("キューアイテム送信失敗:", e.message);
+            failedItems.push(item);
+        }
+    }
+    
+    // 失敗分だけキューに残す
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(failedItems));
+    updateOfflineQueueBadge();
+    
+    const successCount = queue.length - failedItems.length;
+    if (successCount > 0) {
+        showToast(`未送信データ ${successCount}件をスプレッドシートに送信しました！`);
+    }
+    if (failedItems.length > 0) {
+        showToast(`${failedItems.length}件の送信に失敗しました。後で再試行します。`, "error");
+    }
+}
+
+// オンライン復帰時にキューを自動送信
+window.addEventListener("online", () => {
+    console.log("ネットワーク接続が回復しました");
+    setTimeout(() => flushOfflineQueue(), 2000); // 接続安定のため2秒待つ
+});
+
+// オフライン検知時にバッジ表示を更新
+window.addEventListener("offline", () => {
+    console.log("ネットワーク接続が切断されました");
+});
+
+// アプリ起動時にキューをチェック
+window.addEventListener("DOMContentLoaded", () => {
+    updateOfflineQueueBadge();
+    // オンラインなら未送信キューを自動送信
+    if (navigator.onLine && getOfflineQueueCount() > 0) {
+        setTimeout(() => flushOfflineQueue(), 5000);
+    }
+});
 
 // ==========================================
 // ボトムシート（サジェストUI）制御ロジック
