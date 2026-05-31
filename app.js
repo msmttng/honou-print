@@ -34,7 +34,7 @@ if (pdfjsLib) {
 }
 
 // --- 定数・グローバル変数 ---
-const FONT_URL = "yuji_syuku.ttf"; // 代替の美しい毛筆行書体（TTF形式）を使用
+const FONT_URL = "hgs_gyoshotai.ttf"; // HGS行書体（TTCから抽出したTTF形式）を使用
 const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標設定ファイル
 
 let currentTemplate = "10000en";
@@ -189,6 +189,16 @@ window.addEventListener("DOMContentLoaded", async () => {
             localStorage.removeItem("pdf_mail_merge_design_settings");
             localStorage.setItem("pdf_mail_merge_config_version", currentVersion);
             designSettings = {}; // キャッシュをクリア
+            // IndexedDBのフォントキャッシュも削除（フォント変更に対応）
+            try {
+                const db = await openDB();
+                const tx = db.transaction(STORE_NAME, "readwrite");
+                tx.objectStore(STORE_NAME).delete("font_yuji");
+                await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+                console.log("IndexedDBのフォントキャッシュを削除しました。新しいフォントを再ダウンロードします。");
+            } catch (dbErr) {
+                console.warn("IndexedDBフォントキャッシュ削除エラー:", dbErr);
+            }
             // 再度ロードして空の状態に初期化
             loadDesignSettings();
         }
@@ -227,7 +237,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             };
 
             const promises = [];
-            if (!fileStatus.font_yuji) promises.push(fetchFile("yuji_syuku.ttf", "font_yuji"));
+            if (!fileStatus.font_yuji) promises.push(fetchFile("hgs_gyoshotai.ttf", "font_yuji"));
             if (!fileStatus.pdf_10000en) promises.push(fetchFile("奉納ビラ縦.pdf", "pdf_10000en"));
             if (!fileStatus.pdf_1000en) promises.push(fetchFile("奉納ビラ縦阡.pdf", "pdf_1000en"));
             if (!fileStatus.pdf_free) promises.push(fetchFile("奉納ビラフリー.pdf", "pdf_free"));
@@ -343,7 +353,7 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 10,
+        "config_version": 11,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
