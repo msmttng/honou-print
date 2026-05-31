@@ -353,21 +353,21 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 11,
+        "config_version": 12,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
                 "template_file": "奉納ビラ縦.pdf",
                 "fields": {
-                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 100, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
-                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 137, "alignment": "center", "width_mm": 80, "height_mm": 50 }
+                    "name": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "vertical": true, "width_mm": 94, "height_mm": 62, "valign": "center" },
+                    "amount": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "width_mm": 94, "height_mm": 62, "valign": "center" }
                 }
             },
             "1000en": {
                 "template_file": "奉納ビラ縦阡.pdf",
                 "fields": {
-                    "name": { "x_mm": 21.5, "y_mm": 151, "font_size": 100, "alignment": "center", "vertical": true, "width_mm": 24, "height_mm": 150 },
-                    "amount": { "x_mm": 62.5, "y_mm": 222, "font_size": 137, "alignment": "center", "width_mm": 80, "height_mm": 50 }
+                    "name": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "vertical": true, "width_mm": 94, "height_mm": 62, "valign": "center" },
+                    "amount": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "width_mm": 94, "height_mm": 62, "valign": "center" }
                 }
             },
             "free": {
