@@ -353,7 +353,7 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 12,
+        "config_version": 13,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
@@ -373,8 +373,8 @@ function getFallbackConfig() {
             "free": {
                 "template_file": "奉納ビラフリー.pdf",
                 "fields": {
-                    "name": { "x_mm": 21.5, "y_mm": 132, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 25, "height_mm": 126 },
-                    "amount": { "x_mm": 62.5, "y_mm": 264, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 45, "height_mm": 190 }
+                    "name": { "x_mm": 27.0, "y_mm": 163.5, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 25, "height_mm": 150 },
+                    "amount": { "x_mm": 66.5, "y_mm": 277.0, "font_size": 111, "alignment": "center", "vertical": true, "width_mm": 65, "height_mm": 262 }
                 }
             }
         }
