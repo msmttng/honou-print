@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Backups
+_backups/
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Font source files (extracted TTF is used)
+hgrgy.ttc
+ipaexm.ttf
+yuji_syuku.ttf
+
+# Dev scripts
+generate_mock_templates.py
+sample_suggest.html
+resize.js
+extract_font.py
