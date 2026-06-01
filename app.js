@@ -1224,6 +1224,7 @@ function loadRecordToForm(id) {
 
 // --- 名簿テーブルのレンダリング ---
 function renderTable() {
+    updateDashboardStats();
     const tbody = document.getElementById("historyTableBody");
     const searchInput = document.getElementById("searchInput").value.trim().toLowerCase();
     
@@ -2003,4 +2004,52 @@ function updateDirectValue(param, value) {
             triggerAutoUpdate();
         }
     }
+}
+
+
+// ==========================================
+// 集計（ダッシュボード）更新処理
+// ==========================================
+function updateDashboardStats() {
+    let totalMoney = 0;
+    let count10000 = 0;
+    let count5000 = 0;
+    let countFree = 0;
+
+    for (let r of dbRecords) {
+        // テンプレート別カウント
+        if (r.templateType === "萬圓用") count10000++;
+        else if (r.templateType === "阡圓用") count5000++;
+        else if (r.templateType === "フリー用") countFree++;
+        
+        // 金額抽出ロジック
+        if (r.amount) {
+            // 例: "金5,000也", "10000", "5,000円" などをパース
+            // 1. 全角数字を半角に（念のため）
+            let amtStr = r.amount.replace(/[０-９]/g, function(s) {
+                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+            });
+            // 2. 数値以外の文字（カンマ、円、金、也など）を削除
+            amtStr = amtStr.replace(/[^0-9]/g, '');
+            if (amtStr) {
+                totalMoney += parseInt(amtStr, 10);
+            }
+        }
+    }
+
+    // カンマ区切りでフォーマット
+    const elTotalMoney = document.getElementById("statTotalMoney");
+    if (elTotalMoney) elTotalMoney.textContent = totalMoney.toLocaleString();
+
+    const el10000 = document.getElementById("statCount10000");
+    if (el10000) el10000.textContent = count10000.toLocaleString();
+
+    const el5000 = document.getElementById("statCount5000");
+    if (el5000) el5000.textContent = count5000.toLocaleString();
+
+    const elFree = document.getElementById("statCountFree");
+    if (elFree) elFree.textContent = countFree.toLocaleString();
+
+    const elTotal = document.getElementById("statCountTotal");
+    if (elTotal) elTotal.textContent = (count10000 + count5000 + countFree).toLocaleString();
 }
