@@ -1,74 +1,26 @@
 {
-  "config_version": 9,
+  "config_version": 14,
   "default_font": "HGSGyoshotai",
   "templates": {
     "10000en": {
-      "template_file": "奉納ビラ縦.pdf",
+      "template_file": "奉納テンプレート.pdf",
       "fields": {
-        "name": {
-          "x_mm": 20.0,
-          "y_mm": 151.5,
-          "font_size": 98,
-          "alignment": "center",
-          "vertical": true,
-          "width_mm": 24,
-          "height_mm": 150
-        },
-        "amount": {
-          "x_mm": 59.0,
-          "y_mm": 222.5,
-          "font_size": 131,
-          "alignment": "center",
-          "width_mm": 80,
-          "height_mm": 50
-        }
+        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
+        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
       }
     },
     "1000en": {
-      "template_file": "奉納ビラ縦阡.pdf",
+      "template_file": "奉納テンプレート.pdf",
       "fields": {
-        "name": {
-          "x_mm": 20.0,
-          "y_mm": 151.5,
-          "font_size": 98,
-          "alignment": "center",
-          "vertical": true,
-          "width_mm": 24,
-          "height_mm": 150
-        },
-        "amount": {
-          "x_mm": 59.0,
-          "y_mm": 222.5,
-          "font_size": 131,
-          "alignment": "center",
-          "width_mm": 80,
-          "height_mm": 50
-        }
+        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
+        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
       }
     },
     "free": {
-      "template_file": "奉納ビラフリー.pdf",
+      "template_file": "奉納テンプレート.pdf",
       "fields": {
-        "name": {
-          "x_mm": 20.0,
-          "y_mm": 132.5,
-          "font_size": 98,
-          "alignment": "center",
-          "vertical": true,
-          "valign": "top",
-          "width_mm": 25,
-          "height_mm": 126
-        },
-        "amount": {
-          "x_mm": 59.0,
-          "y_mm": 264.5,
-          "font_size": 143,
-          "alignment": "center",
-          "vertical": true,
-          "valign": "center",
-          "width_mm": 55,
-          "height_mm": 234
-        }
+        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
+        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
       }
     }
   }

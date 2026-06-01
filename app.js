@@ -364,28 +364,28 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 13,
+        "config_version": 14,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
-                "template_file": "奉納ビラ縦.pdf",
+                "template_file": "奉納テンプレート.pdf",
                 "fields": {
-                    "name": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "vertical": true, "width_mm": 94, "height_mm": 62, "valign": "center" },
-                    "amount": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "width_mm": 94, "height_mm": 62, "valign": "center" }
+                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
+                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "1000en": {
-                "template_file": "奉納ビラ縦阡.pdf",
+                "template_file": "奉納テンプレート.pdf",
                 "fields": {
-                    "name": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "vertical": true, "width_mm": 94, "height_mm": 62, "valign": "center" },
-                    "amount": { "x_mm": 64.0, "y_mm": 216.0, "font_size": 166, "alignment": "center", "width_mm": 94, "height_mm": 62, "valign": "center" }
+                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
+                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "free": {
-                "template_file": "奉納ビラフリー.pdf",
+                "template_file": "奉納テンプレート.pdf",
                 "fields": {
-                    "name": { "x_mm": 27.0, "y_mm": 163.5, "font_size": 98, "alignment": "center", "vertical": true, "width_mm": 25, "height_mm": 150 },
-                    "amount": { "x_mm": 66.5, "y_mm": 277.0, "font_size": 111, "alignment": "center", "vertical": true, "width_mm": 65, "height_mm": 262 }
+                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
+                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             }
         }
@@ -836,9 +836,15 @@ async function generatePDF(isPrinting = false) {
         
         // デザイン調整値の読み出し
         const settings = designSettings[currentTemplate];
+
+        // 新テンプレート: 「奉納」のみ印刷済み → 金額・氏名をアプリ側で完全合成
+        const fullAmount =
+            currentTemplate === '10000en' ? `金${amountInput}萬圓也` :
+            currentTemplate === '1000en'  ? `金${amountInput}阡圓也` :
+            amountInput; // free: 完全自由入力
         const data = {
-            name: nameInput,
-            amount: amountInput
+            name:   nameInput ? nameInput + '\u3000殿' : '',
+            amount: fullAmount
         };
 
         // 各フィールドの描画
