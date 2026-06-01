@@ -1,27 +1,81 @@
 {
-  "config_version": 15,
-  "default_font": "HGSGyoshotai",
-  "templates": {
-    "10000en": {
-      "template_file": "奉納テンプレーチEpdf",
-      "fields": {
-        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
-        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
-      }
-    },
-    "1000en": {
-      "template_file": "奉納テンプレーチEpdf",
-      "fields": {
-        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
-        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
-      }
-    },
-    "free": {
-      "template_file": "奉納テンプレーチEpdf",
-      "fields": {
-        "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32, "height_mm": 135, "valign": "top" },
-        "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62, "height_mm": 314, "valign": "top" }
-      }
-    }
-  }
+    "config_version":  17,
+    "default_font":  "HGSGyoshotai",
+    "templates":  {
+                      "10000en":  {
+                                      "template_file":  "奉納テンプレーチEpdf",
+                                      "fields":  {
+                                                     "name":  {
+                                                                  "x_mm":  22,
+                                                                  "y_mm":  115.2,
+                                                                  "font_size":  86,
+                                                                  "alignment":  "center",
+                                                                  "vertical":  true,
+                                                                  "width_mm":  32,
+                                                                  "height_mm":  135,
+                                                                  "valign":  "top"
+                                                              },
+                                                     "amount":  {
+                                                                    "x_mm":  52.5,
+                                                                    "y_mm":  263.4,
+                                                                    "font_size":  172,
+                                                                    "alignment":  "center",
+                                                                    "vertical":  true,
+                                                                    "width_mm":  62,
+                                                                    "height_mm":  314,
+                                                                    "valign":  "top"
+                                                                }
+                                                 }
+                                  },
+                      "1000en":  {
+                                     "template_file":  "奉納テンプレーチEpdf",
+                                     "fields":  {
+                                                    "name":  {
+                                                                 "x_mm":  22,
+                                                                 "y_mm":  115.2,
+                                                                 "font_size":  86,
+                                                                 "alignment":  "center",
+                                                                 "vertical":  true,
+                                                                 "width_mm":  32,
+                                                                 "height_mm":  135,
+                                                                 "valign":  "top"
+                                                             },
+                                                    "amount":  {
+                                                                   "x_mm":  52.5,
+                                                                   "y_mm":  263.4,
+                                                                   "font_size":  172,
+                                                                   "alignment":  "center",
+                                                                   "vertical":  true,
+                                                                   "width_mm":  62,
+                                                                   "height_mm":  314,
+                                                                   "valign":  "top"
+                                                               }
+                                                }
+                                 },
+                      "free":  {
+                                   "template_file":  "奉納テンプレーチEpdf",
+                                   "fields":  {
+                                                  "name":  {
+                                                               "x_mm":  22,
+                                                               "y_mm":  115.2,
+                                                               "font_size":  86,
+                                                               "alignment":  "center",
+                                                               "vertical":  true,
+                                                               "width_mm":  32,
+                                                               "height_mm":  135,
+                                                               "valign":  "top"
+                                                           },
+                                                  "amount":  {
+                                                                 "x_mm":  52.5,
+                                                                 "y_mm":  263.4,
+                                                                 "font_size":  172,
+                                                                 "alignment":  "center",
+                                                                 "vertical":  true,
+                                                                 "width_mm":  62,
+                                                                 "height_mm":  314,
+                                                                 "valign":  "top"
+                                                             }
+                                              }
+                               }
+                  }
 }

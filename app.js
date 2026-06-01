@@ -856,8 +856,16 @@ async function generatePDF(isPrinting = false) {
             if (!textValue) continue;
 
             // 用紙サイズ変更に伴うテキスト座標のオフセット適用
-            const x_pt = mmToPt(fieldVal.x) + shiftXPt;
-            const y_pt = mmToPt(fieldVal.y) + shiftYPt;
+            let x_pt = mmToPt(fieldVal.x);
+            let y_pt = mmToPt(fieldVal.y);
+
+            // 背景を含める場合、translateContent() により既にPDFの原点がシフトされているため
+            // 座標にオフセットを足す必要はありません（足すと2重シフトになります）。
+            // 背景を含めない（白紙の新規PDF）場合のみ手動でオフセットを加算します。
+            if (!includeBackground) {
+                x_pt += shiftXPt;
+                y_pt += shiftYPt;
+            }
             const baseFontSize = fieldVal.font_size;
             const width_pt = mmToPt(fieldVal.width_mm || 30);
             const height_pt = mmToPt(fieldVal.height_mm || 150);
