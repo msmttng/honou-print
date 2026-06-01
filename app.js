@@ -553,15 +553,18 @@ function selectTemplate(templateKey) {
     const amountLabel = document.getElementById("amountLabel") || document.querySelector("label[for='amountInput']");
     const amountInput = document.getElementById("amountInput");
     const amountSelect = document.getElementById("amountSelect");
+    const amountAutocompleteWrapper = document.getElementById("amountAutocompleteWrapper");
     
     if (templateKey === "10000en" || templateKey === "1000en") {
         amountLabel.textContent = "任意の金額の数字一文字 (例: 一, 二, 五)";
-        amountInput.style.display = "none";
+        if(amountAutocompleteWrapper) amountAutocompleteWrapper.style.display = "none";
+        else amountInput.style.display = "none";
         if(amountSelect) amountSelect.style.display = "block";
     } else {
         amountLabel.textContent = "任意の金額 または 物品名";
         amountInput.placeholder = "例: 金 五阡圓也、お神酒 二升";
-        amountInput.style.display = "block";
+        if(amountAutocompleteWrapper) amountAutocompleteWrapper.style.display = "block";
+        else amountInput.style.display = "block";
         if(amountSelect) amountSelect.style.display = "none";
     }
     
