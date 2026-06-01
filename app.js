@@ -635,7 +635,6 @@ function updateDpadUI() {
     }
 }
 
-
 function adjustTargetValue(param, change) {
     const targetRadios = document.getElementsByName("dpadTarget");
     let targetKey = "name";
@@ -701,7 +700,6 @@ function makeValueEditable(param) {
         if (e.key === 'Escape') { input.blur(); }
     });
 }
-
 
 function changeTargetValign(value) {
     const targetRadios = document.getElementsByName("dpadTarget");
@@ -2124,5 +2122,3 @@ function switchMainTab(tabId) {
         updateDashboardStats();
     }
 }
-// v29 cache bust
-
