@@ -367,7 +367,7 @@ async function handleSetupFiles(files, status) {
 // --- 繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ險ｭ螳・(config.json縺後↑縺・ｴ蜷医・繝・ヵ繧ｩ繝ｫ繝亥ｮ夂ｾｩ) ---
 function getFallbackConfig() {
     return {
-        "config_version": 22,
+        "config_version": 23,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
@@ -605,16 +605,21 @@ function updateDpadUI() {
     
     const settings = designSettings[currentTemplate];
     if (settings && settings[targetKey]) {
-        badge.textContent = `X: ${settings[targetKey].x.toFixed(1)} / Y: ${settings[targetKey].y.toFixed(1)}`;
+        
+        const elX = document.getElementById("dpad-input-x");
+        const elY = document.getElementById("dpad-input-y");
+        if (elX) elX.value = settings[targetKey].x.toFixed(1);
+        if (elY) elY.value = settings[targetKey].y.toFixed(1);
+
         
         const elFontSize = document.getElementById("dpad-val-font_size");
         const elWidth = document.getElementById("dpad-val-width_mm");
         const elHeight = document.getElementById("dpad-val-height_mm");
         const elValign = document.getElementById("dpad-val-valign");
         
-        if (elFontSize) elFontSize.textContent = settings[targetKey].font_size;
-        if (elWidth) elWidth.textContent = settings[targetKey].width_mm;
-        if (elHeight) elHeight.textContent = settings[targetKey].height_mm;
+        if (elFontSize) elFontSize.value = settings[targetKey].font_size;
+        if (elWidth) elWidth.value = settings[targetKey].width_mm;
+        if (elHeight) elHeight.value = settings[targetKey].height_mm;
         if (elValign) elValign.value = settings[targetKey].valign || "top";
     }
     updatePaperSizeUI();
@@ -1987,3 +1992,20 @@ async function batchPrint() {
     }
 }
 
+
+function updateDirectValue(param, value) {
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
+    }
+    const settings = designSettings[currentTemplate];
+    if (settings && settings[targetKey]) {
+        let parsed = parseFloat(value);
+        if (!isNaN(parsed)) {
+            settings[targetKey][param] = parsed;
+            saveDesignSettings();
+            triggerAutoUpdate();
+        }
+    }
+}
