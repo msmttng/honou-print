@@ -1,23 +1,23 @@
-{
-    "config_version":  17,
+﻿{
+    "config_version":  18,
     "default_font":  "HGSGyoshotai",
     "templates":  {
                       "10000en":  {
-                                      "template_file":  "奉納テンプレーチEpdf",
+                                      "template_file":  "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                                       "fields":  {
                                                      "name":  {
-                                                                  "x_mm":  22,
-                                                                  "y_mm":  115.2,
+                                                                  "x_mm":  24.4,
+                                                                  "y_mm":  186.7,
                                                                   "font_size":  86,
                                                                   "alignment":  "center",
                                                                   "vertical":  true,
                                                                   "width_mm":  32,
-                                                                  "height_mm":  135,
-                                                                  "valign":  "top"
+                                                                  "height_mm":  191,
+                                                                  "valign":  "bottom"
                                                               },
                                                      "amount":  {
-                                                                    "x_mm":  52.5,
-                                                                    "y_mm":  263.4,
+                                                                    "x_mm":  64.4,
+                                                                    "y_mm":  276.4,
                                                                     "font_size":  172,
                                                                     "alignment":  "center",
                                                                     "vertical":  true,
@@ -28,21 +28,21 @@
                                                  }
                                   },
                       "1000en":  {
-                                     "template_file":  "奉納テンプレーチEpdf",
+                                     "template_file":  "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                                      "fields":  {
                                                     "name":  {
-                                                                 "x_mm":  22,
-                                                                 "y_mm":  115.2,
+                                                                 "x_mm":  24.4,
+                                                                 "y_mm":  186.7,
                                                                  "font_size":  86,
                                                                  "alignment":  "center",
                                                                  "vertical":  true,
                                                                  "width_mm":  32,
-                                                                 "height_mm":  135,
-                                                                 "valign":  "top"
+                                                                 "height_mm":  191,
+                                                                 "valign":  "bottom"
                                                              },
                                                     "amount":  {
-                                                                   "x_mm":  52.5,
-                                                                   "y_mm":  263.4,
+                                                                   "x_mm":  64.4,
+                                                                   "y_mm":  276.4,
                                                                    "font_size":  172,
                                                                    "alignment":  "center",
                                                                    "vertical":  true,
@@ -53,21 +53,21 @@
                                                 }
                                  },
                       "free":  {
-                                   "template_file":  "奉納テンプレーチEpdf",
+                                   "template_file":  "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                                    "fields":  {
                                                   "name":  {
-                                                               "x_mm":  22,
-                                                               "y_mm":  115.2,
+                                                               "x_mm":  24.4,
+                                                               "y_mm":  186.7,
                                                                "font_size":  86,
                                                                "alignment":  "center",
                                                                "vertical":  true,
                                                                "width_mm":  32,
-                                                               "height_mm":  135,
-                                                               "valign":  "top"
+                                                               "height_mm":  191,
+                                                               "valign":  "bottom"
                                                            },
                                                   "amount":  {
-                                                                 "x_mm":  52.5,
-                                                                 "y_mm":  263.4,
+                                                                 "x_mm":  64.4,
+                                                                 "y_mm":  276.4,
                                                                  "font_size":  172,
                                                                  "alignment":  "center",
                                                                  "vertical":  true,
