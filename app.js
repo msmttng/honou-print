@@ -607,11 +607,15 @@ function updateDpadUI() {
     if (settings && settings[targetKey]) {
         badge.textContent = `X: ${settings[targetKey].x.toFixed(1)} / Y: ${settings[targetKey].y.toFixed(1)}`;
         
+        const elX = document.getElementById("dpad-val-x");
+        const elY = document.getElementById("dpad-val-y");
         const elFontSize = document.getElementById("dpad-val-font_size");
         const elWidth = document.getElementById("dpad-val-width_mm");
         const elHeight = document.getElementById("dpad-val-height_mm");
         const elValign = document.getElementById("dpad-val-valign");
         
+        if (elX) elX.value = settings[targetKey].x.toFixed(1);
+        if (elY) elY.value = settings[targetKey].y.toFixed(1);
         if (elFontSize) elFontSize.value = settings[targetKey].font_size;
         if (elWidth) elWidth.value = settings[targetKey].width_mm;
         if (elHeight) elHeight.value = settings[targetKey].height_mm;
