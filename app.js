@@ -1,4 +1,4 @@
-// --- Service Worker 登録（PWA対応） ---
+﻿// --- Service Worker 逋ｻ骭ｲ・・WA蟇ｾ蠢懶ｼ・---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then(reg => {
@@ -9,7 +9,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// --- エラー収集ロジック ---
+// --- 繧ｨ繝ｩ繝ｼ蜿朱寔繝ｭ繧ｸ繝・け ---
 window.addEventListener("error", function(e) {
     logError("Global Error: " + e.message + " at " + e.filename + ":" + e.lineno);
 });
@@ -31,41 +31,41 @@ function copyDebugLog() {
     const debugLog = document.getElementById("debugLog");
     if (debugLog) {
         navigator.clipboard.writeText(debugLog.textContent).then(() => {
-            alert("ログをクリップボードにコピーしました！");
+            alert("繝ｭ繧ｰ繧偵け繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・縺励∪縺励◆・・);
         }).catch(err => {
-            alert("コピーに失敗しました。直接選択してコピーしてください。");
+            alert("繧ｳ繝斐・縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲ら峩謗･驕ｸ謚槭＠縺ｦ繧ｳ繝斐・縺励※縺上□縺輔＞縲・);
         });
     }
 }
 
-// --- PDF.js 初期設定 ---
+// --- PDF.js 蛻晄悄險ｭ螳・---
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
 if (pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-// --- 定数・グローバル変数 ---
-const FONT_URL = "hgs_gyoshotai.ttf"; // HGS行書体（TTCから抽出したTTF形式）を使用
-const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標設定ファイル
+// --- 螳壽焚繝ｻ繧ｰ繝ｭ繝ｼ繝舌Ν螟画焚 ---
+const FONT_URL = "hgs_gyoshotai.ttf"; // HGS陦梧嶌菴難ｼ・TC縺九ｉ謚ｽ蜃ｺ縺励◆TTF蠖｢蠑擾ｼ峨ｒ菴ｿ逕ｨ
+const DEFAULT_CONFIG_URL = "templates_config.json"; // 繝・Φ繝励Ξ繝ｼ繝亥ｺｧ讓呵ｨｭ螳壹ヵ繧｡繧､繝ｫ
 
 let currentTemplate = "10000en";
-let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
-let designSettings = {};       // ユーザー調整後の座標・フォントサイズ (LocalStorage保存用)
-let paperSizeSettings = { width: 105, height: 390 }; // 用紙サイズ設定 (mm, 全テンプレート共通)
-let loadedFontBytes = null;    // キャッシュされたフォントデータのArrayBuffer
-let loadedTemplateBytes = {};  // キャッシュされたテンプレートPDFのArrayBuffer
-let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存用)
-let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
-let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
+let config = null;             // 繝・Φ繝励Ξ繝ｼ繝医＃縺ｨ縺ｮ蛻晄悄蠎ｧ讓吶・繝輔か繝ｳ繝医し繧､繧ｺ險ｭ螳・
+let designSettings = {};       // 繝ｦ繝ｼ繧ｶ繝ｼ隱ｿ謨ｴ蠕後・蠎ｧ讓吶・繝輔か繝ｳ繝医し繧､繧ｺ (LocalStorage菫晏ｭ倡畑)
+let paperSizeSettings = { width: 105, height: 390 }; // 逕ｨ邏吶し繧､繧ｺ險ｭ螳・(mm, 蜈ｨ繝・Φ繝励Ξ繝ｼ繝亥・騾・
+let loadedFontBytes = null;    // 繧ｭ繝｣繝・す繝･縺輔ｌ縺溘ヵ繧ｩ繝ｳ繝医ョ繝ｼ繧ｿ縺ｮArrayBuffer
+let loadedTemplateBytes = {};  // 繧ｭ繝｣繝・す繝･縺輔ｌ縺溘ユ繝ｳ繝励Ξ繝ｼ繝・DF縺ｮArrayBuffer
+let dbRecords = [];            // 蜷咲ｰｿ繝ｬ繧ｳ繝ｼ繝我ｸ隕ｧ (LocalStorage菫晏ｭ倡畑)
+let autoUpdateTimer = null;    // 繝ｪ繧｢繝ｫ繧ｿ繧､繝繝励Ξ繝薙Η繝ｼ逕ｨ繝・ヰ繧ｦ繝ｳ繧ｹ繧ｿ繧､繝槭・
+let isAppReady = false;        // 繧｢繝励Μ繧ｱ繝ｼ繧ｷ繝ｧ繝ｳ・・B遲会ｼ峨・蛻晄悄蛹門ｮ御ｺ・ヵ繝ｩ繧ｰ
 
-// --- スプレッドシート連携（GAS） ---
-let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS ウェブアプリの URL (LocalStorage保存用・デフォルト値あり)
-let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
+// --- 繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝磯｣謳ｺ・・AS・・---
+let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS 繧ｦ繧ｧ繝悶い繝励Μ縺ｮ URL (LocalStorage菫晏ｭ倡畑繝ｻ繝・ヵ繧ｩ繝ｫ繝亥､縺ゅｊ)
+let suggestData = {            // 繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝茨ｼ・AS・峨°繧牙叙蠕励＠縺溘し繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ
     "names": [],
     "items": []
 };
 
-// GAS アコーディオンの開閉トグル
+// GAS 繧｢繧ｳ繝ｼ繝・ぅ繧ｪ繝ｳ縺ｮ髢矩哩繝医げ繝ｫ
 function toggleGasAccordion() {
     const accordion = document.getElementById("gasAccordion");
     const arrow = document.getElementById("gasAccordionArrow");
@@ -79,7 +79,7 @@ function toggleGasAccordion() {
     }
 }
 
-// GAS URLの入力時保存
+// GAS URL縺ｮ蜈･蜉帶凾菫晏ｭ・
 function saveGasUrl() {
     const input = document.getElementById("gasUrlInput");
     if (input) {
@@ -87,12 +87,12 @@ function saveGasUrl() {
         try {
             localStorage.setItem("pdf_mail_merge_gas_url", gasUrl);
         } catch (e) {
-            console.warn("GAS URL保存失敗:", e);
+            console.warn("GAS URL菫晏ｭ伜､ｱ謨・", e);
         }
     }
 }
 
-// 起動時のGAS設定とキャッシュの読み込み
+// 襍ｷ蜍墓凾縺ｮGAS險ｭ螳壹→繧ｭ繝｣繝・す繝･縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ
 function loadGasSettings() {
     try {
         // GAS URL of recovery
@@ -103,7 +103,7 @@ function loadGasSettings() {
         const input = document.getElementById("gasUrlInput");
         if (input) input.value = gasUrl;
 
-        // サジェストデータのキャッシュ復元と新方式への自動コンバート
+        // 繧ｵ繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ縺ｮ繧ｭ繝｣繝・す繝･蠕ｩ蜈・→譁ｰ譁ｹ蠑上∈縺ｮ閾ｪ蜍輔さ繝ｳ繝舌・繝・
         const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
         if (cachedSuggests) {
             const rawData = JSON.parse(cachedSuggests);
@@ -115,20 +115,20 @@ function loadGasSettings() {
                 ],
                 items: rawData.items || rawData["free_items"] || []
             };
-            // 重複排除
+            // 驥崎､・賜髯､
             suggestData.names = [...new Set(suggestData.names)];
         }
     } catch (e) {
-        console.error("GAS設定の復元失敗:", e);
+        console.error("GAS險ｭ螳壹・蠕ｩ蜈・､ｱ謨・", e);
     }
 
-    // GAS URLが設定されていれば、バックグラウンドで同期を実行
+    // GAS URL縺瑚ｨｭ螳壹＆繧後※縺・ｌ縺ｰ縲√ヰ繝・け繧ｰ繝ｩ繧ｦ繝ｳ繝峨〒蜷梧悄繧貞ｮ溯｡・
     if (gasUrl) {
         syncFromGAS(true).catch(() => {});
     }
 }
 
-// --- IndexedDB ストレージ管理 ---
+// --- IndexedDB 繧ｹ繝医Ξ繝ｼ繧ｸ邂｡逅・---
 const DB_NAME = "PdfMailMergeDB";
 const STORE_NAME = "files";
 
@@ -177,30 +177,30 @@ async function checkRequiredFiles() {
     return results;
 }
 
-// --- 起動時の初期化処理 ---
+// --- 襍ｷ蜍墓凾縺ｮ蛻晄悄蛹門・逅・---
 window.addEventListener("DOMContentLoaded", async () => {
-    // file:// プロトコルの警告は起動用ブラウザ（--allow-file-access-from-files）を使用することで回避するため削除
+    // file:// 繝励Ο繝医さ繝ｫ縺ｮ隴ｦ蜻翫・襍ｷ蜍慕畑繝悶Λ繧ｦ繧ｶ・・-allow-file-access-from-files・峨ｒ菴ｿ逕ｨ縺吶ｋ縺薙→縺ｧ蝗樣∩縺吶ｋ縺溘ａ蜑企勁
 
-    showStatus("システム初期化中...", true);
+    showStatus("繧ｷ繧ｹ繝・Β蛻晄悄蛹紋ｸｭ...", true);
     
-    // 1. デザイン設定および名簿DBの復元
+    // 1. 繝・じ繧､繝ｳ險ｭ螳壹♀繧医・蜷咲ｰｿDB縺ｮ蠕ｩ蜈・
     loadDesignSettings();
     loadDbRecords();
     renderTable();
 
-    // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
+    // 2. 險ｭ螳壹ヵ繧｡繧､繝ｫ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ (繝ｭ繝ｼ繧ｫ繝ｫ險ｭ螳壹ｒ繝上・繝峨さ繝ｼ繝峨〒菴ｿ逕ｨ)
     config = getFallbackConfig();
 
-    // 3. バージョンチェックによるLocalStorageキャッシュクリア (新設定強制適用)
+    // 3. 繝舌・繧ｸ繝ｧ繝ｳ繝√ぉ繝・け縺ｫ繧医ｋLocalStorage繧ｭ繝｣繝・す繝･繧ｯ繝ｪ繧｢ (譁ｰ險ｭ螳壼ｼｷ蛻ｶ驕ｩ逕ｨ)
     const currentVersion = config.config_version || 1;
     try {
         const savedVersion = localStorage.getItem("pdf_mail_merge_config_version");
         if (savedVersion !== String(currentVersion)) {
-            console.log(`設定バージョンが更新されました (${savedVersion} -> ${currentVersion})。キャッシュをリセットします。`);
+            console.log(`險ｭ螳壹ヰ繝ｼ繧ｸ繝ｧ繝ｳ縺梧峩譁ｰ縺輔ｌ縺ｾ縺励◆ (${savedVersion} -> ${currentVersion})縲ゅく繝｣繝・す繝･繧偵Μ繧ｻ繝・ヨ縺励∪縺吶Ａ);
             localStorage.removeItem("pdf_mail_merge_design_settings");
             localStorage.setItem("pdf_mail_merge_config_version", currentVersion);
-            designSettings = {}; // キャッシュをクリア
-            // IndexedDBのキャッシュも削除（フォント・PDF変更に対応）
+            designSettings = {}; // 繧ｭ繝｣繝・す繝･繧偵け繝ｪ繧｢
+            // IndexedDB縺ｮ繧ｭ繝｣繝・す繝･繧ょ炎髯､・医ヵ繧ｩ繝ｳ繝医・PDF螟画峩縺ｫ蟇ｾ蠢懶ｼ・
             try {
                 const db = await openDB();
                 const tx = db.transaction(STORE_NAME, "readwrite");
@@ -209,43 +209,43 @@ window.addEventListener("DOMContentLoaded", async () => {
                 tx.objectStore(STORE_NAME).delete("pdf_1000en");
                 tx.objectStore(STORE_NAME).delete("pdf_free");
                 await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
-                console.log("IndexedDBのキャッシュを削除しました。新しいファイルを再ダウンロードします。");
+                console.log("IndexedDB縺ｮ繧ｭ繝｣繝・す繝･繧貞炎髯､縺励∪縺励◆縲よ眠縺励＞繝輔ぃ繧､繝ｫ繧貞・繝繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｾ縺吶・);
             } catch (dbErr) {
-                console.warn("IndexedDBキャッシュ削除エラー:", dbErr);
+                console.warn("IndexedDB繧ｭ繝｣繝・す繝･蜑企勁繧ｨ繝ｩ繝ｼ:", dbErr);
             }
-            // 再度ロードして空の状態に初期化
+            // 蜀榊ｺｦ繝ｭ繝ｼ繝峨＠縺ｦ遨ｺ縺ｮ迥ｶ諷九↓蛻晄悄蛹・
             loadDesignSettings();
         }
     } catch (e) {
-        console.warn("LocalStorageアクセスエラー(バージョンチェック):", e);
+        console.warn("LocalStorage繧｢繧ｯ繧ｻ繧ｹ繧ｨ繝ｩ繝ｼ(繝舌・繧ｸ繝ｧ繝ｳ繝√ぉ繝・け):", e);
     }
 
-    // 4. デザイン設定の初期座標マージ
+    // 4. 繝・じ繧､繝ｳ險ｭ螳壹・蛻晄悄蠎ｧ讓吶・繝ｼ繧ｸ
     initDesignSettings();
     updateDpadUI();
     
-    // 5. GAS設定の復元
+    // 5. GAS險ｭ螳壹・蠕ｩ蜈・
     loadGasSettings();
 
-    // --- ここからローカルファイルチェッカー ---
-    showStatus("ローカルファイル確認中...", true);
+    // --- 縺薙％縺九ｉ繝ｭ繝ｼ繧ｫ繝ｫ繝輔ぃ繧､繝ｫ繝√ぉ繝・き繝ｼ ---
+    showStatus("繝ｭ繝ｼ繧ｫ繝ｫ繝輔ぃ繧､繝ｫ遒ｺ隱堺ｸｭ...", true);
     const fileStatus = await checkRequiredFiles();
     const allFilesReady = fileStatus.font_yuji && fileStatus.pdf_10000en && fileStatus.pdf_1000en && fileStatus.pdf_free;
 
     if (allFilesReady) {
-        // 全てのファイルがDBにある場合、フォントをメモリに読み込んでアプリ起動
+        // 蜈ｨ縺ｦ縺ｮ繝輔ぃ繧､繝ｫ縺轡B縺ｫ縺ゅｋ蝣ｴ蜷医√ヵ繧ｩ繝ｳ繝医ｒ繝｡繝｢繝ｪ縺ｫ隱ｭ縺ｿ霎ｼ繧薙〒繧｢繝励Μ襍ｷ蜍・
         await loadAppFromDB();
     } else {
-        // 足りないファイルがある場合、自動ダウンロードを試行
-        showStatus("初回セットアップ中...（通信環境により数秒かかります）", true);
+        // 雜ｳ繧翫↑縺・ヵ繧｡繧､繝ｫ縺後≠繧句ｴ蜷医∬・蜍輔ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨ｒ隧ｦ陦・
+        showStatus("蛻晏屓繧ｻ繝・ヨ繧｢繝・・荳ｭ...・磯壻ｿ｡迺ｰ蠅・↓繧医ｊ謨ｰ遘偵°縺九ｊ縺ｾ縺呻ｼ・, true);
         const placeholder = document.getElementById("previewPlaceholder");
         if (placeholder) {
-            placeholder.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i><p>初期ファイルをダウンロードしています...<br>少々お待ちください</p><p style="font-size:11px;opacity:0.7">（初回のみ8MB程度の通信が発生します）</p>';
+            placeholder.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i><p>蛻晄悄繝輔ぃ繧､繝ｫ繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｦ縺・∪縺・..<br>蟆代・♀蠕・■縺上□縺輔＞</p><p style="font-size:11px;opacity:0.7">・亥・蝗槭・縺ｿ8MB遞句ｺｦ縺ｮ騾壻ｿ｡縺檎匱逕溘＠縺ｾ縺呻ｼ・/p>';
         }
         try {
             const fetchFile = async (url, key) => {
                 const response = await fetch(encodeURI(url));
-                if (!response.ok) throw new Error(`ファイルが見つかりません: ${url}`);
+                if (!response.ok) throw new Error(`繝輔ぃ繧､繝ｫ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ: ${url}`);
                 const buffer = await response.arrayBuffer();
                 await saveFileToDB(key, buffer);
             };
@@ -258,34 +258,34 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             await Promise.all(promises);
             
-            // ダウンロード成功後、アプリを起動
+            // 繝繧ｦ繝ｳ繝ｭ繝ｼ繝画・蜉溷ｾ後√い繝励Μ繧定ｵｷ蜍・
             await loadAppFromDB();
         } catch (e) {
-            // 自動ダウンロードに失敗した場合のみ、手動セットアップ画面を表示
-            logError("自動ダウンロード失敗: " + e.message);
+            // 閾ｪ蜍輔ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨↓螟ｱ謨励＠縺溷ｴ蜷医・縺ｿ縲∵焔蜍輔そ繝・ヨ繧｢繝・・逕ｻ髱｢繧定｡ｨ遉ｺ
+            logError("閾ｪ蜍輔ム繧ｦ繝ｳ繝ｭ繝ｼ繝牙､ｱ謨・ " + e.message);
             showSetupOverlay(fileStatus);
         }
     }
 });
 
-// アプリ本体の起動プロセス
+// 繧｢繝励Μ譛ｬ菴薙・襍ｷ蜍輔・繝ｭ繧ｻ繧ｹ
 async function loadAppFromDB() {
     try {
-        showStatus("フォント読み込み中...", true);
+        showStatus("繝輔か繝ｳ繝郁ｪｭ縺ｿ霎ｼ縺ｿ荳ｭ...", true);
         loadedFontBytes = await getFileFromDB("font_yuji");
         loadedTemplateBytes["10000en"] = await getFileFromDB("pdf_10000en");
         loadedTemplateBytes["1000en"] = await getFileFromDB("pdf_1000en");
         loadedTemplateBytes["free"] = await getFileFromDB("pdf_free");
         
-        showStatus("準備完了", false);
+        showStatus("貅門ｙ螳御ｺ・, false);
         isAppReady = true;
-        selectTemplate("10000en"); // プレビュー更新開始
+        selectTemplate("10000en"); // 繝励Ξ繝薙Η繝ｼ譖ｴ譁ｰ髢句ｧ・
     } catch (e) {
-        logError("データベースからの読み込みに失敗しました: " + e);
+        logError("繝・・繧ｿ繝吶・繧ｹ縺九ｉ縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆: " + e);
     }
 }
 
-// セットアップオーバーレイ制御
+// 繧ｻ繝・ヨ繧｢繝・・繧ｪ繝ｼ繝舌・繝ｬ繧､蛻ｶ蠕｡
 function showSetupOverlay(status) {
     const overlay = document.getElementById("setupOverlay");
     overlay.classList.remove("hidden");
@@ -294,10 +294,10 @@ function showSetupOverlay(status) {
     const dropZone = document.getElementById("dropZone");
     const btnComplete = document.getElementById("btnCompleteSetup");
     
-    // UI初期化
+    // UI蛻晄悄蛹・
     updateSetupUI(status);
 
-    // ドラッグ＆ドロップイベント
+    // 繝峨Λ繝・げ・・ラ繝ｭ繝・・繧､繝吶Φ繝・
     dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
     dropZone.addEventListener("dragleave", e => { e.preventDefault(); dropZone.classList.remove("dragover"); });
     dropZone.addEventListener("drop", async e => {
@@ -308,7 +308,7 @@ function showSetupOverlay(status) {
         }
     });
 
-    // クリックでファイル選択
+    // 繧ｯ繝ｪ繝・け縺ｧ繝輔ぃ繧､繝ｫ驕ｸ謚・
     dropZone.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", async e => {
         if (e.target.files) {
@@ -316,7 +316,7 @@ function showSetupOverlay(status) {
         }
     });
 
-    // 保存して開始ボタン
+    // 菫晏ｭ倥＠縺ｦ髢句ｧ九・繧ｿ繝ｳ
     btnComplete.addEventListener("click", async () => {
         if (btnComplete.classList.contains("ready")) {
             overlay.classList.add("hidden");
@@ -350,13 +350,13 @@ async function handleSetupFiles(files, status) {
         if (name.endsWith(".ttf") || name.endsWith(".ttc")) {
             await saveFileToDB("font_yuji", buffer);
             status.font_yuji = true;
-        } else if (name.includes("縦") && !name.includes("阡")) {
+        } else if (name.includes("邵ｦ") && !name.includes("髦｡")) {
             await saveFileToDB("pdf_10000en", buffer);
             status.pdf_10000en = true;
-        } else if (name.includes("阡")) {
+        } else if (name.includes("髦｡")) {
             await saveFileToDB("pdf_1000en", buffer);
             status.pdf_1000en = true;
-        } else if (name.includes("フリー")) {
+        } else if (name.includes("繝輔Μ繝ｼ")) {
             await saveFileToDB("pdf_free", buffer);
             status.pdf_free = true;
         }
@@ -364,40 +364,40 @@ async function handleSetupFiles(files, status) {
     updateSetupUI(status);
 }
 
-// --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
+// --- 繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ險ｭ螳・(config.json縺後↑縺・ｴ蜷医・繝・ヵ繧ｩ繝ｫ繝亥ｮ夂ｾｩ) ---
 function getFallbackConfig() {
     return {
-        "config_version": 15,
+        "config_version": 22,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
-                "template_file": "奉納テンプレート.pdf",
+                "template_file": "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                 "fields": {
-                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
-                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
+                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "1000en": {
-                "template_file": "奉納テンプレート.pdf",
+                "template_file": "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                 "fields": {
-                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
-                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
+                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "free": {
-                "template_file": "奉納テンプレート.pdf",
+                "template_file": "螂臥ｴ阪ユ繝ｳ繝励Ξ繝ｼ繝・pdf",
                 "fields": {
-                    "name":   { "x_mm": 20.4, "y_mm": 115.2, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 135, "valign": "top" },
-                    "amount": { "x_mm": 64.4, "y_mm": 263.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
+                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             }
         }
     };
 }
 
-// --- デザイン設定の初期化とLocalStorage連携 ---
+// --- 繝・じ繧､繝ｳ險ｭ螳壹・蛻晄悄蛹悶→LocalStorage騾｣謳ｺ ---
 function initDesignSettings() {
-    // configの内容をベースに、LocalStorageにない設定値のみ初期値で埋める
+    // config縺ｮ蜀・ｮｹ繧偵・繝ｼ繧ｹ縺ｫ縲´ocalStorage縺ｫ縺ｪ縺・ｨｭ螳壼､縺ｮ縺ｿ蛻晄悄蛟､縺ｧ蝓九ａ繧・
     for (const [tKey, tVal] of Object.entries(config.templates)) {
         if (!designSettings[tKey]) {
             designSettings[tKey] = {};
@@ -425,17 +425,17 @@ function loadDesignSettings() {
             designSettings = JSON.parse(saved);
         }
     } catch (e) {
-        console.error("LocalStorageデザイン設定アクセスエラー:", e);
+        console.error("LocalStorage繝・じ繧､繝ｳ險ｭ螳壹い繧ｯ繧ｻ繧ｹ繧ｨ繝ｩ繝ｼ:", e);
         designSettings = {};
     }
-    // 用紙サイズ設定の読み込み
+    // 逕ｨ邏吶し繧､繧ｺ險ｭ螳壹・隱ｭ縺ｿ霎ｼ縺ｿ
     try {
         const savedPaper = localStorage.getItem("pdf_mail_merge_paper_size");
         if (savedPaper) {
             paperSizeSettings = JSON.parse(savedPaper);
         }
     } catch (e) {
-        console.error("用紙サイズ設定アクセスエラー:", e);
+        console.error("逕ｨ邏吶し繧､繧ｺ險ｭ螳壹い繧ｯ繧ｻ繧ｹ繧ｨ繝ｩ繝ｼ:", e);
     }
 }
 
@@ -444,11 +444,11 @@ function saveDesignSettings() {
         localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
         localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
     } catch (e) {
-        console.warn("LocalStorage保存エラー:", e);
+        console.warn("LocalStorage菫晏ｭ倥お繝ｩ繝ｼ:", e);
     }
 }
 
-// --- 用紙サイズ調整 ---
+// --- 逕ｨ邏吶し繧､繧ｺ隱ｿ謨ｴ ---
 function adjustPaperSize(dimension, change) {
     if (dimension === 'width') {
         paperSizeSettings.width = parseFloat((paperSizeSettings.width + change).toFixed(1));
@@ -469,7 +469,7 @@ function resetPaperSize() {
     saveDesignSettings();
     updatePaperSizeUI();
     triggerAutoUpdate();
-    showToast('用紙サイズをデフォルト（105 x 390mm）に戻しました');
+    showToast('逕ｨ邏吶し繧､繧ｺ繧偵ョ繝輔か繝ｫ繝茨ｼ・05 x 390mm・峨↓謌ｻ縺励∪縺励◆');
 }
 
 function updatePaperSizeUI() {
@@ -479,7 +479,7 @@ function updatePaperSizeUI() {
     if (hEl) hEl.textContent = paperSizeSettings.height.toFixed(1);
 }
 
-// --- 名簿データベース（履歴）のLocalStorage連携 ---
+// --- 蜷咲ｰｿ繝・・繧ｿ繝吶・繧ｹ・亥ｱ･豁ｴ・峨・LocalStorage騾｣謳ｺ ---
 function loadDbRecords() {
     try {
         const saved = localStorage.getItem("pdf_mail_merge_db");
@@ -487,7 +487,7 @@ function loadDbRecords() {
             dbRecords = JSON.parse(saved);
         }
     } catch (e) {
-        console.error("LocalStorage名簿DBアクセスエラー:", e);
+        console.error("LocalStorage蜷咲ｰｿDB繧｢繧ｯ繧ｻ繧ｹ繧ｨ繝ｩ繝ｼ:", e);
         dbRecords = [];
     }
 }
@@ -496,32 +496,32 @@ function saveDbRecords() {
     try {
         localStorage.setItem("pdf_mail_merge_db", JSON.stringify(dbRecords));
     } catch (e) {
-        console.warn("LocalStorage保存エラー:", e);
+        console.warn("LocalStorage菫晏ｭ倥お繝ｩ繝ｼ:", e);
     }
 }
 
-// --- テンプレートPDFの取得 (キャッシュ対応) ---
+// --- 繝・Φ繝励Ξ繝ｼ繝・DF縺ｮ蜿門ｾ・(繧ｭ繝｣繝・す繝･蟇ｾ蠢・ ---
 async function getTemplateBytes(templateKey) {
     if (loadedTemplateBytes[templateKey]) {
         return loadedTemplateBytes[templateKey];
     }
     
     const filename = config.templates[templateKey].template_file;
-    showStatus("テンプレートPDF読み込み中...", true);
+    showStatus("繝・Φ繝励Ξ繝ｼ繝・DF隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ...", true);
     
-    // ブラウザのキャッシュを回避するため、クエリパラメータを付与
+    // 繝悶Λ繧ｦ繧ｶ縺ｮ繧ｭ繝｣繝・す繝･繧貞屓驕ｿ縺吶ｋ縺溘ａ縲√け繧ｨ繝ｪ繝代Λ繝｡繝ｼ繧ｿ繧剃ｻ倅ｸ・
     const response = await fetch(encodeURI(filename) + "?t=" + new Date().getTime());
     if (!response.ok) {
-        throw new Error(`テンプレートファイルが見つかりません: ${filename}`);
+        throw new Error(`繝・Φ繝励Ξ繝ｼ繝医ヵ繧｡繧､繝ｫ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ: ${filename}`);
     }
     
     const bytes = await response.arrayBuffer();
-    loadedTemplateBytes[templateKey] = bytes; // オンメモリキャッシュ
-    showStatus("準備完了", false);
+    loadedTemplateBytes[templateKey] = bytes; // 繧ｪ繝ｳ繝｡繝｢繝ｪ繧ｭ繝｣繝・す繝･
+    showStatus("貅門ｙ螳御ｺ・, false);
     return bytes;
 }
 
-// --- 状態表示の更新 ---
+// --- 迥ｶ諷玖｡ｨ遉ｺ縺ｮ譖ｴ譁ｰ ---
 function showStatus(text, isLoading) {
     const statusText = document.getElementById("statusText");
     const icon = document.querySelector("#loadingStatus i");
@@ -533,59 +533,59 @@ function showStatus(text, isLoading) {
     } else {
         icon.className = "fa-solid fa-circle-check";
         icon.style.color = "#34d399";
-        // 準備完了時はしばらくしてアイコンだけチェックマークにして点滅を止める
+        // 貅門ｙ螳御ｺ・凾縺ｯ縺励・繧峨￥縺励※繧｢繧､繧ｳ繝ｳ縺縺代メ繧ｧ繝・け繝槭・繧ｯ縺ｫ縺励※轤ｹ貊・ｒ豁｢繧√ｋ
     }
 }
 
-// --- テンプレート切り替え処理 ---
+// --- 繝・Φ繝励Ξ繝ｼ繝亥・繧頑崛縺亥・逅・---
 function selectTemplate(templateKey) {
     currentTemplate = templateKey;
     
-    // UIボタンのアクティブ表示変更
+    // UI繝懊ち繝ｳ縺ｮ繧｢繧ｯ繝・ぅ繝冶｡ｨ遉ｺ螟画峩
     document.querySelectorAll(".template-btn").forEach(btn => btn.classList.remove("active"));
     document.getElementById(`btn-${templateKey}`).classList.add("active");
     
-    // すべてのテンプレートで金額を印字・微調整可能にするため、常に金額フィールドを表示
+    // 縺吶∋縺ｦ縺ｮ繝・Φ繝励Ξ繝ｼ繝医〒驥鷹｡阪ｒ蜊ｰ蟄励・蠕ｮ隱ｿ謨ｴ蜿ｯ閭ｽ縺ｫ縺吶ｋ縺溘ａ縲∝ｸｸ縺ｫ驥鷹｡阪ヵ繧｣繝ｼ繝ｫ繝峨ｒ陦ｨ遉ｺ
     const amountField = document.getElementById("amountField");
     if (amountField) amountField.style.display = "block";
 
-    // 選択されたテンプレートに応じて自動的に金額の初期値・ラベル・プレースホルダーを設定
+    // 驕ｸ謚槭＆繧後◆繝・Φ繝励Ξ繝ｼ繝医↓蠢懊§縺ｦ閾ｪ蜍慕噪縺ｫ驥鷹｡阪・蛻晄悄蛟､繝ｻ繝ｩ繝吶Ν繝ｻ繝励Ξ繝ｼ繧ｹ繝帙Ν繝繝ｼ繧定ｨｭ螳・
     const amountLabel = document.getElementById("amountLabel") || document.querySelector("label[for='amountInput']");
     const amountInput = document.getElementById("amountInput");
     const amountSelect = document.getElementById("amountSelect");
     
     if (templateKey === "10000en" || templateKey === "1000en") {
-        amountLabel.textContent = "任意の金額の数字一文字 (例: 一, 二, 五)";
+        amountLabel.textContent = "莉ｻ諢上・驥鷹｡阪・謨ｰ蟄嶺ｸ譁・ｭ・(萓・ 荳, 莠・ 莠・";
         amountInput.style.display = "none";
         if(amountSelect) amountSelect.style.display = "block";
     } else {
-        amountLabel.textContent = "任意の金額 または 物品名";
-        amountInput.placeholder = "例: 金 五阡圓也、お神酒 二升";
+        amountLabel.textContent = "莉ｻ諢上・驥鷹｡・縺ｾ縺溘・ 迚ｩ蜩∝錐";
+        amountInput.placeholder = "萓・ 驥・莠秘丕蝨謎ｹ溘√♀逾樣・ 莠悟合";
         amountInput.style.display = "block";
         if(amountSelect) amountSelect.style.display = "none";
     }
     
-    // 微調整UIの値を現在のテンプレートのデータに更新
+    // 蠕ｮ隱ｿ謨ｴUI縺ｮ蛟､繧堤樟蝨ｨ縺ｮ繝・Φ繝励Ξ繝ｼ繝医・繝・・繧ｿ縺ｫ譖ｴ譁ｰ
     updateDpadUI();
     
-    // プレビュー再描画
+    // 繝励Ξ繝薙Η繝ｼ蜀肴緒逕ｻ
     updatePreview();
 }
 
-// --- 微調整UI数値の更新 ---
+// --- 蠕ｮ隱ｿ謨ｴUI謨ｰ蛟､縺ｮ譖ｴ譁ｰ ---
 
 
-// --- 画面上での数値調整処理 ---
+// --- 逕ｻ髱｢荳翫〒縺ｮ謨ｰ蛟､隱ｿ謨ｴ蜃ｦ逅・---
 function adjustValue(fieldKey, param, change) {
     const settings = designSettings[currentTemplate];
     if (!settings || !settings[fieldKey]) return;
 
     settings[fieldKey][param] = parseFloat((settings[fieldKey][param] + change).toFixed(1));
     
-    // LocalStorage保存
+    // LocalStorage菫晏ｭ・
     saveDesignSettings();
     
-    // プレビューの自動更新（デバウンスで実行）
+    // 繝励Ξ繝薙Η繝ｼ縺ｮ閾ｪ蜍墓峩譁ｰ・医ョ繝舌え繝ｳ繧ｹ縺ｧ螳溯｡鯉ｼ・
     triggerAutoUpdate();
     updateDpadUI();
 }
@@ -632,7 +632,7 @@ function adjustTargetValue(param, change) {
     adjustValue(targetKey, param, change);
 }
 
-// --- フォントサイズ等の直接入力機能 ---
+// --- 繝輔か繝ｳ繝医し繧､繧ｺ遲峨・逶ｴ謗･蜈･蜉帶ｩ溯・ ---
 function makeValueEditable(param) {
     const span = document.getElementById(`dpad-val-${param}`);
     if (!span) return;
@@ -647,7 +647,7 @@ function makeValueEditable(param) {
     
     const confirm = () => {
         const newVal = parseInt(input.value);
-        // 現在選択中のフィールド(name/amount)の値を更新
+        // 迴ｾ蝨ｨ驕ｸ謚樔ｸｭ縺ｮ繝輔ぅ繝ｼ繝ｫ繝・name/amount)縺ｮ蛟､繧呈峩譁ｰ
         const targetRadios = document.getElementsByName('dpadTarget');
         let targetKey = 'name';
         for (let i = 0; i < targetRadios.length; i++) {
@@ -701,7 +701,7 @@ function changeValign(fieldKey, value) {
     updateDpadUI();
 }
 
-// --- デザイン調整の初期値リセット ---
+// --- 繝・じ繧､繝ｳ隱ｿ謨ｴ縺ｮ蛻晄悄蛟､繝ｪ繧ｻ繝・ヨ ---
 function resetCalibration() {
     const defaultFields = config.templates[currentTemplate].fields;
     for (const [fieldKey, fieldVal] of Object.entries(defaultFields)) {
@@ -717,26 +717,26 @@ function resetCalibration() {
     saveDesignSettings();
     updateDpadUI();
     updatePreview();
-    showToast("デザイン調整を初期値にリセットしました");
+    showToast("繝・じ繧､繝ｳ隱ｿ謨ｴ繧貞・譛溷､縺ｫ繝ｪ繧ｻ繝・ヨ縺励∪縺励◆");
 }
 
-// --- リアルタイムプレビュー用デバウンス制御 ---
+// --- 繝ｪ繧｢繝ｫ繧ｿ繧､繝繝励Ξ繝薙Η繝ｼ逕ｨ繝・ヰ繧ｦ繝ｳ繧ｹ蛻ｶ蠕｡ ---
 function triggerAutoUpdate() {
     if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
     autoUpdateTimer = setTimeout(() => {
         updatePreview();
-    }, 300); // 300ms 入力が止まったらリレンダリング
+    }, 300); // 300ms 蜈･蜉帙′豁｢縺ｾ縺｣縺溘ｉ繝ｪ繝ｬ繝ｳ繝繝ｪ繝ｳ繧ｰ
 }
 
-// --- D-Pad (十字キー) 制御 ---
+// --- D-Pad (蜊∝ｭ励く繝ｼ) 蛻ｶ蠕｡ ---
 let dpadInterval = null;
 
 function startDpad(direction) {
     if (dpadInterval) return;
-    moveDpad(direction); // 初回移動
+    moveDpad(direction); // 蛻晏屓遘ｻ蜍・
     dpadInterval = setInterval(() => {
         moveDpad(direction);
-    }, 120); // 長押し時の連続移動
+    }, 120); // 髟ｷ謚ｼ縺玲凾縺ｮ騾｣邯夂ｧｻ蜍・
 }
 
 function stopDpad() {
@@ -756,7 +756,7 @@ function moveDpad(direction) {
         }
     }
     
-    const change = 0.5; // 0.5mm単位で移動
+    const change = 0.5; // 0.5mm蜊倅ｽ阪〒遘ｻ蜍・
     let param = "";
     let amount = 0;
     
@@ -770,12 +770,12 @@ function moveDpad(direction) {
     adjustValue(targetKey, param, amount);
 }
 
-// --- 単位変換: mm -> pt ---
+// --- 蜊倅ｽ榊､画鋤: mm -> pt ---
 function mmToPt(mm) {
     return mm * 72 / 25.4;
 }
 
-// --- PDFの動的合成処理（コア機能） ---
+// --- PDF縺ｮ蜍慕噪蜷域・蜃ｦ逅・ｼ医さ繧｢讖溯・・・---
 async function generatePDF(isPrinting = false) {
     if (!isAppReady) {
         return null;
@@ -785,23 +785,23 @@ async function generatePDF(isPrinting = false) {
     const amountSelect = document.getElementById("amountSelect");
     const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
     
-    // 氏名がない場合は合成処理をスキップ (プレビュークリア状態に)
+    // 豌丞錐縺後↑縺・ｴ蜷医・蜷域・蜃ｦ逅・ｒ繧ｹ繧ｭ繝・・ (繝励Ξ繝薙Η繝ｼ繧ｯ繝ｪ繧｢迥ｶ諷九↓)
     if (!nameInput) {
         return null;
     }
 
     try {
-        // 1. テンプレートPDFの取得（IndexedDBから事前にロード済み）
+        // 1. 繝・Φ繝励Ξ繝ｼ繝・DF縺ｮ蜿門ｾ暦ｼ・ndexedDB縺九ｉ莠句燕縺ｫ繝ｭ繝ｼ繝画ｸ医∩・・
         const templateBytes = loadedTemplateBytes[currentTemplate];
         if (!templateBytes) {
-            throw new Error(`テンプレートデータが見つかりません: ${currentTemplate}`);
+            throw new Error(`繝・Φ繝励Ξ繝ｼ繝医ョ繝ｼ繧ｿ縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ: ${currentTemplate}`);
         }
-        // 2. pdf-libでPDFをロードまたは新規作成
+        // 2. pdf-lib縺ｧPDF繧偵Ο繝ｼ繝峨∪縺溘・譁ｰ隕丈ｽ懈・
         let pdfDoc;
         let firstPage;
         const includeBackground = document.getElementById("includeBackground") ? document.getElementById("includeBackground").checked : true;
 
-        // 用紙サイズ変更の計算 (原本との差分で translateContent + setSize)
+        // 逕ｨ邏吶し繧､繧ｺ螟画峩縺ｮ險育ｮ・(蜴滓悽縺ｨ縺ｮ蟾ｮ蛻・〒 translateContent + setSize)
         const origDoc = await PDFLib.PDFDocument.load(templateBytes);
         const origPage = origDoc.getPages()[0];
         const origWidthPt = origPage.getSize().width;
@@ -814,54 +814,54 @@ async function generatePDF(isPrinting = false) {
         if (includeBackground) {
             pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
             firstPage = pdfDoc.getPages()[0];
-            // デザインをセンタリングしてからページサイズを変更
+            // 繝・じ繧､繝ｳ繧偵そ繝ｳ繧ｿ繝ｪ繝ｳ繧ｰ縺励※縺九ｉ繝壹・繧ｸ繧ｵ繧､繧ｺ繧貞､画峩
             firstPage.translateContent(shiftXPt, shiftYPt);
             firstPage.setSize(newWidthPt, newHeightPt);
         } else {
-            // 白紙のPDFを新規作成（新しい用紙サイズで）
+            // 逋ｽ邏吶・PDF繧呈眠隕丈ｽ懈・・域眠縺励＞逕ｨ邏吶し繧､繧ｺ縺ｧ・・
             pdfDoc = await PDFLib.PDFDocument.create();
             firstPage = pdfDoc.addPage([newWidthPt, newHeightPt]);
         }
         
-        // 3. 日本語フォントの読み込みと埋め込み
+        // 3. 譌･譛ｬ隱槭ヵ繧ｩ繝ｳ繝医・隱ｭ縺ｿ霎ｼ縺ｿ縺ｨ蝓九ａ霎ｼ縺ｿ
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
                 pdfDoc.registerFontkit(window.fontkit);
                 fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: true });
             } catch (fontError) {
-                console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
+                console.error("繝輔か繝ｳ繝医・蝓九ａ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲よｨ呎ｺ悶ヵ繧ｩ繝ｳ繝医↓繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ縺励∪縺・", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
             }
         } else {
             fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
         }
         
-        // デザイン調整値の読み出し
+        // 繝・じ繧､繝ｳ隱ｿ謨ｴ蛟､縺ｮ隱ｭ縺ｿ蜃ｺ縺・
         const settings = designSettings[currentTemplate];
 
-        // 新テンプレート: 「奉納」のみ印刷済み → 金額・氏名をアプリ側で完全合成
+        // 譁ｰ繝・Φ繝励Ξ繝ｼ繝・ 縲悟･臥ｴ阪阪・縺ｿ蜊ｰ蛻ｷ貂医∩ 竊・驥鷹｡阪・豌丞錐繧偵い繝励Μ蛛ｴ縺ｧ螳悟・蜷域・
         const fullAmount =
-            currentTemplate === '10000en' ? `金${amountInput}萬圓也` :
-            currentTemplate === '1000en'  ? `金${amountInput}阡圓也` :
-            amountInput; // free: 完全自由入力
+            currentTemplate === '10000en' ? `驥・{amountInput}關ｬ蝨謎ｹ歔 :
+            currentTemplate === '1000en'  ? `驥・{amountInput}髦｡蝨謎ｹ歔 :
+            amountInput; // free: 螳悟・閾ｪ逕ｱ蜈･蜉・
         const data = {
-            name:   nameInput ? nameInput + '\u3000殿' : '',
+            name:   nameInput ? nameInput + '\u3000谿ｿ' : '',
             amount: fullAmount
         };
 
-        // 各フィールドの描画
+        // 蜷・ヵ繧｣繝ｼ繝ｫ繝峨・謠冗判
         for (const [fieldKey, fieldVal] of Object.entries(settings)) {
             const textValue = data[fieldKey];
             if (!textValue) continue;
 
-            // 用紙サイズ変更に伴うテキスト座標のオフセット適用
+            // 逕ｨ邏吶し繧､繧ｺ螟画峩縺ｫ莨ｴ縺・ユ繧ｭ繧ｹ繝亥ｺｧ讓吶・繧ｪ繝輔そ繝・ヨ驕ｩ逕ｨ
             let x_pt = mmToPt(fieldVal.x);
             let y_pt = mmToPt(fieldVal.y);
 
-            // 背景を含める場合、translateContent() により既にPDFの原点がシフトされているため
-            // 座標にオフセットを足す必要はありません（足すと2重シフトになります）。
-            // 背景を含めない（白紙の新規PDF）場合のみ手動でオフセットを加算します。
+            // 閭梧勹繧貞性繧√ｋ蝣ｴ蜷医》ranslateContent() 縺ｫ繧医ｊ譌｢縺ｫPDF縺ｮ蜴溽せ縺後す繝輔ヨ縺輔ｌ縺ｦ縺・ｋ縺溘ａ
+            // 蠎ｧ讓吶↓繧ｪ繝輔そ繝・ヨ繧定ｶｳ縺吝ｿ・ｦ√・縺ゅｊ縺ｾ縺帙ｓ・郁ｶｳ縺吶→2驥阪す繝輔ヨ縺ｫ縺ｪ繧翫∪縺呻ｼ峨・
+            // 閭梧勹繧貞性繧√↑縺・ｼ育區邏吶・譁ｰ隕襲DF・牙ｴ蜷医・縺ｿ謇句虚縺ｧ繧ｪ繝輔そ繝・ヨ繧貞刈邂励＠縺ｾ縺吶・
             if (!includeBackground) {
                 x_pt += shiftXPt;
                 y_pt += shiftYPt;
@@ -872,7 +872,7 @@ async function generatePDF(isPrinting = false) {
             
             const fieldConfig = config.templates[currentTemplate].fields[fieldKey];
             if (!fieldConfig) {
-                console.warn(`フィールド設定が見つかりません: ${fieldKey}`);
+                console.warn(`繝輔ぅ繝ｼ繝ｫ繝芽ｨｭ螳壹′隕九▽縺九ｊ縺ｾ縺帙ｓ: ${fieldKey}`);
                 continue;
             }
             const alignment = fieldConfig.alignment || "left";
@@ -882,22 +882,22 @@ async function generatePDF(isPrinting = false) {
             const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
-                // 縦書きの描画処理
+                // 邵ｦ譖ｸ縺阪・謠冗判蜃ｦ逅・
                 const chars = Array.from(textValue);
-                // 枠の高さに収まるようにフォントサイズを縮小
+                // 譫縺ｮ鬮倥＆縺ｫ蜿弱∪繧九ｈ縺・↓繝輔か繝ｳ繝医し繧､繧ｺ繧堤ｸｮ蟆・
                 const currentHeight_pt = chars.length * (currentFontSize * 1.02);
                 if (currentHeight_pt > height_pt) {
                     currentFontSize = height_pt / (chars.length * 1.02);
                 }
-                // 枠の幅（1文字の横幅）にも収まるように縮小
+                // 譫縺ｮ蟷・ｼ・譁・ｭ励・讓ｪ蟷・ｼ峨↓繧ょ庶縺ｾ繧九ｈ縺・↓邵ｮ蟆・
                 if (currentFontSize > width_pt) {
                     currentFontSize = width_pt;
                 }
 
-                // ボックスの上端を計算（元々のフォントサイズを基準に固定）
+                // 繝懊ャ繧ｯ繧ｹ縺ｮ荳顔ｫｯ繧定ｨ育ｮ暦ｼ亥・縲・・繝輔か繝ｳ繝医し繧､繧ｺ繧貞渕貅悶↓蝗ｺ螳夲ｼ・
                 const boxTop = y_pt + baseFontSize;
 
-                // 枠線の描画
+                // 譫邱壹・謠冗判
                 if (showBoundingBox && !isPrinting) {
                     firstPage.drawRectangle({
                         x: x_pt - (width_pt / 2),
@@ -909,7 +909,7 @@ async function generatePDF(isPrinting = false) {
                     });
                 }
 
-                // テキストの上端が boxTop に合うように最初の文字の baseline を設定 (top)
+                // 繝・く繧ｹ繝医・荳顔ｫｯ縺・boxTop 縺ｫ蜷医≧繧医≧縺ｫ譛蛻昴・譁・ｭ励・ baseline 繧定ｨｭ螳・(top)
                 const spacing = currentFontSize * 1.02;
                 let currentY = boxTop - currentFontSize;
                 const valign = fieldVal.valign || "top";
@@ -933,12 +933,12 @@ async function generatePDF(isPrinting = false) {
                     }
                     
                     let charToDraw = char;
-                    if (char === "ー" || char === "─" || char === "―" || char === "-") {
-                        charToDraw = "丨";
-                    } else if (char === "（") {
-                        charToDraw = "︵";
-                    } else if (char === "）") {
-                        charToDraw = "︶";
+                    if (char === "繝ｼ" || char === "笏" || char === "窶・ || char === "-") {
+                        charToDraw = "荳ｨ";
+                    } else if (char === "・・) {
+                        charToDraw = "・ｵ";
+                    } else if (char === "・・) {
+                        charToDraw = "・ｶ";
                     }
                     
                     firstPage.drawText(charToDraw, {
@@ -951,13 +951,13 @@ async function generatePDF(isPrinting = false) {
                     currentY -= spacing;
                 }
             } else {
-                // 通常の横書き描画処理
-                // 枠の幅に収まるようにフォントサイズを縮小
+                // 騾壼ｸｸ縺ｮ讓ｪ譖ｸ縺肴緒逕ｻ蜃ｦ逅・
+                // 譫縺ｮ蟷・↓蜿弱∪繧九ｈ縺・↓繝輔か繝ｳ繝医し繧､繧ｺ繧堤ｸｮ蟆・
                 const currentWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
                 if (currentWidth_pt > width_pt) {
                     currentFontSize = currentFontSize * (width_pt / currentWidth_pt);
                 }
-                // 枠の高さ（1文字の高さ）にも収まるように縮小
+                // 譫縺ｮ鬮倥＆・・譁・ｭ励・鬮倥＆・峨↓繧ょ庶縺ｾ繧九ｈ縺・↓邵ｮ蟆・
                 if (currentFontSize > height_pt) {
                     currentFontSize = height_pt;
                 }
@@ -967,7 +967,7 @@ async function generatePDF(isPrinting = false) {
                     if (alignment === "center") boxX = x_pt - (width_pt / 2);
                     else if (alignment === "right") boxX = x_pt - width_pt;
                     
-                    // ベースラインの少し下を枠の下端とする
+                    // 繝吶・繧ｹ繝ｩ繧､繝ｳ縺ｮ蟆代＠荳九ｒ譫縺ｮ荳狗ｫｯ縺ｨ縺吶ｋ
                     const boxY = y_pt - (baseFontSize * 0.2);
 
                     firstPage.drawRectangle({
@@ -981,7 +981,7 @@ async function generatePDF(isPrinting = false) {
                 }
 
                 let drawX = x_pt;
-                // 縮小後のフォントサイズで再計算
+                // 邵ｮ蟆丞ｾ後・繝輔か繝ｳ繝医し繧､繧ｺ縺ｧ蜀崎ｨ育ｮ・
                 const newTextWidth = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
                 
                 let drawY = y_pt; // default: top/baseline
@@ -1010,25 +1010,25 @@ async function generatePDF(isPrinting = false) {
             }
         }
 
-        // 4. PDFを保存してBlobを生成
+        // 4. PDF繧剃ｿ晏ｭ倥＠縺ｦBlob繧堤函謌・
         const pdfBytes = await pdfDoc.save();
         return new Blob([pdfBytes], { type: "application/pdf" });
 
     } catch (e) {
-        console.error("PDF合成エラー:", e);
-        logError("PDF合成エラーのキャッチ: " + (e.stack || e.message));
-        showToast("PDF合成中にエラーが発生しました: " + e.message, "error");
-        showStatus("PDF生成エラー", false);
+        console.error("PDF蜷域・繧ｨ繝ｩ繝ｼ:", e);
+        logError("PDF蜷域・繧ｨ繝ｩ繝ｼ縺ｮ繧ｭ繝｣繝・メ: " + (e.stack || e.message));
+        showToast("PDF蜷域・荳ｭ縺ｫ繧ｨ繝ｩ繝ｼ縺檎匱逕溘＠縺ｾ縺励◆: " + e.message, "error");
+        showStatus("PDF逕滓・繧ｨ繝ｩ繝ｼ", false);
         return null;
     }
 }
 
-// --- リアルタイムプレビュー更新（チラつき防止版） ---
+// --- 繝ｪ繧｢繝ｫ繧ｿ繧､繝繝励Ξ繝薙Η繝ｼ譖ｴ譁ｰ・医メ繝ｩ縺､縺埼亟豁｢迚茨ｼ・---
 async function updatePreview() {
     const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
     
-    showStatus("PDF生成中...", true);
+    showStatus("PDF逕滓・荳ｭ...", true);
     const pdfBlob = await generatePDF(false);
     
     if (pdfBlob && pdfjsLib) {
@@ -1050,7 +1050,7 @@ async function updatePreview() {
             
             const outputScale = window.devicePixelRatio || 1;
             
-            // オフスクリーンcanvasで先にレンダリング（チラつき防止）
+            // 繧ｪ繝輔せ繧ｯ繝ｪ繝ｼ繝ｳcanvas縺ｧ蜈医↓繝ｬ繝ｳ繝繝ｪ繝ｳ繧ｰ・医メ繝ｩ縺､縺埼亟豁｢・・
             const offscreen = document.createElement('canvas');
             offscreen.width = Math.floor(viewport.width * outputScale);
             offscreen.height = Math.floor(viewport.height * outputScale);
@@ -1068,7 +1068,7 @@ async function updatePreview() {
             
             await page.render(renderContext).promise;
             
-            // レンダリング完了後にメインcanvasへ一括コピー
+            // 繝ｬ繝ｳ繝繝ｪ繝ｳ繧ｰ螳御ｺ・ｾ後↓繝｡繧､繝ｳcanvas縺ｸ荳諡ｬ繧ｳ繝斐・
             pdfCanvas.width = offscreen.width;
             pdfCanvas.height = offscreen.height;
             pdfCanvas.style.width = Math.floor(viewport.width) + "px";
@@ -1078,83 +1078,83 @@ async function updatePreview() {
             
             pdfCanvas.style.display = "block";
             previewPlaceholder.style.display = "none";
-            showStatus("プレビュー更新完了", false);
+            showStatus("繝励Ξ繝薙Η繝ｼ譖ｴ譁ｰ螳御ｺ・, false);
         } catch (error) {
             logError("PDF.js Render Error: " + error);
-            showStatus("プレビュー表示エラー", false);
+            showStatus("繝励Ξ繝薙Η繝ｼ陦ｨ遉ｺ繧ｨ繝ｩ繝ｼ", false);
         }
     } else {
-        // pdfBlobがnull（氏名未入力など）の場合のみcanvasをクリア
+        // pdfBlob縺系ull・域ｰ丞錐譛ｪ蜈･蜉帙↑縺ｩ・峨・蝣ｴ蜷医・縺ｿcanvas繧偵け繝ｪ繧｢
         if (!pdfBlob) {
             pdfCanvas.style.display = "none";
             previewPlaceholder.style.display = "flex";
         }
-        showStatus("準備完了", false);
+        showStatus("貅門ｙ螳御ｺ・, false);
     }
 }
 
-// --- 印刷 / PDF保存アクション ---
+// --- 蜊ｰ蛻ｷ / PDF菫晏ｭ倥い繧ｯ繧ｷ繝ｧ繝ｳ ---
 async function printPDF() {
     const nameInput = document.getElementById("nameInput").value.trim();
     if (!nameInput) {
-        showToast("氏名を入力してから印刷してください", "error");
+        showToast("豌丞錐繧貞・蜉帙＠縺ｦ縺九ｉ蜊ｰ蛻ｷ縺励※縺上□縺輔＞", "error");
         return;
     }
 
-    showStatus("印刷用データを準備中...", true);
+    showStatus("蜊ｰ蛻ｷ逕ｨ繝・・繧ｿ繧呈ｺ門ｙ荳ｭ...", true);
     const pdfBlob = await generatePDF(true);
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
         
-        // 別タブで開いて印刷を実行させる
+        // 蛻･繧ｿ繝悶〒髢九＞縺ｦ蜊ｰ蛻ｷ繧貞ｮ溯｡後＆縺帙ｋ
         const newWindow = window.open(pdfUrl, "_blank");
         if (newWindow) {
             newWindow.onload = () => {
                 newWindow.print();
             };
-            showToast("印刷プレビューを別タブで開きました");
+            showToast("蜊ｰ蛻ｷ繝励Ξ繝薙Η繝ｼ繧貞挨繧ｿ繝悶〒髢九″縺ｾ縺励◆");
         } else {
-            // ポップアップがブロックされた場合は直接ダウンロード
+            // 繝昴ャ繝励い繝・・縺後ヶ繝ｭ繝・け縺輔ｌ縺溷ｴ蜷医・逶ｴ謗･繝繧ｦ繝ｳ繝ｭ繝ｼ繝・
             const link = document.createElement("a");
             link.href = pdfUrl;
-            link.download = `奉納ビラ_${nameInput}.pdf`;
+            link.download = `螂臥ｴ阪ン繝ｩ_${nameInput}.pdf`;
             link.click();
-            showToast("ポップアップがブロックされたため、PDFをダウンロードしました");
+            showToast("繝昴ャ繝励い繝・・縺後ヶ繝ｭ繝・け縺輔ｌ縺溘◆繧√￣DF繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｾ縺励◆");
         }
-        showStatus("印刷データ出力完了", false);
+        showStatus("蜊ｰ蛻ｷ繝・・繧ｿ蜃ｺ蜉帛ｮ御ｺ・, false);
         
-        // 印刷履歴への登録
-        saveRecord(false); // 重複を避けるため静かに自動登録
+        // 蜊ｰ蛻ｷ螻･豁ｴ縺ｸ縺ｮ逋ｻ骭ｲ
+        saveRecord(false); // 驥崎､・ｒ驕ｿ縺代ｋ縺溘ａ髱吶°縺ｫ閾ｪ蜍慕匳骭ｲ
     }
 }
 
-// --- データベース（履歴登録・表示）処理 ---
+// --- 繝・・繧ｿ繝吶・繧ｹ・亥ｱ･豁ｴ逋ｻ骭ｲ繝ｻ陦ｨ遉ｺ・牙・逅・---
 function saveRecord(showNotice = true) {
     const nameInput = document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
     const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
     
     if (!nameInput) {
-        if (showNotice) showToast("氏名を入力してください", "error");
+        if (showNotice) showToast("豌丞錐繧貞・蜉帙＠縺ｦ縺上□縺輔＞", "error");
         return;
     }
 
-    // 重複チェック (同一の氏名かつ金額かつテンプレートが直近にあればスキップ)
+    // 驥崎､・メ繧ｧ繝・け (蜷御ｸ縺ｮ豌丞錐縺九▽驥鷹｡阪°縺､繝・Φ繝励Ξ繝ｼ繝医′逶ｴ霑代↓縺ゅｌ縺ｰ繧ｹ繧ｭ繝・・)
     const isDuplicate = dbRecords.some(r => 
         r.name === nameInput && 
         r.amount === amountInput && 
         r.template === currentTemplate &&
-        (new Date().getTime() - new Date(r.date).getTime() < 30000) // 30秒以内の同一データ
+        (new Date().getTime() - new Date(r.date).getTime() < 30000) // 30遘剃ｻ･蜀・・蜷御ｸ繝・・繧ｿ
     );
     
     if (isDuplicate) return;
 
     let dbAmount = amountInput;
     if (currentTemplate === "10000en") {
-        dbAmount = `金${amountInput || "一"}萬圓也`;
+        dbAmount = `驥・{amountInput || "荳"}關ｬ蝨謎ｹ歔;
     } else if (currentTemplate === "1000en") {
-        dbAmount = `金${amountInput || "一"}阡圓也`;
+        dbAmount = `驥・{amountInput || "荳"}髦｡蝨謎ｹ歔;
     }
 
     const newRecord = {
@@ -1165,49 +1165,49 @@ function saveRecord(showNotice = true) {
         amount: dbAmount
     };
 
-    dbRecords.unshift(newRecord); // 先頭に追加
+    dbRecords.unshift(newRecord); // 蜈磯ｭ縺ｫ霑ｽ蜉
     saveDbRecords();
     renderTable();
     
-    // スプレッドシート連携（GAS）へ非同期で履歴を送信
+    // 繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝磯｣謳ｺ・・AS・峨∈髱槫酔譛溘〒螻･豁ｴ繧帝∽ｿ｡
     sendToGAS(newRecord);
     
     if (showNotice) {
-        showToast("名簿に正常に登録しました！");
+        showToast("蜷咲ｰｿ縺ｫ豁｣蟶ｸ縺ｫ逋ｻ骭ｲ縺励∪縺励◆・・);
     }
 }
 
 function deleteRecord(id) {
-    if (confirm("このレコードを名簿から削除しますか？")) {
+    if (confirm("縺薙・繝ｬ繧ｳ繝ｼ繝峨ｒ蜷咲ｰｿ縺九ｉ蜑企勁縺励∪縺吶°・・)) {
         dbRecords = dbRecords.filter(r => r.id !== id);
         saveDbRecords();
         renderTable();
-        showToast("名簿から削除しました");
+        showToast("蜷咲ｰｿ縺九ｉ蜑企勁縺励∪縺励◆");
     }
 }
 
-// --- 名簿アイテムのフォーム呼び出し ---
+// --- 蜷咲ｰｿ繧｢繧､繝・Β縺ｮ繝輔か繝ｼ繝蜻ｼ縺ｳ蜃ｺ縺・---
 function loadRecordToForm(id) {
     const record = dbRecords.find(r => r.id === id);
     if (!record) return;
 
-    // 1. テンプレートの変更
+    // 1. 繝・Φ繝励Ξ繝ｼ繝医・螟画峩
     selectTemplate(record.template);
     
-    // 2. フォーム入力値の設定
+    // 2. 繝輔か繝ｼ繝蜈･蜉帛､縺ｮ險ｭ螳・
     document.getElementById("nameInput").value = record.name;
     
     if (record.template === "10000en" || record.template === "1000en") {
-        // 履歴DBの "金五萬圓也" から "五" を抽出してUIに入力
+        // 螻･豁ｴDB縺ｮ "驥台ｺ碑成蝨謎ｹ・ 縺九ｉ "莠・ 繧呈歓蜃ｺ縺励※UI縺ｫ蜈･蜉・
         let val = record.amount;
-        if (val.startsWith("金")) {
+        if (val.startsWith("驥・)) {
             val = val.substring(1);
         }
-        if (val.endsWith("萬圓也")) {
+        if (val.endsWith("關ｬ蝨謎ｹ・)) {
             val = val.substring(0, val.length - 3);
-        } else if (val.endsWith("阡圓也")) {
+        } else if (val.endsWith("髦｡蝨謎ｹ・)) {
             val = val.substring(0, val.length - 3);
-        } else if (val.endsWith("阡圆也")) {
+        } else if (val.endsWith("髦｡蝨・ｹ・)) {
             val = val.substring(0, val.length - 3);
         }
         const amountSelect = document.getElementById("amountSelect");
@@ -1217,60 +1217,60 @@ function loadRecordToForm(id) {
         document.getElementById("amountInput").value = record.amount;
     }
 
-    // 3. プレビューの再描画
+    // 3. 繝励Ξ繝薙Η繝ｼ縺ｮ蜀肴緒逕ｻ
     updatePreview();
-    showToast("名簿データを入力フォームに読み込みました");
+    showToast("蜷咲ｰｿ繝・・繧ｿ繧貞・蜉帙ヵ繧ｩ繝ｼ繝縺ｫ隱ｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆");
 }
 
-// --- 名簿テーブルのレンダリング ---
+// --- 蜷咲ｰｿ繝・・繝悶Ν縺ｮ繝ｬ繝ｳ繝繝ｪ繝ｳ繧ｰ ---
 function renderTable() {
     const tbody = document.getElementById("historyTableBody");
     const searchInput = document.getElementById("searchInput").value.trim().toLowerCase();
     
     tbody.innerHTML = "";
     
-    // 検索フィルタリング
+    // 讀懃ｴ｢繝輔ぅ繝ｫ繧ｿ繝ｪ繝ｳ繧ｰ
     const filteredRecords = dbRecords.filter(r => 
         r.name.toLowerCase().includes(searchInput) || 
         r.amount.toLowerCase().includes(searchInput)
     );
 
     if (filteredRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="no-data">登録されている名簿データはありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="no-data">逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ蜷咲ｰｿ繝・・繧ｿ縺ｯ縺ゅｊ縺ｾ縺帙ｓ縲・/td></tr>`;
         return;
     }
 
     filteredRecords.forEach(r => {
         const tr = document.createElement("tr");
         
-        // 日付フォーマット
+        // 譌･莉倥ヵ繧ｩ繝ｼ繝槭ャ繝・
         const d = new Date(r.date);
         const dateStr = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
         
-        // テンプレートバッジ
+        // 繝・Φ繝励Ξ繝ｼ繝医ヰ繝・ず
         let badgeClass = "badge-10000";
-        let badgeText = "萬圓用";
+        let badgeText = "關ｬ蝨鍋畑";
         if (r.template === "1000en") {
             badgeClass = "badge-100";
-            badgeText = "阡圓用";
+            badgeText = "髦｡蝨鍋畑";
         } else if (r.template === "free") {
             badgeClass = "badge-free";
-            badgeText = "フリー";
+            badgeText = "繝輔Μ繝ｼ";
         }
 
         tr.innerHTML = `
             <td data-label=""><input type="checkbox" class="record-checkbox" value="${r.id}" onchange="updateBatchCount()" style="transform: scale(1.3);"></td>
-            <td data-label="日時">${dateStr}</td>
-            <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
-            <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
-            <td data-label="金額/物品">${escapeHTML(r.amount)}</td>
+            <td data-label="譌･譎・>${dateStr}</td>
+            <td data-label="蜿ｰ邏咏ｨｮ鬘・><span class="badge ${badgeClass}">${badgeText}</span></td>
+            <td data-label="豌丞錐" style="font-weight: 500;">${escapeHTML(r.name)}</td>
+            <td data-label="驥鷹｡・迚ｩ蜩・>${escapeHTML(r.amount)}</td>
             <td data-label="">
                 <div class="action-btns">
                     <button class="btn-table btn-table-edit" onclick="loadRecordToForm('${r.id}')">
-                        <i class="fa-solid fa-arrows-spin"></i>呼び出す
+                        <i class="fa-solid fa-arrows-spin"></i>蜻ｼ縺ｳ蜃ｺ縺・
                     </button>
                     <button class="btn-table btn-table-del" onclick="deleteRecord('${r.id}')">
-                        <i class="fa-solid fa-trash-can"></i>削除
+                        <i class="fa-solid fa-trash-can"></i>蜑企勁
                     </button>
                 </div>
             </td>
@@ -1279,22 +1279,22 @@ function renderTable() {
     });
 }
 
-// --- CSVエクスポート機能 ---
+// --- CSV繧ｨ繧ｯ繧ｹ繝昴・繝域ｩ溯・ ---
 function exportCSV() {
     if (dbRecords.length === 0) {
-        showToast("エクスポートするデータがありません", "error");
+        showToast("繧ｨ繧ｯ繧ｹ繝昴・繝医☆繧九ョ繝ｼ繧ｿ縺後≠繧翫∪縺帙ｓ", "error");
         return;
     }
 
-    let csvContent = "\ufeff"; // Excelでの文字化けを防ぐためのBOM付きUTF-8
-    csvContent += "日時,テンプレート種類,奉納者氏名,金額/物品名\n";
+    let csvContent = "\ufeff"; // Excel縺ｧ縺ｮ譁・ｭ怜喧縺代ｒ髦ｲ縺舌◆繧√・BOM莉倥″UTF-8
+    csvContent += "譌･譎・繝・Φ繝励Ξ繝ｼ繝育ｨｮ鬘・螂臥ｴ崎・ｰ丞錐,驥鷹｡・迚ｩ蜩∝錐\n";
 
     dbRecords.forEach(r => {
         const d = new Date(r.date);
         const dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
-        const templateStr = r.template === "10000en" ? "萬圓用" : (r.template === "1000en" ? "阡圓用" : "フリー用");
+        const templateStr = r.template === "10000en" ? "關ｬ蝨鍋畑" : (r.template === "1000en" ? "髦｡蝨鍋畑" : "繝輔Μ繝ｼ逕ｨ");
         
-        // カンマやダブルクォーテーションのエスケープ
+        // 繧ｫ繝ｳ繝槭ｄ繝繝悶Ν繧ｯ繧ｩ繝ｼ繝・・繧ｷ繝ｧ繝ｳ縺ｮ繧ｨ繧ｹ繧ｱ繝ｼ繝・
         const escapedName = `"${r.name.replace(/"/g, '""')}"`;
         const escapedAmount = `"${r.amount.replace(/"/g, '""')}"`;
 
@@ -1305,14 +1305,14 @@ function exportCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `奉納名簿履歴_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `螂臥ｴ榊錐邁ｿ螻･豁ｴ_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("名簿データをCSVとして出力しました！");
+    showToast("蜷咲ｰｿ繝・・繧ｿ繧辰SV縺ｨ縺励※蜃ｺ蜉帙＠縺ｾ縺励◆・・);
 }
 
-// --- アコーディオンの開閉 ---
+// --- 繧｢繧ｳ繝ｼ繝・ぅ繧ｪ繝ｳ縺ｮ髢矩哩 ---
 function toggleAccordion() {
     const accordion = document.getElementById("calibrationAccordion");
     const arrow = document.getElementById("accordionArrow");
@@ -1325,7 +1325,7 @@ function toggleAccordion() {
     }
 }
 
-// #8 スマホでは微調整アコーディオンをデフォルトで開く
+// #8 繧ｹ繝槭・縺ｧ縺ｯ蠕ｮ隱ｿ謨ｴ繧｢繧ｳ繝ｼ繝・ぅ繧ｪ繝ｳ繧偵ョ繝輔か繝ｫ繝医〒髢九￥
 if (window.innerWidth <= 768) {
     window.addEventListener("DOMContentLoaded", () => {
         const accordion = document.getElementById("calibrationAccordion");
@@ -1337,53 +1337,53 @@ if (window.innerWidth <= 768) {
     });
 }
 
-// #9 スマホ用PDF保存（直接ダウンロード）
+// #9 繧ｹ繝槭・逕ｨPDF菫晏ｭ假ｼ育峩謗･繝繧ｦ繝ｳ繝ｭ繝ｼ繝会ｼ・
 async function mobilePrintPDF() {
     const nameInput = document.getElementById("nameInput").value.trim();
     if (!nameInput) {
-        showToast("氏名を入力してから保存してください", "error");
+        showToast("豌丞錐繧貞・蜉帙＠縺ｦ縺九ｉ菫晏ｭ倥＠縺ｦ縺上□縺輔＞", "error");
         return;
     }
 
-    showStatus("PDF生成中...", true);
+    showStatus("PDF逕滓・荳ｭ...", true);
     const pdfBlob = await generatePDF(true);
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
         const link = document.createElement("a");
         link.href = pdfUrl;
-        link.download = `奉納ビラ_${nameInput}.pdf`;
+        link.download = `螂臥ｴ阪ン繝ｩ_${nameInput}.pdf`;
         link.click();
         URL.revokeObjectURL(pdfUrl);
-        showToast("PDFを保存しました");
-        showStatus("PDF保存完了", false);
+        showToast("PDF繧剃ｿ晏ｭ倥＠縺ｾ縺励◆");
+        showStatus("PDF菫晏ｭ伜ｮ御ｺ・, false);
         saveRecord(false);
     }
 }
 
-// iPhone AirPrint用の印刷機能
+// iPhone AirPrint逕ｨ縺ｮ蜊ｰ蛻ｷ讖溯・
 async function mobilePrintAirPrint() {
     const nameInput = document.getElementById("nameInput").value.trim();
     if (!nameInput) {
-        showToast("氏名を入力してから印刷してください", "error");
+        showToast("豌丞錐繧貞・蜉帙＠縺ｦ縺九ｉ蜊ｰ蛻ｷ縺励※縺上□縺輔＞", "error");
         return;
     }
 
-    showStatus("印刷データ準備中...", true);
+    showStatus("蜊ｰ蛻ｷ繝・・繧ｿ貅門ｙ荳ｭ...", true);
     
     try {
         const pdfBlob = await generatePDF(true);
         
         if (!pdfBlob) {
-            showToast("PDFの生成に失敗しました", "error");
-            showStatus("準備完了", false);
+            showToast("PDF縺ｮ逕滓・縺ｫ螟ｱ謨励＠縺ｾ縺励◆", "error");
+            showStatus("貅門ｙ螳御ｺ・, false);
             return;
         }
 
-        const fileName = `奉納ビラ_${nameInput}.pdf`;
+        const fileName = `螂臥ｴ阪ン繝ｩ_${nameInput}.pdf`;
 
-        // 方法1: iOS Web Share API でPDFを共有シートに送る
-        // 共有シートから「プリント」→ AirPrint
+        // 譁ｹ豕・: iOS Web Share API 縺ｧPDF繧貞・譛峨す繝ｼ繝医↓騾√ｋ
+        // 蜈ｱ譛峨す繝ｼ繝医°繧峨後・繝ｪ繝ｳ繝医坂・ AirPrint
         if (navigator.share) {
             try {
                 const pdfFile = new File([pdfBlob], fileName, { type: "application/pdf" });
@@ -1391,20 +1391,20 @@ async function mobilePrintAirPrint() {
                 
                 if (navigator.canShare && navigator.canShare(shareData)) {
                     await navigator.share(shareData);
-                    showStatus("印刷準備完了", false);
+                    showStatus("蜊ｰ蛻ｷ貅門ｙ螳御ｺ・, false);
                     saveRecord(false);
                     return;
                 }
             } catch (e) {
                 if (e.name === "AbortError") {
-                    showStatus("準備完了", false);
+                    showStatus("貅門ｙ螳御ｺ・, false);
                     return;
                 }
                 console.warn("Share API:", e);
             }
         }
 
-        // 方法2: 別タブでPDFを開く（共有ボタン→プリント）
+        // 譁ｹ豕・: 蛻･繧ｿ繝悶〒PDF繧帝幕縺擾ｼ亥・譛峨・繧ｿ繝ｳ竊偵・繝ｪ繝ｳ繝茨ｼ・
         const pdfUrl = URL.createObjectURL(pdfBlob);
         const link = document.createElement("a");
         link.href = pdfUrl;
@@ -1414,18 +1414,18 @@ async function mobilePrintAirPrint() {
         link.click();
         document.body.removeChild(link);
         
-        showToast("PDFを開きました。共有ボタン→「プリント」で印刷できます。");
-        showStatus("印刷準備完了", false);
+        showToast("PDF繧帝幕縺阪∪縺励◆縲ょ・譛峨・繧ｿ繝ｳ竊偵後・繝ｪ繝ｳ繝医阪〒蜊ｰ蛻ｷ縺ｧ縺阪∪縺吶・);
+        showStatus("蜊ｰ蛻ｷ貅門ｙ螳御ｺ・, false);
         saveRecord(false);
         
     } catch (e) {
-        logError("印刷エラー: " + e.message);
-        showToast("印刷に失敗しました: " + e.message, "error");
-        showStatus("準備完了", false);
+        logError("蜊ｰ蛻ｷ繧ｨ繝ｩ繝ｼ: " + e.message);
+        showToast("蜊ｰ蛻ｷ縺ｫ螟ｱ謨励＠縺ｾ縺励◆: " + e.message, "error");
+        showStatus("貅門ｙ螳御ｺ・, false);
     }
 }
 
-// #7 長押しリピート機能（+/-ボタン）
+// #7 髟ｷ謚ｼ縺励Μ繝斐・繝域ｩ溯・・・/-繝懊ち繝ｳ・・
 (function setupLongPressRepeat() {
     document.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll(".calib-btn").forEach(btn => {
@@ -1434,7 +1434,7 @@ async function mobilePrintAirPrint() {
 
             const startRepeat = (e) => {
                 e.preventDefault();
-                // 初回は通常のクリックで処理済み
+                // 蛻晏屓縺ｯ騾壼ｸｸ縺ｮ繧ｯ繝ｪ繝・け縺ｧ蜃ｦ逅・ｸ医∩
                 timeoutId = setTimeout(() => {
                     intervalId = setInterval(() => {
                         btn.click();
@@ -1459,17 +1459,17 @@ async function mobilePrintAirPrint() {
     });
 })();
 
-// --- フォームのクリア ---
+// --- 繝輔か繝ｼ繝縺ｮ繧ｯ繝ｪ繧｢ ---
 function clearForm() {
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
     const amountSelect = document.getElementById("amountSelect");
-    if (amountSelect) amountSelect.value = "一";
+    if (amountSelect) amountSelect.value = "荳";
     updatePreview();
-    showToast("フォームをクリアしました");
+    showToast("繝輔か繝ｼ繝繧偵け繝ｪ繧｢縺励∪縺励◆");
 }
 
-// --- HTMLエスケープ ---
+// --- HTML繧ｨ繧ｹ繧ｱ繝ｼ繝・---
 function escapeHTML(str) {
     return str
         .replace(/&/g, "&amp;")
@@ -1479,7 +1479,7 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
-// --- トースト通知の表示 ---
+// --- 繝医・繧ｹ繝磯夂衍縺ｮ陦ｨ遉ｺ ---
 function showToast(message, type = "success") {
     const toast = document.getElementById("toast");
     const icon = toast.querySelector("i");
@@ -1500,24 +1500,24 @@ function showToast(message, type = "success") {
     }, 3000);
 }
 
-// --- スプレッドシート連携（GAS）API ---
+// --- 繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝磯｣謳ｺ・・AS・陰PI ---
 
-// GASからサジェストデータを取得（GET）
+// GAS縺九ｉ繧ｵ繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ繧貞叙蠕暦ｼ・ET・・
 async function syncFromGAS(isBackground = false) {
     if (!gasUrl) {
-        if (!isBackground) showToast("GASのウェブアプリURLを設定してください", "error");
+        if (!isBackground) showToast("GAS縺ｮ繧ｦ繧ｧ繝悶い繝励ΜURL繧定ｨｭ螳壹＠縺ｦ縺上□縺輔＞", "error");
         return;
     }
 
     const btn = document.getElementById("btnSyncGAS");
     if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 同期中...';
+        btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 蜷梧悄荳ｭ...';
         btn.style.opacity = "0.7";
         btn.disabled = true;
     }
 
     try {
-        // キャッシュクリアのためのタイムスタンプを追加
+        // 繧ｭ繝｣繝・す繝･繧ｯ繝ｪ繧｢縺ｮ縺溘ａ縺ｮ繧ｿ繧､繝繧ｹ繧ｿ繝ｳ繝励ｒ霑ｽ蜉
         const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
         const response = await fetch(fetchUrl, {
             method: "GET",
@@ -1531,47 +1531,47 @@ async function syncFromGAS(isBackground = false) {
             throw new Error(data.error);
         }
 
-        // サジェストデータを更新（新方式のnames/itemsに対応し、旧方式の3列データもマージして統合する後方互換処理）
+        // 繧ｵ繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ繧呈峩譁ｰ・域眠譁ｹ蠑上・names/items縺ｫ蟇ｾ蠢懊＠縲∵立譁ｹ蠑上・3蛻励ョ繝ｼ繧ｿ繧ゅ・繝ｼ繧ｸ縺励※邨ｱ蜷医☆繧句ｾ梧婿莠呈鋤蜃ｦ逅・ｼ・
         const rawNames = data.names || [
             ...(data["10000en_names"] || []),
             ...(data["1000en_names"] || []),
             ...(data["free_names"] || [])
         ];
-        // 重複排除して格納
+        // 驥崎､・賜髯､縺励※譬ｼ邏・
         suggestData.names = [...new Set(rawNames)];
         suggestData.items = data.items || data["free_items"] || [];
 
-        // LocalStorageに保存
+        // LocalStorage縺ｫ菫晏ｭ・
         try {
             localStorage.setItem("pdf_mail_merge_suggests", JSON.stringify(suggestData));
             localStorage.setItem("pdf_mail_merge_suggests_time", new Date().toISOString());
-        } catch (e) { /* 無視 */ }
+        } catch (e) { /* 辟｡隕・*/ }
 
         if (!isBackground) {
             const totalCount = suggestData.names.length + suggestData.items.length;
-            showToast(`スプレッドシートからサジェストデータ ${totalCount}件を同期しました`);
+            showToast(`繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝医°繧峨し繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ ${totalCount}莉ｶ繧貞酔譛溘＠縺ｾ縺励◆`);
         }
     } catch (e) {
-        console.error("GAS同期エラー:", e);
-        if (!isBackground) showToast("サジェストデータの同期に失敗しました: " + e.message, "error");
+        console.error("GAS蜷梧悄繧ｨ繝ｩ繝ｼ:", e);
+        if (!isBackground) showToast("繧ｵ繧ｸ繧ｧ繧ｹ繝医ョ繝ｼ繧ｿ縺ｮ蜷梧悄縺ｫ螟ｱ謨励＠縺ｾ縺励◆: " + e.message, "error");
     } finally {
         if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> スプレッドシートから同期';
+            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 繧ｹ繝励Ξ繝・ラ繧ｷ繝ｼ繝医°繧牙酔譛・;
             btn.style.opacity = "1";
             btn.disabled = false;
         }
     }
 }
 
-// 履歴データをスプレッドシートへ自動追記（POST）- オフラインキュー対応
+// 螻･豁ｴ繝・・繧ｿ繧偵せ繝励Ξ繝・ラ繧ｷ繝ｼ繝医∈閾ｪ蜍戊ｿｽ險假ｼ・OST・・ 繧ｪ繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ蟇ｾ蠢・
 async function sendToGAS(record) {
-    if (!gasUrl) return; // GAS URLが未設定ならスキップ
+    if (!gasUrl) return; // GAS URL縺梧悴險ｭ螳壹↑繧峨せ繧ｭ繝・・
 
-    let templateTypeStr = "フリー用";
+    let templateTypeStr = "繝輔Μ繝ｼ逕ｨ";
     if (record.template === "10000en") {
-        templateTypeStr = "萬圓用";
+        templateTypeStr = "關ｬ蝨鍋畑";
     } else if (record.template === "1000en") {
-        templateTypeStr = "阡圓用";
+        templateTypeStr = "髦｡蝨鍋畑";
     }
 
     const payload = {
@@ -1581,33 +1581,33 @@ async function sendToGAS(record) {
         amount: record.amount
     };
 
-    // オフラインの場合はキューに追加して終了
+    // 繧ｪ繝輔Λ繧､繝ｳ縺ｮ蝣ｴ蜷医・繧ｭ繝･繝ｼ縺ｫ霑ｽ蜉縺励※邨ゆｺ・
     if (!navigator.onLine) {
         addToOfflineQueue(payload);
-        console.log("オフラインのためキューに追加しました");
+        console.log("繧ｪ繝輔Λ繧､繝ｳ縺ｮ縺溘ａ繧ｭ繝･繝ｼ縺ｫ霑ｽ蜉縺励∪縺励◆");
         return;
     }
 
     try {
-        console.log("GASへのPOST送信を開始します...", payload);
+        console.log("GAS縺ｸ縺ｮPOST騾∽ｿ｡繧帝幕蟋九＠縺ｾ縺・..", payload);
         await fetch(gasUrl, {
             method: "POST",
             mode: "no-cors",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        console.log("GASへのデータ送信要求を送信しました");
+        console.log("GAS縺ｸ縺ｮ繝・・繧ｿ騾∽ｿ｡隕∵ｱゅｒ騾∽ｿ｡縺励∪縺励◆");
     } catch (e) {
-        // ネットワークエラー時はキューに追加
-        console.warn("GAS送信失敗、オフラインキューに追加:", e.message);
+        // 繝阪ャ繝医Ρ繝ｼ繧ｯ繧ｨ繝ｩ繝ｼ譎ゅ・繧ｭ繝･繝ｼ縺ｫ霑ｽ蜉
+        console.warn("GAS騾∽ｿ｡螟ｱ謨励√が繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ縺ｫ霑ｽ蜉:", e.message);
         addToOfflineQueue(payload);
     }
 }
 
-// --- オフラインキュー管理 ---
+// --- 繧ｪ繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ邂｡逅・---
 const OFFLINE_QUEUE_KEY = "pdf_mail_merge_offline_queue";
 
-// キューにペイロードを追加
+// 繧ｭ繝･繝ｼ縺ｫ繝壹う繝ｭ繝ｼ繝峨ｒ霑ｽ蜉
 function addToOfflineQueue(payload) {
     try {
         const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
@@ -1615,11 +1615,11 @@ function addToOfflineQueue(payload) {
         localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
         updateOfflineQueueBadge();
     } catch (e) {
-        console.error("オフラインキュー保存エラー:", e);
+        console.error("繧ｪ繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ菫晏ｭ倥お繝ｩ繝ｼ:", e);
     }
 }
 
-// キューの件数を取得
+// 繧ｭ繝･繝ｼ縺ｮ莉ｶ謨ｰ繧貞叙蠕・
 function getOfflineQueueCount() {
     try {
         const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
@@ -1629,7 +1629,7 @@ function getOfflineQueueCount() {
     }
 }
 
-// 未送信バッジの更新
+// 譛ｪ騾∽ｿ｡繝舌ャ繧ｸ縺ｮ譖ｴ譁ｰ
 function updateOfflineQueueBadge() {
     const count = getOfflineQueueCount();
     let badge = document.getElementById("offlineQueueBadge");
@@ -1640,21 +1640,21 @@ function updateOfflineQueueBadge() {
     }
     
     if (!badge) {
-        // バッジ要素がなければ動的に作成（ステータスバー横に配置）
+        // 繝舌ャ繧ｸ隕∫ｴ縺後↑縺代ｌ縺ｰ蜍慕噪縺ｫ菴懈・・医せ繝・・繧ｿ繧ｹ繝舌・讓ｪ縺ｫ驟咲ｽｮ・・
         badge = document.createElement("div");
         badge.id = "offlineQueueBadge";
         badge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; border: 1px solid #fde68a; cursor: pointer; font-weight: 600;";
-        badge.title = "クリックして未送信データを再送信";
+        badge.title = "繧ｯ繝ｪ繝・け縺励※譛ｪ騾∽ｿ｡繝・・繧ｿ繧貞・騾∽ｿ｡";
         badge.onclick = () => flushOfflineQueue();
         const header = document.querySelector("header");
         if (header) header.appendChild(badge);
     }
     
-    badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> 未送信 ${count}件`;
+    badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> 譛ｪ騾∽ｿ｡ ${count}莉ｶ`;
     badge.style.display = "inline-flex";
 }
 
-// キューの一括送信（オンライン復帰時に自動実行）
+// 繧ｭ繝･繝ｼ縺ｮ荳諡ｬ騾∽ｿ｡・医が繝ｳ繝ｩ繧､繝ｳ蠕ｩ蟶ｰ譎ゅ↓閾ｪ蜍募ｮ溯｡鯉ｼ・
 async function flushOfflineQueue() {
     if (!gasUrl || !navigator.onLine) return;
     
@@ -1667,8 +1667,8 @@ async function flushOfflineQueue() {
     
     if (queue.length === 0) return;
     
-    console.log(`オフラインキュー: ${queue.length}件の未送信データを送信開始...`);
-    showToast(`未送信データ ${queue.length}件をスプレッドシートに送信中...`);
+    console.log(`繧ｪ繝輔Λ繧､繝ｳ繧ｭ繝･繝ｼ: ${queue.length}莉ｶ縺ｮ譛ｪ騾∽ｿ｡繝・・繧ｿ繧帝∽ｿ｡髢句ｧ・..`);
+    showToast(`譛ｪ騾∽ｿ｡繝・・繧ｿ ${queue.length}莉ｶ繧偵せ繝励Ξ繝・ラ繧ｷ繝ｼ繝医↓騾∽ｿ｡荳ｭ...`);
     
     const failedItems = [];
     
@@ -1680,48 +1680,48 @@ async function flushOfflineQueue() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(item.payload)
             });
-            console.log("キューアイテム送信成功:", item.payload.name);
+            console.log("繧ｭ繝･繝ｼ繧｢繧､繝・Β騾∽ｿ｡謌仙粥:", item.payload.name);
         } catch (e) {
-            console.warn("キューアイテム送信失敗:", e.message);
+            console.warn("繧ｭ繝･繝ｼ繧｢繧､繝・Β騾∽ｿ｡螟ｱ謨・", e.message);
             failedItems.push(item);
         }
     }
     
-    // 失敗分だけキューに残す
+    // 螟ｱ謨怜・縺縺代く繝･繝ｼ縺ｫ谿九☆
     localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(failedItems));
     updateOfflineQueueBadge();
     
     const successCount = queue.length - failedItems.length;
     if (successCount > 0) {
-        showToast(`未送信データ ${successCount}件をスプレッドシートに送信しました！`);
+        showToast(`譛ｪ騾∽ｿ｡繝・・繧ｿ ${successCount}莉ｶ繧偵せ繝励Ξ繝・ラ繧ｷ繝ｼ繝医↓騾∽ｿ｡縺励∪縺励◆・～);
     }
     if (failedItems.length > 0) {
-        showToast(`${failedItems.length}件の送信に失敗しました。後で再試行します。`, "error");
+        showToast(`${failedItems.length}莉ｶ縺ｮ騾∽ｿ｡縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲ょｾ後〒蜀崎ｩｦ陦後＠縺ｾ縺吶Ａ, "error");
     }
 }
 
-// オンライン復帰時にキューを自動送信
+// 繧ｪ繝ｳ繝ｩ繧､繝ｳ蠕ｩ蟶ｰ譎ゅ↓繧ｭ繝･繝ｼ繧定・蜍暮∽ｿ｡
 window.addEventListener("online", () => {
-    console.log("ネットワーク接続が回復しました");
-    setTimeout(() => flushOfflineQueue(), 2000); // 接続安定のため2秒待つ
+    console.log("繝阪ャ繝医Ρ繝ｼ繧ｯ謗･邯壹′蝗槫ｾｩ縺励∪縺励◆");
+    setTimeout(() => flushOfflineQueue(), 2000); // 謗･邯壼ｮ牙ｮ壹・縺溘ａ2遘貞ｾ・▽
 });
 
-// オフライン検知時にバッジ表示を更新
+// 繧ｪ繝輔Λ繧､繝ｳ讀懃衍譎ゅ↓繝舌ャ繧ｸ陦ｨ遉ｺ繧呈峩譁ｰ
 window.addEventListener("offline", () => {
-    console.log("ネットワーク接続が切断されました");
+    console.log("繝阪ャ繝医Ρ繝ｼ繧ｯ謗･邯壹′蛻・妙縺輔ｌ縺ｾ縺励◆");
 });
 
-// アプリ起動時にキューをチェック
+// 繧｢繝励Μ襍ｷ蜍墓凾縺ｫ繧ｭ繝･繝ｼ繧偵メ繧ｧ繝・け
 window.addEventListener("DOMContentLoaded", () => {
     updateOfflineQueueBadge();
-    // オンラインなら未送信キューを自動送信
+    // 繧ｪ繝ｳ繝ｩ繧､繝ｳ縺ｪ繧画悴騾∽ｿ｡繧ｭ繝･繝ｼ繧定・蜍暮∽ｿ｡
     if (navigator.onLine && getOfflineQueueCount() > 0) {
         setTimeout(() => flushOfflineQueue(), 5000);
     }
 });
 
 // ==========================================
-// ボトムシート（サジェストUI）制御ロジック
+// 繝懊ヨ繝繧ｷ繝ｼ繝茨ｼ医し繧ｸ繧ｧ繧ｹ繝・I・牙宛蠕｡繝ｭ繧ｸ繝・け
 // ==========================================
 let currentSheetTarget = 'name'; // 'name' or 'amount'
 let currentSheetTab = 'recent'; // 'recent' or 'cloud'
@@ -1732,18 +1732,18 @@ function openBottomSheet(target) {
     const sheet = document.getElementById('bottomSheet');
     const searchInput = document.getElementById('sheetSearchInput');
     
-    // プレースホルダーの切り替え
+    // 繝励Ξ繝ｼ繧ｹ繝帙Ν繝繝ｼ縺ｮ蛻・ｊ譖ｿ縺・
     if (target === 'name') {
-        searchInput.placeholder = "氏名を直接入力 または 検索...";
+        searchInput.placeholder = "豌丞錐繧堤峩謗･蜈･蜉・縺ｾ縺溘・ 讀懃ｴ｢...";
     } else {
-        searchInput.placeholder = "金額・物品名を直接入力 または 検索...";
+        searchInput.placeholder = "驥鷹｡阪・迚ｩ蜩∝錐繧堤峩謗･蜈･蜉・縺ｾ縺溘・ 讀懃ｴ｢...";
     }
     
     searchInput.value = '';
     overlay.classList.add('active');
     sheet.classList.add('active');
     
-    // タブを初期化
+    // 繧ｿ繝悶ｒ蛻晄悄蛹・
     switchSheetTab('recent');
 }
 
@@ -1789,13 +1789,13 @@ function renderSheetList() {
     
     if (currentSheetTarget === 'name') {
         if (currentSheetTab === 'recent' && !query) {
-            // 最近の履歴から重複排除して氏名を抽出
+            // 譛霑代・螻･豁ｴ縺九ｉ驥崎､・賜髯､縺励※豌丞錐繧呈歓蜃ｺ
             sourceData = [...new Set(dbRecords.map(r => r.name))];
         } else {
-            // クラウドまたは検索時は全クラウドデータ
+            // 繧ｯ繝ｩ繧ｦ繝峨∪縺溘・讀懃ｴ｢譎ゅ・蜈ｨ繧ｯ繝ｩ繧ｦ繝峨ョ繝ｼ繧ｿ
             sourceData = suggestData.names || [];
             isCloud = true;
-            // 検索時はローカル履歴もマージして検索対象にする
+            // 讀懃ｴ｢譎ゅ・繝ｭ繝ｼ繧ｫ繝ｫ螻･豁ｴ繧ゅ・繝ｼ繧ｸ縺励※讀懃ｴ｢蟇ｾ雎｡縺ｫ縺吶ｋ
             if (query) {
                 const localNames = dbRecords.map(r => r.name);
                 sourceData = [...new Set([...sourceData, ...localNames])];
@@ -1803,7 +1803,7 @@ function renderSheetList() {
         }
     } else {
         if (currentSheetTab === 'recent' && !query) {
-            // 最近の履歴から金額/物品を抽出
+            // 譛霑代・螻･豁ｴ縺九ｉ驥鷹｡・迚ｩ蜩√ｒ謚ｽ蜃ｺ
             sourceData = [...new Set(dbRecords.map(r => r.amount))];
         } else {
             sourceData = suggestData.items || [];
@@ -1820,7 +1820,7 @@ function renderSheetList() {
     if (query.length > 0) {
         filtered = sourceData.filter(item => item.toLowerCase().includes(query));
         
-        // 検索結果に完全一致がある場合は新規ボタンを隠す
+        // 讀懃ｴ｢邨先棡縺ｫ螳悟・荳閾ｴ縺後≠繧句ｴ蜷医・譁ｰ隕上・繧ｿ繝ｳ繧帝國縺・
         const exactMatch = filtered.some(item => item.toLowerCase() === query);
         const btnConfirm = document.getElementById('btnConfirmNew');
         if (exactMatch) {
@@ -1829,17 +1829,17 @@ function renderSheetList() {
     }
     
     if (filtered.length === 0) {
-        content.innerHTML = '<div class="empty-message">該当する候補がありません。<br>上の入力欄にそのまま入力して決定ボタンを押してください。</div>';
+        content.innerHTML = '<div class="empty-message">隧ｲ蠖薙☆繧句呵｣懊′縺ゅｊ縺ｾ縺帙ｓ縲・br>荳翫・蜈･蜉帶ｬ・↓縺昴・縺ｾ縺ｾ蜈･蜉帙＠縺ｦ豎ｺ螳壹・繧ｿ繝ｳ繧呈款縺励※縺上□縺輔＞縲・/div>';
         return;
     }
     
-    // 上限30件程度にする
+    // 荳企剞30莉ｶ遞句ｺｦ縺ｫ縺吶ｋ
     filtered.slice(0, 30).forEach(item => {
         const div = document.createElement('div');
         div.className = 'list-item';
         div.innerHTML = `
             <span>${escapeHTML(item)}</span>
-            <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
+            <span class="list-item-sub">${isCloud ? '繧ｯ繝ｩ繧ｦ繝・ : '螻･豁ｴ'}</span>
         `;
         div.onclick = () => selectSheetItem(item);
         content.appendChild(div);
@@ -1864,16 +1864,16 @@ function confirmNewSheetInput() {
 }
 
 // ==========================================
-// 一括印刷機能
+// 荳諡ｬ蜊ｰ蛻ｷ讖溯・
 // ==========================================
 
-// 一括選択/解除
+// 荳諡ｬ驕ｸ謚・隗｣髯､
 function toggleSelectAll(checked) {
     document.querySelectorAll('.record-checkbox').forEach(cb => cb.checked = checked);
     updateBatchCount();
 }
 
-// 選択件数の更新
+// 驕ｸ謚樔ｻｶ謨ｰ縺ｮ譖ｴ譁ｰ
 function updateBatchCount() {
     const count = document.querySelectorAll('.record-checkbox:checked').length;
     const btn = document.getElementById('btnBatchPrint');
@@ -1882,23 +1882,23 @@ function updateBatchCount() {
     if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
 }
 
-// 一括印刷
+// 荳諡ｬ蜊ｰ蛻ｷ
 async function batchPrint() {
     const checkedBoxes = document.querySelectorAll('.record-checkbox:checked');
     const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
     
     if (selectedIds.length === 0) {
-        showToast('印刷するレコードを選択してください', 'error');
+        showToast('蜊ｰ蛻ｷ縺吶ｋ繝ｬ繧ｳ繝ｼ繝峨ｒ驕ｸ謚槭＠縺ｦ縺上□縺輔＞', 'error');
         return;
     }
     
-    showStatus(`一括印刷: ${selectedIds.length}件のPDFを生成中...`, true);
+    showStatus(`荳諡ｬ蜊ｰ蛻ｷ: ${selectedIds.length}莉ｶ縺ｮPDF繧堤函謌蝉ｸｭ...`, true);
     
-    // 現在のフォーム状態を保存
+    // 迴ｾ蝨ｨ縺ｮ繝輔か繝ｼ繝迥ｶ諷九ｒ菫晏ｭ・
     const origTemplate = currentTemplate;
     const origName = document.getElementById('nameInput').value;
     const origAmount = document.getElementById('amountInput').value;
-    const origSelect = document.getElementById('amountSelect') ? document.getElementById('amountSelect').value : '一';
+    const origSelect = document.getElementById('amountSelect') ? document.getElementById('amountSelect').value : '荳';
     
     try {
         const mergedPdf = await PDFLib.PDFDocument.create();
@@ -1907,20 +1907,20 @@ async function batchPrint() {
             const record = dbRecords.find(r => r.id === selectedIds[i]);
             if (!record) continue;
             
-            showStatus(`一括印刷: ${i + 1}/${selectedIds.length} 件目を処理中...`, true);
+            showStatus(`荳諡ｬ蜊ｰ蛻ｷ: ${i + 1}/${selectedIds.length} 莉ｶ逶ｮ繧貞・逅・ｸｭ...`, true);
             
-            // レコードのテンプレートに切り替え（UIは更新せずに内部値のみ変更）
+            // 繝ｬ繧ｳ繝ｼ繝峨・繝・Φ繝励Ξ繝ｼ繝医↓蛻・ｊ譖ｿ縺茨ｼ・I縺ｯ譖ｴ譁ｰ縺帙★縺ｫ蜀・Κ蛟､縺ｮ縺ｿ螟画峩・・
             currentTemplate = record.template;
             
-            // フォーム値を一時的に設定
+            // 繝輔か繝ｼ繝蛟､繧剃ｸ譎ら噪縺ｫ險ｭ螳・
             document.getElementById('nameInput').value = record.name;
             
-            // 金額をパース
+            // 驥鷹｡阪ｒ繝代・繧ｹ
             if (record.template === '10000en' || record.template === '1000en') {
                 let val = record.amount;
-                if (val.startsWith('金')) val = val.substring(1);
-                if (val.endsWith('萬圓也')) val = val.substring(0, val.length - 3);
-                else if (val.endsWith('阡圓也')) val = val.substring(0, val.length - 3);
+                if (val.startsWith('驥・)) val = val.substring(1);
+                if (val.endsWith('關ｬ蝨謎ｹ・)) val = val.substring(0, val.length - 3);
+                else if (val.endsWith('髦｡蝨謎ｹ・)) val = val.substring(0, val.length - 3);
                 const amountSelect = document.getElementById('amountSelect');
                 if (amountSelect) amountSelect.value = val;
                 document.getElementById('amountInput').value = val;
@@ -1928,7 +1928,7 @@ async function batchPrint() {
                 document.getElementById('amountInput').value = record.amount;
             }
             
-            // PDF生成
+            // PDF逕滓・
             const pdfBlob = await generatePDF(true);
             if (pdfBlob) {
                 const pdfBytes = await pdfBlob.arrayBuffer();
@@ -1938,7 +1938,7 @@ async function batchPrint() {
             }
         }
         
-        // フォームの状態を元に戻す
+        // 繝輔か繝ｼ繝縺ｮ迥ｶ諷九ｒ蜈・↓謌ｻ縺・
         currentTemplate = origTemplate;
         document.getElementById('nameInput').value = origName;
         document.getElementById('amountInput').value = origAmount;
@@ -1946,8 +1946,8 @@ async function batchPrint() {
         if (amountSelectRestore) amountSelectRestore.value = origSelect;
         
         if (mergedPdf.getPageCount() === 0) {
-            showToast('PDFの生成に失敗しました', 'error');
-            showStatus('準備完了', false);
+            showToast('PDF縺ｮ逕滓・縺ｫ螟ｱ謨励＠縺ｾ縺励◆', 'error');
+            showStatus('貅門ｙ螳御ｺ・, false);
             return;
         }
         
@@ -1955,30 +1955,30 @@ async function batchPrint() {
         const blob = new Blob([mergedBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         
-        // 印刷 or ダウンロード
+        // 蜊ｰ蛻ｷ or 繝繧ｦ繝ｳ繝ｭ繝ｼ繝・
         const newWindow = window.open(url, '_blank');
         if (newWindow) {
             newWindow.onload = () => newWindow.print();
-            showToast(`${selectedIds.length}件のPDFを一括印刷します`);
+            showToast(`${selectedIds.length}莉ｶ縺ｮPDF繧剃ｸ諡ｬ蜊ｰ蛻ｷ縺励∪縺兪);
         } else {
             const link = document.createElement('a');
             link.href = url;
-            link.download = `奉納ビラ一括_${selectedIds.length}件_${new Date().toISOString().slice(0,10)}.pdf`;
+            link.download = `螂臥ｴ阪ン繝ｩ荳諡ｬ_${selectedIds.length}莉ｶ_${new Date().toISOString().slice(0,10)}.pdf`;
             link.click();
-            showToast(`${selectedIds.length}件のPDFをダウンロードしました`);
+            showToast(`${selectedIds.length}莉ｶ縺ｮPDF繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｾ縺励◆`);
         }
         
-        showStatus('一括印刷完了', false);
+        showStatus('荳諡ｬ蜊ｰ蛻ｷ螳御ｺ・, false);
         
-        // テンプレートUIを元に戻す
+        // 繝・Φ繝励Ξ繝ｼ繝・I繧貞・縺ｫ謌ｻ縺・
         selectTemplate(currentTemplate);
         
     } catch (e) {
-        console.error('一括印刷エラー:', e);
-        showToast('一括印刷に失敗しました: ' + e.message, 'error');
-        showStatus('準備完了', false);
+        console.error('荳諡ｬ蜊ｰ蛻ｷ繧ｨ繝ｩ繝ｼ:', e);
+        showToast('荳諡ｬ蜊ｰ蛻ｷ縺ｫ螟ｱ謨励＠縺ｾ縺励◆: ' + e.message, 'error');
+        showStatus('貅門ｙ螳御ｺ・, false);
         
-        // エラー時もフォームの状態を元に戻す
+        // 繧ｨ繝ｩ繝ｼ譎ゅｂ繝輔か繝ｼ繝縺ｮ迥ｶ諷九ｒ蜈・↓謌ｻ縺・
         currentTemplate = origTemplate;
         document.getElementById('nameInput').value = origName;
         document.getElementById('amountInput').value = origAmount;
@@ -1986,3 +1986,4 @@ async function batchPrint() {
         if (amountSelectErr) amountSelectErr.value = origSelect;
     }
 }
+
