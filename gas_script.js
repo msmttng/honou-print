@@ -58,18 +58,21 @@ function doGet(e) {
   };
   
   // ==========================================
-  // 【追加】「履歴」シートからも奉納者名を読み込む
+  // 【追加】「履歴」から始まるすべてのシートから奉納者名を読み込む（年度別対応）
   // ==========================================
-  const historySheet = ss.getSheetByName("履歴");
-  if (historySheet) {
-    const hLastRow = historySheet.getLastRow();
-    if (hLastRow >= 2) {
-      // C列（3列目）が奉納者氏名
-      const historyNames = historySheet.getRange(2, 3, hLastRow - 1, 1).getValues();
-      for (let r = 0; r < historyNames.length; r++) {
-        const hName = historyNames[r][0];
-        if (hName !== undefined && hName !== null && hName.toString().trim() !== "") {
-          data.names.push(hName.toString().trim());
+  const allSheets = ss.getSheets();
+  for (let i = 0; i < allSheets.length; i++) {
+    const s = allSheets[i];
+    if (s.getName().startsWith("履歴")) {
+      const hLastRow = s.getLastRow();
+      if (hLastRow >= 2) {
+        // C列（3列目）が奉納者氏名
+        const historyNames = s.getRange(2, 3, hLastRow - 1, 1).getValues();
+        for (let r = 0; r < historyNames.length; r++) {
+          const hName = historyNames[r][0];
+          if (hName !== undefined && hName !== null && hName.toString().trim() !== "") {
+            data.names.push(hName.toString().trim());
+          }
         }
       }
     }
