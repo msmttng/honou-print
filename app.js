@@ -1133,7 +1133,13 @@ async function printPDF() {
 function saveRecord(showNotice = true) {
     const nameInput = document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
-    const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
+    let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
+    
+    // 【追加】「空」チェックが入っていればタグを付与
+    const emptyCheck = document.getElementById("emptyCheck");
+    if (emptyCheck && emptyCheck.checked && amountInput !== "") {
+        amountInput += " [空]";
+    }
     
     if (!nameInput) {
         if (showNotice) showToast("氏名を入力してください", "error");
@@ -2010,6 +2016,41 @@ function updateDirectValue(param, value) {
 // ==========================================
 // 集計（ダッシュボード）更新処理
 // ==========================================
+// 漢数字パース用関数
+function parseKanjiNumber(str) {
+    if (!str) return 0;
+    // 1. 全角数字を半角に
+    let halfStr = str.replace(/[０-９]/g, function(s) { return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); });
+    // 2. アラビア数字があればそれを優先して抽出
+    let arabicMatch = halfStr.replace(/[^0-9]/g, '');
+    if (arabicMatch && parseInt(arabicMatch, 10) > 0) {
+        return parseInt(arabicMatch, 10);
+    }
+    // 3. アラビア数字がなければ漢数字をパース
+    let total = 0;
+    let currentNum = 1;
+    let hasParsed = false;
+    const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9};
+    const unitMap = {'萬':10000, '万':10000, '阡':1000, '千':1000, '百':100, '十':10};
+    
+    for (let i = 0; i < halfStr.length; i++) {
+        let char = halfStr[i];
+        if (numMap[char] !== undefined) {
+            currentNum = numMap[char];
+            hasParsed = true;
+        } else if (unitMap[char] !== undefined) {
+            total += currentNum * unitMap[char];
+            currentNum = 1; // リセット
+            hasParsed = true;
+        }
+    }
+    if (hasParsed) {
+        // 末尾に単位がない場合（例: 「五」だけなど）
+        return total > 0 ? total : currentNum;
+    }
+    return 0;
+}
+
 function updateDashboardStats() {
     let totalMoney = 0;
     let count10000 = 0;
@@ -2017,23 +2058,14 @@ function updateDashboardStats() {
     let countFree = 0;
 
     for (let r of dbRecords) {
-        // テンプレート別カウント
+        // テンプレート別カウント (枚数は「空」でもカウントする)
         if (r.templateType === "萬圓用") count10000++;
         else if (r.templateType === "阡圓用") count5000++;
         else if (r.templateType === "フリー用") countFree++;
         
-        // 金額抽出ロジック
-        if (r.amount) {
-            // 例: "金5,000也", "10000", "5,000円" などをパース
-            // 1. 全角数字を半角に（念のため）
-            let amtStr = r.amount.replace(/[０-９]/g, function(s) {
-                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-            });
-            // 2. 数値以外の文字（カンマ、円、金、也など）を削除
-            amtStr = amtStr.replace(/[^0-9]/g, '');
-            if (amtStr) {
-                totalMoney += parseInt(amtStr, 10);
-            }
+        // 金額抽出ロジック (「空」の場合は金額合算を除外)
+        if (r.amount && !r.amount.includes('[空]')) {
+            totalMoney += parseKanjiNumber(r.amount);
         }
     }
 
@@ -2052,4 +2084,19 @@ function updateDashboardStats() {
 
     const elTotal = document.getElementById("statCountTotal");
     if (elTotal) elTotal.textContent = (count10000 + count5000 + countFree).toLocaleString();
+}
+
+
+function switchMainTab(tabId) {
+    document.getElementById("tabMain-history").classList.remove("active");
+    document.getElementById("tabMain-dashboard").classList.remove("active");
+    document.getElementById("mainTabContent-history").style.display = "none";
+    document.getElementById("mainTabContent-dashboard").style.display = "none";
+    
+    document.getElementById("tabMain-" + tabId).classList.add("active");
+    document.getElementById("mainTabContent-" + tabId).style.display = "block";
+    
+    if (tabId === "dashboard") {
+        updateDashboardStats();
+    }
 }
