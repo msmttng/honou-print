@@ -367,28 +367,28 @@ async function handleSetupFiles(files, status) {
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
 function getFallbackConfig() {
     return {
-        "config_version": 19,
+        "config_version": 20,
         "default_font": "HGSGyoshotai",
         "templates": {
             "10000en": {
                 "template_file": "奉納ビラ0602.pdf",
                 "fields": {
                     "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
-                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "amount": { "x_mm": 52.5, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "1000en": {
                 "template_file": "奉納ビラ0602.pdf",
                 "fields": {
                     "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
-                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "amount": { "x_mm": 52.5, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             },
             "free": {
                 "template_file": "奉納ビラ0602.pdf",
                 "fields": {
                     "name":   { "x_mm": 24.4, "y_mm": 186.7, "font_size": 86,  "alignment": "center", "vertical": true, "width_mm": 32,  "height_mm": 191, "valign": "bottom" },
-                    "amount": { "x_mm": 64.4, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
+                    "amount": { "x_mm": 52.5, "y_mm": 276.4, "font_size": 172, "alignment": "center", "vertical": true, "width_mm": 62,  "height_mm": 314, "valign": "top" }
                 }
             }
         }
