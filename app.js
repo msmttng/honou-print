@@ -591,34 +591,50 @@ function adjustValue(fieldKey, param, change) {
 }
 
 function updateDpadUI() {
-    const badge = document.getElementById("dpadCoordinates");
-    if (!badge) return;
-    
-    const targetRadios = document.getElementsByName("dpadTarget");
-    let targetKey = "name";
-    for (let i = 0; i < targetRadios.length; i++) {
-        if (targetRadios[i].checked) {
-            targetKey = targetRadios[i].value;
-            break;
+    try {
+        const badge = document.getElementById("dpadCoordinates");
+        if (!badge) return;
+        
+        const targetRadios = document.getElementsByName("dpadTarget");
+        let targetKey = "name";
+        for (let i = 0; i < targetRadios.length; i++) {
+            if (targetRadios[i].checked) {
+                targetKey = targetRadios[i].value;
+                break;
+            }
         }
-    }
-    
-    const settings = designSettings[currentTemplate];
-    if (settings && settings[targetKey]) {
-        badge.textContent = `X: ${settings[targetKey].x.toFixed(1)} / Y: ${settings[targetKey].y.toFixed(1)}`;
         
-        const elFontSize = document.getElementById("dpad-val-font_size");
-        const elWidth = document.getElementById("dpad-val-width_mm");
-        const elHeight = document.getElementById("dpad-val-height_mm");
-        const elValign = document.getElementById("dpad-val-valign");
-        
-        if (elFontSize) elFontSize.textContent = settings[targetKey].font_size;
-        if (elWidth) elWidth.textContent = settings[targetKey].width_mm;
-        if (elHeight) elHeight.textContent = settings[targetKey].height_mm;
-        if (elValign) elValign.value = settings[targetKey].valign || "top";
+        const settings = designSettings[currentTemplate];
+        if (settings && settings[targetKey]) {
+            const x = Number(settings[targetKey].x) || 0;
+            const y = Number(settings[targetKey].y) || 0;
+            badge.textContent = `X: ${x.toFixed(1)} / Y: ${y.toFixed(1)}`;
+            
+            const elFontSize = document.getElementById("dpad-val-font_size");
+            const elWidth = document.getElementById("dpad-val-width_mm");
+            const elHeight = document.getElementById("dpad-val-height_mm");
+            const elValign = document.getElementById("dpad-val-valign");
+            
+            if (elFontSize) {
+                if (elFontSize.tagName === 'INPUT') elFontSize.value = settings[targetKey].font_size;
+                else elFontSize.textContent = settings[targetKey].font_size;
+            }
+            if (elWidth) {
+                if (elWidth.tagName === 'INPUT') elWidth.value = settings[targetKey].width_mm;
+                else elWidth.textContent = settings[targetKey].width_mm;
+            }
+            if (elHeight) {
+                if (elHeight.tagName === 'INPUT') elHeight.value = settings[targetKey].height_mm;
+                else elHeight.textContent = settings[targetKey].height_mm;
+            }
+            if (elValign) elValign.value = settings[targetKey].valign || "top";
+        }
+        updatePaperSizeUI();
+    } catch (e) {
+        console.error("updateDpadUI error:", e);
     }
-    updatePaperSizeUI();
 }
+
 
 function adjustTargetValue(param, change) {
     const targetRadios = document.getElementsByName("dpadTarget");
@@ -635,26 +651,41 @@ function adjustTargetValue(param, change) {
 // --- フォントサイズ等の直接入力機能 ---
 function makeValueEditable(param) {
     const span = document.getElementById(`dpad-val-${param}`);
-    if (!span) return;
+    if (!span || span.tagName === 'INPUT') return;
     const currentVal = parseInt(span.textContent);
     const input = document.createElement('input');
+    input.id = `dpad-val-${param}`;
     input.type = 'number';
     input.value = isNaN(currentVal) ? 0 : currentVal;
-    input.style.cssText = 'width: 60px; text-align: center; font-weight: 600; font-family: monospace; border: 2px solid var(--accent); border-radius: 4px; padding: 2px; font-size: 14px;';
+    input.style.cssText = 'width: 60px; text-align: center; font-weight: 600; font-family: monospace; border: 2px solid var(--accent); border-radius: 4px; padding: 2px; font-size: 14px; outline: none;';
     span.replaceWith(input);
     input.focus();
     input.select();
     
-    const confirm = () => {
-        const newVal = parseInt(input.value);
-        // 現在選択中のフィールド(name/amount)の値を更新
+    const confirmAndRevert = () => {
+        const newSpan = document.createElement('span');
+        newSpan.id = `dpad-val-${param}`;
+        newSpan.style.cssText = 'font-weight: 600; font-family: monospace; cursor: pointer;';
+        newSpan.onclick = () => makeValueEditable(param);
+        
         const targetRadios = document.getElementsByName('dpadTarget');
         let targetKey = 'name';
         for (let i = 0; i < targetRadios.length; i++) {
             if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
         }
-        
+        newSpan.textContent = designSettings[currentTemplate]?.[targetKey]?.[param] ?? '--';
+        input.replaceWith(newSpan);
+        updateDpadUI();
+    };
+
+    input.addEventListener('change', () => {
+        const newVal = parseInt(input.value);
         if (!isNaN(newVal) && newVal > 0) {
+            const targetRadios = document.getElementsByName('dpadTarget');
+            let targetKey = 'name';
+            for (let i = 0; i < targetRadios.length; i++) {
+                if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
+            }
             const settings = designSettings[currentTemplate];
             if (settings && settings[targetKey]) {
                 settings[targetKey][param] = newVal;
@@ -662,22 +693,15 @@ function makeValueEditable(param) {
                 triggerAutoUpdate();
             }
         }
-        
-        const newSpan = document.createElement('span');
-        newSpan.id = `dpad-val-${param}`;
-        newSpan.style.cssText = 'font-weight: 600; font-family: monospace; cursor: pointer;';
-        newSpan.onclick = () => makeValueEditable(param);
-        newSpan.textContent = designSettings[currentTemplate]?.[targetKey]?.[param] ?? '--';
-        input.replaceWith(newSpan);
-        updateDpadUI();
-    };
-    
-    input.addEventListener('blur', confirm);
+    });
+
+    input.addEventListener('blur', confirmAndRevert);
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
         if (e.key === 'Escape') { input.blur(); }
     });
 }
+
 
 function changeTargetValign(value) {
     const targetRadios = document.getElementsByName("dpadTarget");
@@ -2100,5 +2124,6 @@ function switchMainTab(tabId) {
         updateDashboardStats();
     }
 }
-/ /   v 2 9   c a c h e   b u s t  
+/ /   v 2 9   c a c h e   b u s t 
+ 
  
