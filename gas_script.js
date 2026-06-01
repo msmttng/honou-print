@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 奉納ビラ 印刷＆名簿管理システム 用 Google Apps Script
  * 
  * 【セットアップ手順】
@@ -56,6 +56,24 @@ function doGet(e) {
     "names": [],
     "items": []
   };
+  
+  // ==========================================
+  // 【追加】「履歴」シートからも奉納者名を読み込む
+  // ==========================================
+  const historySheet = ss.getSheetByName("履歴");
+  if (historySheet) {
+    const hLastRow = historySheet.getLastRow();
+    if (hLastRow >= 2) {
+      // C列（3列目）が奉納者氏名
+      const historyNames = historySheet.getRange(2, 3, hLastRow - 1, 1).getValues();
+      for (let r = 0; r < historyNames.length; r++) {
+        const hName = historyNames[r][0];
+        if (hName !== undefined && hName !== null && hName.toString().trim() !== "") {
+          data.names.push(hName.toString().trim());
+        }
+      }
+    }
+  }
   
   for (let col = 0; col < lastColumn; col++) {
     const header = headers[col];
@@ -116,3 +134,4 @@ function doPost(e) {
                          .setMimeType(ContentService.MimeType.JSON);
   }
 }
+
