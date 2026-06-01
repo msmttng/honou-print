@@ -1504,6 +1504,8 @@ function clearForm() {
     document.getElementById("amountInput").value = "";
     const amountSelect = document.getElementById("amountSelect");
     if (amountSelect) amountSelect.value = "一";
+    const emptyCheck = document.getElementById("emptyCheck");
+    if (emptyCheck) emptyCheck.checked = false;
     updatePreview();
     showToast("フォームをクリアしました");
 }
