@@ -1,5 +1,5 @@
 // Service Worker - 奉納ビラ印刷＆名簿管理システム
-const CACHE_NAME = 'honou-print-v27';
+const CACHE_NAME = 'honou-print-v28';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
