@@ -592,9 +592,6 @@ function adjustValue(fieldKey, param, change) {
 
 function updateDpadUI() {
     try {
-        const badge = document.getElementById("dpadCoordinates");
-        if (!badge) return;
-        
         const targetRadios = document.getElementsByName("dpadTarget");
         let targetKey = "name";
         for (let i = 0; i < targetRadios.length; i++) {
@@ -608,7 +605,16 @@ function updateDpadUI() {
         if (settings && settings[targetKey]) {
             const x = Number(settings[targetKey].x) || 0;
             const y = Number(settings[targetKey].y) || 0;
-            badge.textContent = `X: ${x.toFixed(1)} / Y: ${y.toFixed(1)}`;
+            
+            const badge = document.getElementById("dpadCoordinates");
+            if (badge) {
+                badge.textContent = `X: ${x.toFixed(1)} / Y: ${y.toFixed(1)}`;
+            }
+            
+            const elX = document.getElementById("dpad-input-x");
+            const elY = document.getElementById("dpad-input-y");
+            if (elX) elX.value = x.toFixed(1);
+            if (elY) elY.value = y.toFixed(1);
             
             const elFontSize = document.getElementById("dpad-val-font_size");
             const elWidth = document.getElementById("dpad-val-width_mm");
@@ -634,6 +640,7 @@ function updateDpadUI() {
         console.error("updateDpadUI error:", e);
     }
 }
+
 
 function adjustTargetValue(param, change) {
     const targetRadios = document.getElementsByName("dpadTarget");
