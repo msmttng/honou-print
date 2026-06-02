@@ -412,6 +412,16 @@ function initDesignSettings() {
             if (designSettings[tKey][fKey].width_mm === undefined) designSettings[tKey][fKey].width_mm = fVal.width_mm || 30;
             if (designSettings[tKey][fKey].height_mm === undefined) designSettings[tKey][fKey].height_mm = fVal.height_mm || 150;
             if (designSettings[tKey][fKey].valign === undefined) designSettings[tKey][fKey].valign = fVal.valign || "top";
+            
+            // 新設項目
+            if (designSettings[tKey][fKey].char_spacing === undefined) designSettings[tKey][fKey].char_spacing = 0.0;
+            if (designSettings[tKey][fKey].bold === undefined) designSettings[tKey][fKey].bold = false;
+            
+            // 敬称（nameフィールドのみ設定）
+            if (fKey === "name") {
+                if (designSettings[tKey][fKey].honorific === undefined) designSettings[tKey][fKey].honorific = "殿";
+                if (designSettings[tKey][fKey].honorific_spacing === undefined) designSettings[tKey][fKey].honorific_spacing = 0.0;
+            }
         }
     }
     saveDesignSettings();
@@ -623,6 +633,8 @@ function updateDpadUI() {
             const elWidth = document.getElementById("dpad-val-width_mm");
             const elHeight = document.getElementById("dpad-val-height_mm");
             const elValign = document.getElementById("dpad-val-valign");
+            const elCharSpacing = document.getElementById("dpad-val-char_spacing");
+            const elBold = document.getElementById("boldCheck");
             
             if (elFontSize) {
                 if (elFontSize.tagName === 'INPUT') elFontSize.value = settings[targetKey].font_size;
@@ -637,6 +649,39 @@ function updateDpadUI() {
                 else elHeight.textContent = settings[targetKey].height_mm;
             }
             if (elValign) elValign.value = settings[targetKey].valign || "top";
+            
+            if (elCharSpacing) {
+                if (elCharSpacing.tagName === 'INPUT') elCharSpacing.value = settings[targetKey].char_spacing || 0;
+                else elCharSpacing.textContent = (settings[targetKey].char_spacing || 0.0).toFixed(1);
+            }
+            if (elBold) {
+                elBold.checked = settings[targetKey].bold || false;
+            }
+            
+            // 敬称UIの同期（nameの時だけ値がセットされている）
+            const nameSettings = settings["name"];
+            if (nameSettings) {
+                const elHonorificSelect = document.getElementById("honorificSelect");
+                const elHonorificCustomInput = document.getElementById("honorificCustomInput");
+                const elHonorificSpacingVal = document.getElementById("honorific-spacing-val");
+                
+                const currentHonorific = nameSettings.honorific || "殿";
+                if (elHonorificSelect) {
+                    if (["殿", "様", "なし"].includes(currentHonorific)) {
+                        elHonorificSelect.value = currentHonorific;
+                        if (elHonorificCustomInput) elHonorificCustomInput.style.display = "none";
+                    } else {
+                        elHonorificSelect.value = "custom";
+                        if (elHonorificCustomInput) {
+                            elHonorificCustomInput.style.display = "block";
+                            elHonorificCustomInput.value = currentHonorific;
+                        }
+                    }
+                }
+                if (elHonorificSpacingVal) {
+                    elHonorificSpacingVal.textContent = (nameSettings.honorific_spacing || 0.0).toFixed(1);
+                }
+            }
         }
         updatePaperSizeUI();
     } catch (e) {
@@ -657,14 +702,77 @@ function adjustTargetValue(param, change) {
     adjustValue(targetKey, param, change);
 }
 
+// 新規追加: 太字（重ね描き）の設定変更
+function changeTargetBold(checked) {
+    const targetRadios = document.getElementsByName("dpadTarget");
+    let targetKey = "name";
+    for (let i = 0; i < targetRadios.length; i++) {
+        if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
+    }
+    const settings = designSettings[currentTemplate];
+    if (settings && settings[targetKey]) {
+        settings[targetKey].bold = checked;
+        saveDesignSettings();
+        triggerAutoUpdate();
+    }
+}
+
+// 新規追加: 敬称セレクトボックスの変更
+function changeHonorific(value) {
+    const settings = designSettings[currentTemplate];
+    if (settings && settings["name"]) {
+        const input = document.getElementById("honorificCustomInput");
+        if (value === "custom") {
+            if (input) {
+                input.style.display = "block";
+                settings["name"].honorific = input.value || "殿";
+            }
+        } else {
+            if (input) input.style.display = "none";
+            settings["name"].honorific = value;
+        }
+        saveDesignSettings();
+        triggerAutoUpdate();
+    }
+}
+
+// 新規追加: 敬称のカスタムテキスト入力変更
+function changeCustomHonorific(value) {
+    const settings = designSettings[currentTemplate];
+    if (settings && settings["name"]) {
+        settings["name"].honorific = value;
+        saveDesignSettings();
+        triggerAutoUpdate();
+    }
+}
+
+// 新規追加: 敬称とのスペース間隔調整
+function adjustHonorificSpacing(change) {
+    const settings = designSettings[currentTemplate];
+    if (settings && settings["name"]) {
+        let current = settings["name"].honorific_spacing || 0.0;
+        current = parseFloat((current + change).toFixed(1));
+        if (current < -10) current = -10;
+        if (current > 50) current = 50;
+        settings["name"].honorific_spacing = current;
+        
+        const span = document.getElementById("honorific-spacing-val");
+        if (span) span.textContent = current.toFixed(1);
+        
+        saveDesignSettings();
+        triggerAutoUpdate();
+    }
+}
+
 // --- フォントサイズ等の直接入力機能 ---
 function makeValueEditable(param) {
     const span = document.getElementById(`dpad-val-${param}`);
     if (!span || span.tagName === 'INPUT') return;
-    const currentVal = parseInt(span.textContent);
+    const currentVal = parseFloat(span.textContent);
     const input = document.createElement('input');
     input.id = `dpad-val-${param}`;
     input.type = 'number';
+    input.step = param === 'char_spacing' ? '0.1' : '1';
     input.value = isNaN(currentVal) ? 0 : currentVal;
     input.style.cssText = 'width: 60px; text-align: center; font-weight: 600; font-family: monospace; border: 2px solid var(--accent); border-radius: 4px; padding: 2px; font-size: 14px; outline: none;';
     span.replaceWith(input);
@@ -682,14 +790,16 @@ function makeValueEditable(param) {
         for (let i = 0; i < targetRadios.length; i++) {
             if (targetRadios[i].checked) { targetKey = targetRadios[i].value; break; }
         }
-        newSpan.textContent = designSettings[currentTemplate]?.[targetKey]?.[param] ?? '--';
+        
+        const val = designSettings[currentTemplate]?.[targetKey]?.[param] ?? '--';
+        newSpan.textContent = typeof val === 'number' ? val.toFixed(param === 'char_spacing' ? 1 : 0) : val;
         input.replaceWith(newSpan);
         updateDpadUI();
     };
 
     input.addEventListener('change', () => {
-        const newVal = parseInt(input.value);
-        if (!isNaN(newVal) && newVal > 0) {
+        const newVal = parseFloat(input.value);
+        if (!isNaN(newVal)) {
             const targetRadios = document.getElementsByName('dpadTarget');
             let targetKey = 'name';
             for (let i = 0; i < targetRadios.length; i++) {
@@ -743,8 +853,14 @@ function resetCalibration() {
             font_size: fieldVal.font_size,
             width_mm: fieldVal.width_mm || 30,
             height_mm: fieldVal.height_mm || 150,
-            valign: fieldVal.valign || "top"
+            valign: fieldVal.valign || "top",
+            char_spacing: 0.0,
+            bold: false
         };
+        if (fieldKey === "name") {
+            designSettings[currentTemplate][fieldKey].honorific = "殿";
+            designSettings[currentTemplate][fieldKey].honorific_spacing = 0.0;
+        }
     }
     saveDesignSettings();
     updateDpadUI();
@@ -877,8 +993,13 @@ async function generatePDF(isPrinting = false) {
             currentTemplate === '10000en' ? `金${amountInput}萬圓也` :
             currentTemplate === '1000en'  ? `金${amountInput}阡圓也` :
             amountInput; // free: 完全自由入力
+        
+        // 敬称の設定取得
+        const nameSettings = settings["name"] || {};
+        const honorific = nameSettings.honorific || "殿";
+        
         const data = {
-            name:   nameInput ? nameInput + '\u3000殿' : '',
+            name:   nameInput || '',
             amount: fullAmount
         };
 
@@ -887,7 +1008,7 @@ async function generatePDF(isPrinting = false) {
             const textValue = data[fieldKey];
             if (!textValue) continue;
 
-            // 用紙サイズ変更に伴うテキスト座標のオフセット適用
+            // 用紙サイズ変更に伴うテキスト座標 of オフセット適用
             let x_pt = mmToPt(fieldVal.x);
             let y_pt = mmToPt(fieldVal.y);
 
@@ -915,11 +1036,25 @@ async function generatePDF(isPrinting = false) {
 
             if (isVertical) {
                 // 縦書きの描画処理
-                const chars = Array.from(textValue);
+                let chars = Array.from(textValue);
+                let honorificChars = [];
+                let honorificSpacingPt = 0;
+                
+                // 氏名フィールドかつ敬称ありの時
+                if (fieldKey === "name" && nameInput && honorific !== "なし") {
+                    honorificChars = Array.from(honorific === "custom" ? (nameSettings.honorific || "") : honorific);
+                    honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
+                }
+                
+                const totalCharsCount = chars.length + honorificChars.length;
+                const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
+                
                 // 枠の高さに収まるようにフォントサイズを縮小
-                const currentHeight_pt = chars.length * (currentFontSize * 1.02);
+                // 総高さ = (文字数 * フォントサイズ * 1.02) + ((文字数-1) * 字間) + 敬称スペース
+                let currentHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
                 if (currentHeight_pt > height_pt) {
-                    currentFontSize = height_pt / (chars.length * 1.02);
+                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (totalCharsCount * 1.02);
+                    if (currentFontSize < 10) currentFontSize = 10;
                 }
                 // 枠の幅（1文字の横幅）にも収まるように縮小
                 if (currentFontSize > width_pt) {
@@ -941,22 +1076,34 @@ async function generatePDF(isPrinting = false) {
                     });
                 }
 
-                // テキストの上端が boxTop に合うように最初の文字の baseline を設定 (top)
-                const spacing = currentFontSize * 1.02;
+                // テキストの上端が boxTop に合うように最初の文字の baseline を設定
+                const finalHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                const spacing = currentFontSize * 1.02 + charSpacingPt;
+                
                 let currentY = boxTop - currentFontSize;
                 const valign = fieldVal.valign || "top";
                 if (valign !== "top") {
-                    const textHeight_pt = (chars.length - 1) * spacing + currentFontSize;
                     if (valign === "center") {
-                        currentY = boxTop - (height_pt / 2) + (textHeight_pt / 2) - currentFontSize;
+                        currentY = boxTop - (height_pt / 2) + (finalHeight_pt / 2) - currentFontSize;
                     } else if (valign === "bottom") {
-                        currentY = boxTop - height_pt + textHeight_pt - currentFontSize;
+                        currentY = boxTop - height_pt + finalHeight_pt - currentFontSize;
                     }
                 }
                 
-                for (const char of chars) {
+                // 描画文字リストの作成
+                const allDrawChars = [];
+                chars.forEach(char => allDrawChars.push({ char, isHonorific: false }));
+                honorificChars.forEach((char, idx) => {
+                    allDrawChars.push({ char, isHonorific: true, isFirstHonorific: idx === 0 });
+                });
+                
+                for (const item of allDrawChars) {
+                    if (item.isHonorific && item.isFirstHonorific) {
+                        currentY -= honorificSpacingPt; // 敬称スペースの適用
+                    }
+                    
                     let drawX = x_pt;
-                    const charWidth = fontToUse.widthOfTextAtSize(char, currentFontSize);
+                    const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
                     
                     if (alignment === "center") {
                         drawX = x_pt - (charWidth / 2);
@@ -964,32 +1111,44 @@ async function generatePDF(isPrinting = false) {
                         drawX = x_pt - charWidth;
                     }
                     
-                    let charToDraw = char;
-                    if (char === "ー" || char === "─" || char === "―" || char === "-") {
+                    let charToDraw = item.char;
+                    if (item.char === "ー" || item.char === "─" || item.char === "―" || item.char === "-") {
                         charToDraw = "丨";
-                    } else if (char === "（") {
+                    } else if (item.char === "（") {
                         charToDraw = "︵";
-                    } else if (char === "）") {
+                    } else if (item.char === "）") {
                         charToDraw = "︶";
                     }
                     
-                    firstPage.drawText(charToDraw, {
+                    const drawOptions = {
                         x: drawX,
                         y: currentY,
                         size: currentFontSize,
                         font: fontToUse,
                         color: PDFLib.rgb(0.1, 0.1, 0.1)
-                    });
+                    };
+                    
+                    firstPage.drawText(charToDraw, drawOptions);
+                    // 疑似太字（重ね描き）
+                    if (fieldVal.bold) {
+                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3 });
+                        firstPage.drawText(charToDraw, { ...drawOptions, y: currentY + 0.3 });
+                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3, y: currentY + 0.3 });
+                    }
+                    
                     currentY -= spacing;
                 }
             } else {
-                // 通常の横書き描画処理
+                // 通常の横書き描画処理（字間と重ね描きを反映）
+                const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
+                
                 // 枠の幅に収まるようにフォントサイズを縮小
-                const currentWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
+                let currentWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize) + (textValue.length - 1) * charSpacingPt;
                 if (currentWidth_pt > width_pt) {
-                    currentFontSize = currentFontSize * (width_pt / currentWidth_pt);
+                    currentFontSize = (width_pt - (textValue.length - 1) * charSpacingPt) / (currentWidth_pt / currentFontSize);
+                    if (currentFontSize < 10) currentFontSize = 10;
                 }
-                // 枠の高さ（1文字の高さ）にも収まるように縮小
+                // 枠の高さにも収まるように縮小
                 if (currentFontSize > height_pt) {
                     currentFontSize = height_pt;
                 }
@@ -998,8 +1157,6 @@ async function generatePDF(isPrinting = false) {
                     let boxX = x_pt;
                     if (alignment === "center") boxX = x_pt - (width_pt / 2);
                     else if (alignment === "right") boxX = x_pt - width_pt;
-                    
-                    // ベースラインの少し下を枠の下端とする
                     const boxY = y_pt - (baseFontSize * 0.2);
 
                     firstPage.drawRectangle({
@@ -1013,10 +1170,9 @@ async function generatePDF(isPrinting = false) {
                 }
 
                 let drawX = x_pt;
-                // 縮小後のフォントサイズで再計算
-                const newTextWidth = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
+                const newTextWidth = fontToUse.widthOfTextAtSize(textValue, currentFontSize) + (textValue.length - 1) * charSpacingPt;
                 
-                let drawY = y_pt; // default: top/baseline
+                let drawY = y_pt;
                 const valign = fieldVal.valign || "top";
                 const boxY = y_pt - (baseFontSize * 0.2);
                 
@@ -1032,13 +1188,29 @@ async function generatePDF(isPrinting = false) {
                     drawX = x_pt - newTextWidth;
                 }
 
-                firstPage.drawText(textValue, {
-                    x: drawX,
-                    y: drawY,
-                    size: currentFontSize,
-                    font: fontToUse,
-                    color: PDFLib.rgb(0.1, 0.1, 0.1)
-                });
+                // 一文字ずつ描画（字間適用のため）
+                let currentX = drawX;
+                for (let idx = 0; idx < textValue.length; idx++) {
+                    const char = textValue[idx];
+                    const charWidth = fontToUse.widthOfTextAtSize(char, currentFontSize);
+                    
+                    const drawOptions = {
+                        x: currentX,
+                        y: drawY,
+                        size: currentFontSize,
+                        font: fontToUse,
+                        color: PDFLib.rgb(0.1, 0.1, 0.1)
+                    };
+                    
+                    firstPage.drawText(char, drawOptions);
+                    if (fieldVal.bold) {
+                        firstPage.drawText(char, { ...drawOptions, x: currentX + 0.3 });
+                        firstPage.drawText(char, { ...drawOptions, y: drawY + 0.3 });
+                        firstPage.drawText(char, { ...drawOptions, x: currentX + 0.3, y: drawY + 0.3 });
+                    }
+                    
+                    currentX += charWidth + charSpacingPt;
+                }
             }
         }
 
@@ -1685,8 +1857,8 @@ function updateOfflineQueueBadge() {
         badge = document.createElement("div");
         badge.id = "offlineQueueBadge";
         badge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; border: 1px solid #fde68a; cursor: pointer; font-weight: 600;";
-        badge.title = "クリックして未送信データを再送信";
-        badge.onclick = () => flushOfflineQueue();
+        badge.title = "クリックして未送信データを管理";
+        badge.onclick = () => openQueueModal();
         const header = document.querySelector("header");
         if (header) header.appendChild(badge);
     }
@@ -1878,13 +2050,54 @@ function renderSheetList() {
     filtered.slice(0, 30).forEach(item => {
         const div = document.createElement('div');
         div.className = 'list-item';
+        div.style.position = 'relative';
+        div.style.paddingRight = '55px'; // 削除ボタンのスペースを確保
+        
         div.innerHTML = `
-            <span>${escapeHTML(item)}</span>
-            <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
+            <div style="display: flex; flex-direction: column; flex: 1;" onclick="selectSheetItem('${escapeSingleQuotes(item)}')">
+                <span>${escapeHTML(item)}</span>
+                <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
+            </div>
+            <button type="button" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: none; background: #fee2e2; color: #ef4444; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5;" onclick="deleteSuggestItem('${escapeSingleQuotes(item)}', '${isCloud ? 'cloud' : 'recent'}'); event.stopPropagation();">
+                <i class="fa-solid fa-xmark" style="font-size: 14px;"></i>
+            </button>
         `;
-        div.onclick = () => selectSheetItem(item);
         content.appendChild(div);
     });
+}
+
+function escapeSingleQuotes(str) {
+    return str.replace(/'/g, "\\'");
+}
+
+// サジェスト候補の個別削除
+function deleteSuggestItem(val, type) {
+    if (confirm(`このサジェスト候補「${val}」を一覧から削除しますか？`)) {
+        if (currentSheetTarget === 'name') {
+            if (suggestData.names) {
+                suggestData.names = suggestData.names.filter(item => item !== val);
+            }
+            if (type === 'recent') {
+                dbRecords = dbRecords.filter(r => r.name !== val);
+                saveDbRecords();
+                renderTable();
+            }
+        } else {
+            if (suggestData.items) {
+                suggestData.items = suggestData.items.filter(item => item !== val);
+            }
+            if (type === 'recent') {
+                dbRecords = dbRecords.filter(r => r.amount !== val);
+                saveDbRecords();
+                renderTable();
+            }
+        }
+        
+        // LocalStorageにサジェストデータを保存
+        localStorage.setItem("pdf_mail_merge_suggests", JSON.stringify(suggestData));
+        showToast("サジェスト候補を削除しました");
+        renderSheetList(); // リスト再描画
+    }
 }
 
 function selectSheetItem(val) {
@@ -2133,4 +2346,159 @@ function switchMainTab(tabId) {
     if (tabId === "dashboard") {
         updateDashboardStats();
     }
+}
+
+// ==========================================
+// 手動キャッシュクリア ＆ 強制再同期
+// ==========================================
+async function forceClearAppCache() {
+    if (confirm("アプリのキャッシュ（フォントやPDF原本テンプレートなど）をすべてクリアし、最新ファイルを強制的に再ダウンロードします。よろしいですか？\n※デザインの微調整値や名簿の履歴は消去されません。")) {
+        // 設定バージョンなどのLocalStorageフラグを削除
+        localStorage.removeItem("pdf_mail_merge_config_version");
+        
+        // IndexedDB のファイルキャッシュを全削除
+        try {
+            const db = await openDB();
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            tx.objectStore(STORE_NAME).clear();
+            await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+            console.log("IndexedDB キャッシュを強制クリアしました。");
+        } catch (dbErr) {
+            console.warn("IndexedDB強制クリアエラー:", dbErr);
+        }
+        
+        // ページをリロードして再起動
+        window.location.reload();
+    }
+}
+
+// ==========================================
+// オフライン送信キュー個別管理モーダル
+// ==========================================
+function openQueueModal() {
+    const overlay = document.getElementById('queueModalOverlay');
+    const modal = document.getElementById('queueModal');
+    
+    if (overlay && modal) {
+        overlay.classList.add('active');
+        modal.classList.add('active');
+        renderQueueModalList();
+    }
+}
+
+function closeQueueModal() {
+    const overlay = document.getElementById('queueModalOverlay');
+    const modal = document.getElementById('queueModal');
+    if (overlay && modal) {
+        overlay.classList.remove('active');
+        modal.classList.remove('active');
+    }
+}
+
+function renderQueueModalList() {
+    const content = document.getElementById('queueModalContent');
+    if (!content) return;
+    content.innerHTML = '';
+    
+    let queue = [];
+    try {
+        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+    } catch (e) {
+        queue = [];
+    }
+    
+    if (queue.length === 0) {
+        content.innerHTML = '<div class="empty-message">未送信のデータはありません。</div>';
+        setTimeout(() => closeQueueModal(), 1500); // キューが空なら自動で閉じる
+        return;
+    }
+    
+    queue.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.style.position = 'relative';
+        div.style.paddingRight = '110px'; // アクションボタン用スペース
+        
+        const payload = item.payload;
+        div.innerHTML = `
+            <div style="display: flex; flex-direction: column; flex: 1;">
+                <span style="font-size: 14px; font-weight: bold; color: var(--text-primary);">${escapeHTML(payload.name)}</span>
+                <span style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHTML(payload.templateType)} | ${escapeHTML(payload.amount)}</span>
+                <span style="font-size: 10px; color: #94a3b8; margin-top: 4px;">登録日時: ${escapeHTML(payload.timestamp)}</span>
+            </div>
+            <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; gap: 6px; z-index: 5;">
+                <button type="button" class="btn" style="padding: 6px 8px; font-size: 11px; background: #e0f2fe; color: #0284c7; min-height: 28px; width: auto; border: 1px solid #bae6fd; border-radius: 4px; font-weight: 600;" onclick="sendSingleQueueItem(${idx})">
+                    送信
+                </button>
+                <button type="button" class="btn" style="padding: 6px 8px; font-size: 11px; background: #fee2e2; color: #ef4444; min-height: 28px; width: auto; border: 1px solid #fecaca; border-radius: 4px; font-weight: 600;" onclick="deleteSingleQueueItem(${idx})">
+                    除外
+                </button>
+            </div>
+        `;
+        content.appendChild(div);
+    });
+}
+
+// キューの個別送信
+async function sendSingleQueueItem(idx) {
+    if (!navigator.onLine) {
+        showToast("オフライン状態のため送信できません", "error");
+        return;
+    }
+    
+    let queue = [];
+    try {
+        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+    } catch (e) { return; }
+    
+    if (!queue[idx]) return;
+    const item = queue[idx];
+    
+    showToast(`${item.payload.name}様 のデータを送信中...`);
+    
+    try {
+        await fetch(gasUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(item.payload)
+        });
+        
+        // 成功したら配列から削除して保存
+        queue.splice(idx, 1);
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        updateOfflineQueueBadge();
+        renderQueueModalList();
+        showToast("データを正常に送信しました！");
+    } catch (e) {
+        showToast("送信に失敗しました: " + e.message, "error");
+    }
+}
+
+// キューの個別削除
+function deleteSingleQueueItem(idx) {
+    let queue = [];
+    try {
+        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+    } catch (e) { return; }
+    
+    if (!queue[idx]) return;
+    
+    if (confirm(`この未送信データ（${queue[idx].payload.name}様）を未送信リストから削除（除外）しますか？`)) {
+        queue.splice(idx, 1);
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        updateOfflineQueueBadge();
+        renderQueueModalList();
+        showToast("未送信データを削除しました");
+    }
+}
+
+// モーダルからの全件送信
+async function flushOfflineQueueFromModal() {
+    if (!navigator.onLine) {
+        showToast("オフライン状態のため送信できません", "error");
+        return;
+    }
+    closeQueueModal();
+    await flushOfflineQueue();
 }

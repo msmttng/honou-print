@@ -1137,6 +1137,28 @@
                     </div>
                 </div>
 
+                <!-- 敬称およびスペース調整 -->
+                <div class="form-group" style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-bottom: 18px;">
+                    <div>
+                        <label for="honorificSelect">敬称</label>
+                        <select id="honorificSelect" class="form-control" onchange="changeHonorific(this.value)">
+                            <option value="殿">殿</option>
+                            <option value="様">様</option>
+                            <option value="なし">なし（印字なし）</option>
+                            <option value="custom">自由入力...</option>
+                        </select>
+                        <input type="text" id="honorificCustomInput" class="form-control" placeholder="敬称を入力..." style="display: none; margin-top: 6px; font-size: 14px;" oninput="changeCustomHonorific(this.value)">
+                    </div>
+                    <div>
+                        <label>敬称との間隔 (mm)</label>
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px; height: 42px;">
+                            <button type="button" class="btn" style="padding: 2px 8px; min-height: 30px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustHonorificSpacing(-0.5)"><i class="fa-solid fa-minus"></i></button>
+                            <span id="honorific-spacing-val" style="font-weight: 600; font-family: monospace; font-size: 14px;">0.0</span>
+                            <button type="button" class="btn" style="padding: 2px 8px; min-height: 30px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustHonorificSpacing(0.5)"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-group" id="amountField" style="display: none;">
                     <label id="amountLabel" for="amountInput">任意の金額 または 物品名</label>
                     <div class="autocomplete-wrapper" id="amountAutocompleteWrapper" style="position: relative;">
@@ -1187,9 +1209,14 @@
                                 設定すると、「名簿登録」や「印刷」時に自動でスプレッドシートに追記され、サジェストも自動で同期されます。
                             </p>
                         </div>
-                        <button type="button" class="btn btn-primary" id="btnSyncGAS" onclick="syncFromGAS()" style="width: 100%; font-size: 14px; padding: 10px 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                            <i class="fa-solid fa-rotate"></i> スプレッドシートから同期
-                        </button>
+                        <div style="display: flex; gap: 10px; margin-top: 6px;">
+                            <button type="button" class="btn btn-primary" id="btnSyncGAS" onclick="syncFromGAS()" style="flex: 1.3; font-size: 14px; padding: 10px 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                                <i class="fa-solid fa-rotate"></i> スプレッドシートから同期
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="forceClearAppCache()" style="flex: 1; font-size: 14px; padding: 10px 14px; background: #fff5f5; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                                <i class="fa-solid fa-trash-can"></i> キャッシュ消去
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1271,6 +1298,23 @@
                                     <option value="center">中央合わせ</option>
                                     <option value="bottom">下合わせ</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <!-- 縦書き文字間隔（字間） & 疑似太字（重ね描き） -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <label style="font-size: 12px; color: var(--text-secondary);">文字間隔 (mm)</label>
+                                <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px;">
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('char_spacing', -0.5)"><i class="fa-solid fa-minus"></i></button>
+                                    <span id="dpad-val-char_spacing" style="font-weight: 600; font-family: monospace; cursor: pointer;" onclick="makeValueEditable('char_spacing')">--</span>
+                                    <button type="button" class="btn" style="padding: 4px 12px; min-height: 30px; font-size: 14px; background: #f1f5f9; color: #475569;" onclick="adjustTargetValue('char_spacing', 0.5)"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px; justify-content: center;">
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin-top: 18px; user-select: none;">
+                                    <input type="checkbox" id="boldCheck" onchange="changeTargetBold(this.checked)" style="transform: scale(1.2);"> 太字（重ね描き）にする
+                                </label>
                             </div>
                         </div>
 
@@ -1389,13 +1433,26 @@
                 <div class="card-title" style="margin-bottom: 0;">
                     <span><i class="fa-solid fa-users"></i> 奉納者名簿・印刷履歴一覧</span>
                 </div>
-                <div style="display: flex; gap: 12px; align-items: center; width: 60%; justify-content: flex-end; flex-wrap: wrap;">
-                    <input type="text" id="searchInput" class="form-control db-search" placeholder="氏名や物品名で検索..." oninput="renderTable()">
-                    <button class="btn btn-secondary" onclick="exportCSV()" style="padding: 10px 16px;">
-                        <i class="fa-solid fa-file-csv"></i> CSV出力
+                <div style="display: flex; gap: 10px; align-items: center; width: 80%; justify-content: flex-end; flex-wrap: wrap;">
+                    <select id="sortSelect" class="form-control" style="max-width: 170px; padding: 8px 12px; font-size: 14px; height: 38px; cursor: pointer;" onchange="renderTable()">
+                        <option value="date_desc">日付の新しい順</option>
+                        <option value="date_asc">日付の古い順</option>
+                        <option value="template_desc">台紙種類 (萬→阡→フ)</option>
+                        <option value="template_asc">台紙種類 (フ→阡→萬)</option>
+                        <option value="name_asc">氏名 (五十音順)</option>
+                    </select>
+                    <input type="text" id="searchInput" class="form-control db-search" style="max-width: 170px; height: 38px;" placeholder="氏名や物品名で検索..." oninput="renderTable()">
+                    <button class="btn btn-secondary" onclick="exportCSV()" style="padding: 10px 14px; font-size: 14px; height: 38px;">
+                        <i class="fa-solid fa-file-csv"></i> 全件CSV
                     </button>
-                    <button class="btn btn-primary" id="btnBatchPrint" onclick="batchPrint()" style="padding: 10px 16px; display: none;">
-                        <i class="fa-solid fa-layer-group"></i> <span id="batchCount">0</span>件を一括印刷
+                    <button class="btn btn-primary" id="btnBatchPrint" onclick="batchPrint()" style="padding: 10px 14px; font-size: 14px; height: 38px; display: none;">
+                        <i class="fa-solid fa-layer-group"></i> <span id="batchCount">0</span>件一括印刷
+                    </button>
+                    <button class="btn btn-secondary" id="btnBatchExport" onclick="batchExportCSV()" style="padding: 10px 14px; font-size: 14px; height: 38px; display: none; background: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1;">
+                        <i class="fa-solid fa-file-excel"></i> 選択分CSV
+                    </button>
+                    <button class="btn btn-secondary" id="btnBatchDelete" onclick="batchDeleteRecords()" style="padding: 10px 14px; font-size: 14px; height: 38px; display: none; background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c;">
+                        <i class="fa-solid fa-trash-can"></i> 選択削除
                     </button>
                 </div>
             </div>
@@ -1510,8 +1567,34 @@
         </button>
     </div>
 
+    <!-- オフライン送信キュー管理モーダル -->
+    <div class="bottom-sheet-overlay" id="queueModalOverlay" onclick="closeQueueModal()"></div>
+    <div class="bottom-sheet" id="queueModal" style="height: 75vh;">
+        <div class="sheet-header">
+            <div class="sheet-handle"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 18px; font-weight: bold; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-cloud-arrow-up" style="color: var(--warning);"></i> 未送信データの管理
+                </h3>
+                <button class="btn-close" onclick="closeQueueModal()"><i class="fa-solid fa-circle-xmark"></i></button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+                インターネット未接続時に登録された履歴です。接続が回復すると自動送信されますが、ここで確認・個別送信・削除が可能です。
+            </p>
+        </div>
+        <div class="sheet-content" id="queueModalContent" style="padding: 10px 0;">
+            <!-- 動的リスト -->
+        </div>
+        <div style="padding: 16px; display: flex; gap: 10px; background: #fff; border-top: 1px solid #e2e8f0;">
+            <button class="btn btn-primary" onclick="flushOfflineQueueFromModal()" style="flex: 1; padding: 12px; font-weight: bold;">
+                <i class="fa-solid fa-cloud-arrow-up"></i> すべて今すぐ送信
+            </button>
+            <button class="btn btn-secondary" onclick="closeQueueModal()" style="padding: 12px 20px;">閉じる</button>
+        </div>
+    </div>
+
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=35.1"></script>
+    <script src="app.js?v=36.0"></script>
 
 </body>
 </html>
