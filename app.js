@@ -41,7 +41,7 @@ function copyDebugLog() {
 // --- PDF.js 初期設定 ---
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
 if (pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.js';
 }
 
 // --- 定数・グローバル変数 ---
@@ -130,15 +130,26 @@ function loadGasSettings() {
 
 // --- IndexedDB ストレージ管理 ---
 const DB_NAME = "PdfMailMergeDB";
-const STORE_NAME = "files";
+const DB_VERSION = 2;
+const STORE_FILES = "files";
+const STORE_RECORDS = "records";  // 名簿レコード（Outbox兼用）
+const STORE_KV = "kv";            // サジェストキャッシュ・墓標・メタ情報
 
 async function openDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME);
+            if (!db.objectStoreNames.contains(STORE_FILES)) {
+                db.createObjectStore(STORE_FILES);
+            }
+            if (!db.objectStoreNames.contains(STORE_RECORDS)) {
+                const s = db.createObjectStore(STORE_RECORDS, { keyPath: "id" });
+                s.createIndex("sync", "sync");
+                s.createIndex("date", "date");
+            }
+            if (!db.objectStoreNames.contains(STORE_KV)) {
+                db.createObjectStore(STORE_KV);
             }
         };
         request.onsuccess = () => resolve(request.result);
@@ -146,11 +157,68 @@ async function openDB() {
     });
 }
 
+async function idbPutRecord(record) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readwrite");
+        tx.objectStore(STORE_RECORDS).put(record);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function idbDeleteRecord(id) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readwrite");
+        tx.objectStore(STORE_RECORDS).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function idbGetAllRecords() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_RECORDS, "readonly").objectStore(STORE_RECORDS).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbGetPendingRecords() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_RECORDS, "readonly").objectStore(STORE_RECORDS).index("sync").getAll("pending");
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbKvGet(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_KV, "readonly").objectStore(STORE_KV).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function idbKvSet(key, value) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_KV, "readwrite");
+        tx.objectStore(STORE_KV).put(value, key);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
 async function saveFileToDB(key, arrayBuffer) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
+        const tx = db.transaction(STORE_FILES, "readwrite");
+        const store = tx.objectStore(STORE_FILES);
         store.put(arrayBuffer, key);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
@@ -160,8 +228,8 @@ async function saveFileToDB(key, arrayBuffer) {
 async function getFileFromDB(key) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
+        const tx = db.transaction(STORE_FILES, "readonly");
+        const store = tx.objectStore(STORE_FILES);
         const request = store.get(key);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -178,10 +246,59 @@ async function checkRequiredFiles() {
 }
 
 // --- 起動時の初期化処理 ---
+
+async function requestPersistentStorage() {
+    if (navigator.storage && navigator.storage.persist) {
+        const granted = await navigator.storage.persist();
+        console.log("永続ストレージ:", granted ? "許可" : "未許可");
+        const stEl = document.getElementById("storageStatus");
+        if (stEl) stEl.textContent = "永続ストレージ: " + (granted ? "許可済み" : "未許可（ホーム画面に追加を推奨）");
+    }
+}
+
+async function migrateFromLocalStorage() {
+    if (await idbKvGet("migrated_v2")) return;
+    try {
+        // 名簿: 既存レコードは「同期済み扱い」で取り込む（過去分の再送を防ぐ）
+        const oldDb = JSON.parse(localStorage.getItem("pdf_mail_merge_db") || "[]");
+        for (const r of oldDb) {
+            r.sync = r.sync || "synced";
+            await idbPutRecord(r);
+        }
+        // 旧オフラインキュー: 中身は未送信なので pending レコード化
+        const oldQueue = JSON.parse(localStorage.getItem("pdf_mail_merge_offline_queue") || "[]");
+        for (const q of oldQueue) {
+            const p = q.payload || {};
+            await idbPutRecord({
+                id: "rec_mig_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+                date: q.queuedAt || new Date().toISOString(),
+                template: p.templateType === "萬圓用" ? "10000en"
+                        : p.templateType === "阡圓用" ? "1000en" : "free",
+                name: p.name || "",
+                amount: p.amount || "",
+                sync: "pending"
+            });
+        }
+        // サジェストのクラウドキャッシュ
+        const oldSuggests = localStorage.getItem("pdf_mail_merge_suggests");
+        if (oldSuggests) await idbKvSet("cloud_suggests", JSON.parse(oldSuggests));
+
+        await idbKvSet("migrated_v2", true);
+        localStorage.removeItem("pdf_mail_merge_db");
+        localStorage.removeItem("pdf_mail_merge_offline_queue");
+    } catch (e) {
+        console.error("移行エラー:", e);
+    }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
     // file:// プロトコルの警告は起動用ブラウザ（--allow-file-access-from-files）を使用することで回避するため削除
 
     showStatus("システム初期化中...", true);
+    
+    // 0. 永続ストレージの要求とマイグレーション
+    await requestPersistentStorage();
+    await migrateFromLocalStorage();
     
     // 1. デザイン設定および名簿DBの復元
     loadDesignSettings();
@@ -203,11 +320,11 @@ window.addEventListener("DOMContentLoaded", async () => {
             // IndexedDBのキャッシュも削除（フォント・PDF変更に対応）
             try {
                 const db = await openDB();
-                const tx = db.transaction(STORE_NAME, "readwrite");
-                tx.objectStore(STORE_NAME).delete("font_yuji");
-                tx.objectStore(STORE_NAME).delete("pdf_10000en");
-                tx.objectStore(STORE_NAME).delete("pdf_1000en");
-                tx.objectStore(STORE_NAME).delete("pdf_free");
+                const tx = db.transaction(STORE_FILES, "readwrite");
+                tx.objectStore(STORE_FILES).delete("font_yuji");
+                tx.objectStore(STORE_FILES).delete("pdf_10000en");
+                tx.objectStore(STORE_FILES).delete("pdf_1000en");
+                tx.objectStore(STORE_FILES).delete("pdf_free");
                 await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
                 console.log("IndexedDBのキャッシュを削除しました。新しいファイルを再ダウンロードします。");
             } catch (dbErr) {
@@ -350,14 +467,13 @@ async function handleSetupFiles(files, status) {
         if (name.endsWith(".ttf") || name.endsWith(".ttc")) {
             await saveFileToDB("font_yuji", buffer);
             status.font_yuji = true;
-        } else if (name.includes("縦") && !name.includes("阡")) {
-            await saveFileToDB("pdf_10000en", buffer);
+        } else if (name.includes("0602") || name.includes("奉納ビラ")) {
+            // 新規の単一PDF (奉納ビラ0602.pdf等) を3つの枠すべてに適用
+            await saveFileToDB("pdf_10000en", buffer.slice(0));
+            await saveFileToDB("pdf_1000en", buffer.slice(0));
+            await saveFileToDB("pdf_free", buffer.slice(0));
             status.pdf_10000en = true;
-        } else if (name.includes("阡")) {
-            await saveFileToDB("pdf_1000en", buffer);
             status.pdf_1000en = true;
-        } else if (name.includes("フリー")) {
-            await saveFileToDB("pdf_free", buffer);
             status.pdf_free = true;
         }
     }
@@ -490,24 +606,20 @@ function updatePaperSizeUI() {
 }
 
 // --- 名簿データベース（履歴）のLocalStorage連携 ---
-function loadDbRecords() {
+async function loadDbRecords() {
     try {
-        const saved = localStorage.getItem("pdf_mail_merge_db");
-        if (saved) {
-            dbRecords = JSON.parse(saved);
-        }
+        dbRecords = await idbGetAllRecords();
+        // UI更新は上位で呼ばれる renderTable 等で行う
     } catch (e) {
-        console.error("LocalStorage名簿DBアクセスエラー:", e);
+        console.error("IndexedDB名簿DBアクセスエラー:", e);
         dbRecords = [];
     }
 }
 
 function saveDbRecords() {
-    try {
-        localStorage.setItem("pdf_mail_merge_db", JSON.stringify(dbRecords));
-    } catch (e) {
-        console.warn("LocalStorage保存エラー:", e);
-    }
+    // IndexedDB化により、メモリ上の配列をLocalStorageに保存する処理は廃止
+    // レコード更新時は個別に idbPutRecord を呼ぶこと
+    // ここは空実装にしておく（古いコードとの互換性のため）
 }
 
 // --- テンプレートPDFの取得 (キャッシュ対応) ---
@@ -1372,25 +1484,27 @@ function saveRecord(showNotice = true) {
         date: new Date().toISOString(),
         template: currentTemplate,
         name: nameInput,
-        amount: dbAmount
+        amount: dbAmount,
+        sync: "pending" // IndexedDB Outbox パターン
     };
 
-    dbRecords.unshift(newRecord); // 先頭に追加
-    saveDbRecords();
-    renderTable();
+    dbRecords.unshift(newRecord); // メモリ上(UI表示用)に追加
     
-    // スプレッドシート連携（GAS）へ非同期で履歴を送信
-    sendToGAS(newRecord);
+    // IndexedDBへ保存し、同期を試行する
+    idbPutRecord(newRecord).then(() => {
+        renderTable();
+        pushPendingRecords();
+    });
     
     if (showNotice) {
         showToast("名簿に正常に登録しました！");
     }
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
     if (confirm("このレコードを名簿から削除しますか？")) {
         dbRecords = dbRecords.filter(r => r.id !== id);
-        saveDbRecords();
+        await idbDeleteRecord(id);
         renderTable();
         showToast("名簿から削除しました");
     }
@@ -1555,7 +1669,6 @@ async function mobilePrintPDF() {
         showToast("氏名を入力してから保存してください", "error");
         return;
     }
-
     showStatus("PDF生成中...", true);
     const pdfBlob = await generatePDF(true);
     
@@ -1712,7 +1825,6 @@ function showToast(message, type = "success") {
         toast.classList.remove("show");
     }, 3000);
 }
-
 // --- スプレッドシート連携（GAS）API ---
 
 // GASからサジェストデータを取得（GET）
@@ -1730,38 +1842,28 @@ async function syncFromGAS(isBackground = false) {
     }
 
     try {
-        // キャッシュクリアのためのタイムスタンプを追加
         const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
-        const response = await fetch(fetchUrl, {
-            method: "GET",
-            mode: "cors"
-        });
-
+        const response = await fetch(fetchUrl, { method: "GET", mode: "cors" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
+        if (data.error) throw new Error(data.error);
 
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        // サジェストデータを更新（新方式のnames/itemsに対応し、旧方式の3列データもマージして統合する後方互換処理）
         const rawNames = data.names || [
             ...(data["10000en_names"] || []),
             ...(data["1000en_names"] || []),
             ...(data["free_names"] || [])
         ];
-        // 重複排除して格納
-        suggestData.names = [...new Set(rawNames)];
-        suggestData.items = data.items || data["free_items"] || [];
-
-        // LocalStorageに保存
-        try {
-            localStorage.setItem("pdf_mail_merge_suggests", JSON.stringify(suggestData));
-            localStorage.setItem("pdf_mail_merge_suggests_time", new Date().toISOString());
-        } catch (e) { /* 無視 */ }
+        
+        const cloudData = {
+            names: [...new Set(rawNames)],
+            items: data.items || data["free_items"] || []
+        };
+        
+        await idbKvSet("cloud_suggests", cloudData);
+        await buildSuggestData(); // 再構築
 
         if (!isBackground) {
-            const totalCount = suggestData.names.length + suggestData.items.length;
+            const totalCount = cloudData.names.length + cloudData.items.length;
             showToast(`スプレッドシートからサジェストデータ ${totalCount}件を同期しました`);
         }
     } catch (e) {
@@ -1769,82 +1871,84 @@ async function syncFromGAS(isBackground = false) {
         if (!isBackground) showToast("サジェストデータの同期に失敗しました: " + e.message, "error");
     } finally {
         if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> スプレッドシートから同期';
+            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> サジェスト同期';
             btn.style.opacity = "1";
             btn.disabled = false;
         }
     }
 }
 
-// 履歴データをスプレッドシートへ自動追記（POST）- オフラインキュー対応
-async function sendToGAS(record) {
-    if (!gasUrl) return; // GAS URLが未設定ならスキップ
-
-    let templateTypeStr = "フリー用";
-    if (record.template === "10000en") {
-        templateTypeStr = "萬圓用";
-    } else if (record.template === "1000en") {
-        templateTypeStr = "阡圓用";
-    }
-
-    const payload = {
-        timestamp: new Date(record.date).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
-        templateType: templateTypeStr,
-        name: record.name,
-        amount: record.amount
+// --- IndexedDB対応 サジェスト構築 (ローカル優先) ---
+async function buildSuggestData() {
+    // DB名簿から抽出
+    const all = await idbGetAllRecords();
+    const names = all.map(r => r.name).filter(Boolean);
+    const items = all.map(r => r.amount).filter(Boolean);
+    
+    // クラウドキャッシュから抽出
+    const cloud = await idbKvGet("cloud_suggests") || { names: [], items: [] };
+    
+    suggestData = {
+        names: [...new Set([...names, ...cloud.names])],
+        items: [...new Set([...items, ...cloud.items])]
     };
-
-    // オフラインの場合はキューに追加して終了
-    if (!navigator.onLine) {
-        addToOfflineQueue(payload);
-        console.log("オフラインのためキューに追加しました");
-        return;
-    }
-
-    try {
-        console.log("GASへのPOST送信を開始します...", payload);
-        await fetch(gasUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        console.log("GASへのデータ送信要求を送信しました");
-    } catch (e) {
-        // ネットワークエラー時はキューに追加
-        console.warn("GAS送信失敗、オフラインキューに追加:", e.message);
-        addToOfflineQueue(payload);
-    }
+    renderSheetList();
 }
 
-// --- オフラインキュー管理 ---
-const OFFLINE_QUEUE_KEY = "pdf_mail_merge_offline_queue";
+// 履歴データをスプレッドシートへ自動追記（Outbox同期）
+async function pushPendingRecords() {
+    if (!navigator.onLine || !gasUrl) return;
+    const pendings = await idbGetPendingRecords();
+    
+    updateSyncBadge(pendings.length);
+    if (pendings.length === 0) return;
+    
+    console.log(`未送信データ ${pendings.length}件を同期開始...`);
+    const token = await idbKvGet("api_token") || "GUEST_TOKEN_" + Math.random().toString(36).substr(2);
+    await idbKvSet("api_token", token);
+    
+    for (const record of pendings) {
+        let templateTypeStr = "フリー用";
+        if (record.template === "10000en") templateTypeStr = "萬圓用";
+        else if (record.template === "1000en") templateTypeStr = "阡圓用";
 
-// キューにペイロードを追加
-function addToOfflineQueue(payload) {
-    try {
-        const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-        queue.push({ payload, queuedAt: new Date().toISOString() });
-        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-        updateOfflineQueueBadge();
-    } catch (e) {
-        console.error("オフラインキュー保存エラー:", e);
-    }
-}
+        const payload = {
+            id: record.id,
+            timestamp: new Date(record.date).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+            templateType: templateTypeStr,
+            name: record.name,
+            amount: record.amount,
+            token: token
+        };
 
-// キューの件数を取得
-function getOfflineQueueCount() {
-    try {
-        const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-        return queue.length;
-    } catch (e) {
-        return 0;
+        try {
+            const res = await fetch(gasUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            // no-corsは成否判定が不完全だが、ネットワークエラーにならなければ送信成功とみなす
+            record.sync = "synced";
+            await idbPutRecord(record);
+            
+            // メモリ上の dbRecords も sync: "synced" に更新
+            const memRec = dbRecords.find(r => r.id === record.id);
+            if (memRec) memRec.sync = "synced";
+            
+        } catch (e) {
+            console.warn("GAS同期中にネットワークエラー。以降は中断します:", e);
+            break;
+        }
     }
+    
+    const remaining = await idbGetPendingRecords();
+    updateSyncBadge(remaining.length);
+    renderTable(); // バッジ表示などを更新
 }
 
 // 未送信バッジの更新
-function updateOfflineQueueBadge() {
-    const count = getOfflineQueueCount();
+function updateSyncBadge(count) {
     let badge = document.getElementById("offlineQueueBadge");
     
     if (count === 0) {
@@ -1853,12 +1957,14 @@ function updateOfflineQueueBadge() {
     }
     
     if (!badge) {
-        // バッジ要素がなければ動的に作成（ステータスバー横に配置）
         badge = document.createElement("div");
         badge.id = "offlineQueueBadge";
         badge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; border: 1px solid #fde68a; cursor: pointer; font-weight: 600;";
-        badge.title = "クリックして未送信データを管理";
-        badge.onclick = () => openQueueModal();
+        badge.title = "クリックして未送信データを強制同期";
+        badge.onclick = () => {
+            showToast("手動同期を開始します...");
+            pushPendingRecords();
+        };
         const header = document.querySelector("header");
         if (header) header.appendChild(badge);
     }
@@ -1867,71 +1973,100 @@ function updateOfflineQueueBadge() {
     badge.style.display = "inline-flex";
 }
 
-// キューの一括送信（オンライン復帰時に自動実行）
-async function flushOfflineQueue() {
-    if (!gasUrl || !navigator.onLine) return;
-    
-    let queue;
+// イベントリスナー登録 (オンライン復帰、表示時)
+window.addEventListener("online", () => {
+    showToast("オンラインに復帰しました。未送信データを同期します。");
+    pushPendingRecords();
+});
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        pushPendingRecords();
+        buildSuggestData(); // 復帰時にサジェストも再構築
+    }
+});
+
+// ==========================================
+// バックアップ・復元
+// ==========================================
+async function exportBackupData() {
     try {
-        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+        const records = await idbGetAllRecords();
+        const data = {
+            version: 1,
+            date: new Date().toISOString(),
+            records: records
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `honou_backup_${new Date().getTime()}.json`;
+        a.click();
+        showToast("バックアップデータを保存しました");
     } catch (e) {
-        return;
-    }
-    
-    if (queue.length === 0) return;
-    
-    console.log(`オフラインキュー: ${queue.length}件の未送信データを送信開始...`);
-    showToast(`未送信データ ${queue.length}件をスプレッドシートに送信中...`);
-    
-    const failedItems = [];
-    
-    for (const item of queue) {
-        try {
-            await fetch(gasUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(item.payload)
-            });
-            console.log("キューアイテム送信成功:", item.payload.name);
-        } catch (e) {
-            console.warn("キューアイテム送信失敗:", e.message);
-            failedItems.push(item);
-        }
-    }
-    
-    // 失敗分だけキューに残す
-    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(failedItems));
-    updateOfflineQueueBadge();
-    
-    const successCount = queue.length - failedItems.length;
-    if (successCount > 0) {
-        showToast(`未送信データ ${successCount}件をスプレッドシートに送信しました！`);
-    }
-    if (failedItems.length > 0) {
-        showToast(`${failedItems.length}件の送信に失敗しました。後で再試行します。`, "error");
+        showToast("バックアップ失敗: " + e.message, "error");
     }
 }
 
-// オンライン復帰時にキューを自動送信
-window.addEventListener("online", () => {
-    console.log("ネットワーク接続が回復しました");
-    setTimeout(() => flushOfflineQueue(), 2000); // 接続安定のため2秒待つ
-});
-
-// オフライン検知時にバッジ表示を更新
-window.addEventListener("offline", () => {
-    console.log("ネットワーク接続が切断されました");
-});
-
-// アプリ起動時にキューをチェック
-window.addEventListener("DOMContentLoaded", () => {
-    updateOfflineQueueBadge();
-    // オンラインなら未送信キューを自動送信
-    if (navigator.onLine && getOfflineQueueCount() > 0) {
-        setTimeout(() => flushOfflineQueue(), 5000);
+async function importBackupData(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data.records || !Array.isArray(data.records)) throw new Error("無効なフォーマット");
+        
+        for (const r of data.records) {
+            await idbPutRecord(r);
+        }
+        await loadDbRecords();
+        renderTable();
+        showToast(`バックアップから ${data.records.length}件のデータを読み込みました`);
+    } catch (err) {
+        showToast("読み込み失敗: " + err.message, "error");
     }
-});
+    e.target.value = "";
+}
+
+async function restoreFromGAS() {
+    if (!gasUrl) {
+        showToast("GASのURLを設定してください", "error");
+        return;
+    }
+    if (!confirm("クラウド（スプレッドシート）から全ての名簿データをダウンロードし、ローカルに復元します。\n現在のローカルデータに追加されます。よろしいですか？")) return;
+    
+    const btn = document.getElementById("btnRestoreGAS");
+    if (btn) btn.innerHTML = "復元中...";
+    try {
+        const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "mode=restore&t=" + Date.now();
+        const response = await fetch(fetchUrl);
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        
+        let count = 0;
+        for (const r of data.records) {
+            // クラウドから来たものは同期済みとする
+            const record = {
+                id: r.id || "rec_res_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+                date: r.timestamp || new Date().toISOString(),
+                template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
+                name: r.name,
+                amount: r.amount,
+                sync: "synced"
+            };
+            // 既存のIDがあればスキップなどしても良いが、ここでは単純にPut
+            await idbPutRecord(record);
+            count++;
+        }
+        await loadDbRecords();
+        renderTable();
+        showToast(`クラウドから ${count}件の履歴を復元しました`);
+    } catch (e) {
+        showToast("復元失敗: " + e.message, "error");
+    } finally {
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-down"></i> 名簿フル復元`;
+    }
+} 
 
 // ==========================================
 // ボトムシート（サジェストUI）制御ロジック

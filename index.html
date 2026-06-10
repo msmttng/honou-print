@@ -18,12 +18,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     
     <!-- FontAwesome (Icons) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="lib/all.min.css">
     
     <!-- pdf-lib -->
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="lib/pdf-lib.min.js"></script>
+    <script src="lib/fontkit.umd.js"></script>
+    <script src="lib/pdf.min.js"></script>
 
     <style>
         :root {
@@ -1083,9 +1083,9 @@
 
             <div class="file-list">
                 <div class="file-item" id="status-font"><i class="fa-solid fa-circle-check pending"></i> フォント (yuji_syuku.ttf または hgrgy.ttf)</div>
-                <div class="file-item" id="status-pdf-10000"><i class="fa-solid fa-circle-check pending"></i> 萬圓用 (奉納ビラ縦.pdf)</div>
-                <div class="file-item" id="status-pdf-1000"><i class="fa-solid fa-circle-check pending"></i> 阡圓用 (奉納ビラ縦阡.pdf)</div>
-                <div class="file-item" id="status-pdf-free"><i class="fa-solid fa-circle-check pending"></i> フリー (奉納ビラフリー.pdf)</div>
+                <div class="file-item" id="status-pdf-10000"><i class="fa-solid fa-circle-check pending"></i> 萬圓用 (奉納ビラ0602.pdf)</div>
+                <div class="file-item" id="status-pdf-1000"><i class="fa-solid fa-circle-check pending"></i> 阡圓用 (奉納ビラ0602.pdf)</div>
+                <div class="file-item" id="status-pdf-free"><i class="fa-solid fa-circle-check pending"></i> フリー (奉納ビラ0602.pdf)</div>
             </div>
 
             <button type="button" id="btnCompleteSetup" class="btn"><i class="fa-solid fa-rocket"></i> 保存して開始する</button>
@@ -1209,13 +1209,41 @@
                                 設定すると、「名簿登録」や「印刷」時に自動でスプレッドシートに追記され、サジェストも自動で同期されます。
                             </p>
                         </div>
-                        <div style="display: flex; gap: 10px; margin-top: 6px;">
+                        <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
                             <button type="button" class="btn btn-primary" id="btnSyncGAS" onclick="syncFromGAS()" style="flex: 1.3; font-size: 14px; padding: 10px 14px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                                <i class="fa-solid fa-rotate"></i> スプレッドシートから同期
+                                <i class="fa-solid fa-rotate"></i> サジェスト同期
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btnRestoreGAS" onclick="restoreFromGAS()" style="flex: 1.3; font-size: 14px; padding: 10px 14px; background: var(--warning); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> 名簿フル復元
                             </button>
                             <button type="button" class="btn btn-secondary" onclick="forceClearAppCache()" style="flex: 1; font-size: 14px; padding: 10px 14px; background: #fff5f5; border: 1px solid #fca5a5; color: #b91c1c; border-radius: 8px; cursor: pointer; font-weight: 600;">
                                 <i class="fa-solid fa-trash-can"></i> キャッシュ消去
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- データ管理・バックアップ設定アコーディオン -->
+                <div class="accordion" id="backupAccordion" style="margin-top: 10px;">
+                    <div class="accordion-header" onclick="this.parentElement.classList.toggle('open')">
+                        <span><i class="fa-solid fa-database"></i> データ管理・バックアップ</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <div class="accordion-content">
+                        <p id="storageStatus" style="font-size: 12px; font-weight: bold; color: var(--text-secondary); margin-bottom: 12px;">
+                            永続ストレージ: 確認中...
+                        </p>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.4;">
+                            ※ホーム画面に追加して使うとデータが保護されます（iOS等で長期間のデータ保存が可能になります）。
+                        </p>
+                        <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-primary" onclick="exportBackupData()" style="flex: 1; font-size: 14px; padding: 10px 14px; background: var(--success); color: #fff; border: none; border-radius: 8px; cursor: pointer;">
+                                <i class="fa-solid fa-download"></i> 全データ書き出し
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('importBackupFile').click()" style="flex: 1; font-size: 14px; padding: 10px 14px; background: #fff; border: 1px solid #cbd5e1; color: var(--text-primary); border-radius: 8px; cursor: pointer;">
+                                <i class="fa-solid fa-upload"></i> 読み込み
+                            </button>
+                            <input type="file" id="importBackupFile" accept=".json" style="display: none;" onchange="importBackupData(event)">
                         </div>
                     </div>
                 </div>

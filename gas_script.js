@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 奉納ビラ 印刷＆名簿管理システム 用 Google Apps Script
  * 
  * 【セットアップ手順】
@@ -21,10 +21,36 @@
  * 10. 発行された「ウェブアプリのURL」をコピーし、印刷アプリの「スプレッドシート（GAS）連携設定」のURL欄に貼り付けます。
  */
 
-// GETリクエスト: サジェストデータの取得
+// GETリクエスト: サジェストデータの取得、およびリストア
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
+  // mode=restore の場合は全履歴を返す
+  if (e.parameter && e.parameter.mode === "restore") {
+    let records = [];
+    const sheet = ss.getSheetByName("履歴");
+    if (sheet) {
+      const hLastRow = sheet.getLastRow();
+      if (hLastRow >= 2) {
+        // A列からE列まで取得 (日時, 種類, 氏名, 金額, ID)
+        const historyData = sheet.getRange(2, 1, hLastRow - 1, 5).getValues();
+        for (let r = 0; r < historyData.length; r++) {
+          const row = historyData[r];
+          records.push({
+            timestamp: row[0],
+            templateType: row[1],
+            name: row[2],
+            amount: row[3],
+            id: row[4] || ""
+          });
+        }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ records: records }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // サジェストデータの取得ロジック
   const data = {
     "names": [],
     "items": []
@@ -50,7 +76,7 @@ function doGet(e) {
           const hItem = historyData[r][1];
           if (hItem !== undefined && hItem !== null && hItem.toString().trim() !== "") {
             const val = hItem.toString().trim();
-            // 金額っぽい文字列（数字のみ、または金・円・圓・也・空が含まれる）を除外して物品名のみを抽出
+            // 金額っぽい文字列を除外して物品名のみを抽出
             if (!/^[0-9,]+$/.test(val) && !val.includes("金") && !val.includes("円") && !val.includes("圓") && !val.includes("也") && !val.includes("空")) {
               data.items.push(val);
             }
@@ -68,9 +94,16 @@ function doGet(e) {
                        .setMimeType(ContentService.MimeType.JSON);
 }
 
-// POSTリクエスト: 履歴データの書き込み
+// POSTリクエスト: 履歴データの書き込み (LockService + 冪等性対応)
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
+    // 同時アクセス防ぐため最大10秒ロックを待機
+    if (!lock.tryLock(10000)) {
+      return ContentService.createTextOutput(JSON.stringify({ result: "error", message: "System busy. Please try again." }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const params = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName("履歴");
@@ -78,21 +111,43 @@ function doPost(e) {
     // 履歴シートがない場合は自動作成
     if (!sheet) {
       sheet = ss.insertSheet("履歴");
-      sheet.appendRow(["日時", "台紙種類", "奉納者氏名", "金額/物品名"]);
+      sheet.appendRow(["日時", "台紙種類", "奉納者氏名", "金額/物品名", "ID", "Token"]);
     }
     
     const timestamp = params.timestamp || new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
     const templateType = params.templateType || "";
     const name = params.name || "";
     const amount = params.amount || "";
+    const reqId = params.id || "";
+    const token = params.token || "";
     
-    sheet.appendRow([timestamp, templateType, name, amount]);
+    // 冪等性: reqId がある場合、すでに同じIDが登録されていないか確認
+    if (reqId) {
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        // E列(5列目)がID
+        const idVals = sheet.getRange(2, 5, lastRow - 1, 1).getValues();
+        for (let i = 0; i < idVals.length; i++) {
+          if (idVals[i][0] === reqId) {
+            // すでに存在する場合は上書きして終了（再送時の重複回避）
+            sheet.getRange(i + 2, 1, 1, 6).setValues([[timestamp, templateType, name, amount, reqId, token]]);
+            return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "updated" }))
+                                 .setMimeType(ContentService.MimeType.JSON);
+          }
+        }
+      }
+    }
     
-    return ContentService.createTextOutput(JSON.stringify({ result: "success" }))
+    // 新規追加
+    sheet.appendRow([timestamp, templateType, name, amount, reqId, token]);
+    
+    return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "inserted" }))
                          .setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ result: "error", message: error.toString() }))
                          .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
