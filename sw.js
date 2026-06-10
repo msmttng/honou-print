@@ -1,9 +1,9 @@
 // Service Worker - 奉納ビラ印刷＆名簿管理システム
-const CACHE_NAME = 'honou-print-v37';
+const CACHE_NAME = 'honou-print-v38';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './app.js?v=37',
+  './app.js?v=38',
   './hgs_gyoshotai.ttf',
   './奉納ビラ0602.pdf',
   './templates_config.json',
