@@ -46,9 +46,12 @@ if (pdfjsLib) {
 
 // --- 定数・グローバル変数 ---
 const FONT_URL = "hgs_gyoshotai.ttf"; // HGS行書体（TTCから抽出したTTF形式）を使用
-const DEFAULT_CONFIG_URL = "templates_config.json"; // テンプレート座標設定ファイル
+// 注: templates_config.json は参照用。実行時の設定は getFallbackConfig() が正。
 
 let currentTemplate = "10000en";
+let templatePageSizes = {};    // テンプレートPDF原本のページサイズキャッシュ {tmpl: {w, h}} (pt)
+let previewRenderGen = 0;      // プレビューのレースコンディション防止用 世代カウンタ
+let editingRecordId = null;    // 現在編集中のレコードID
 let config = null;             // テンプレートごとの初期座標・フォントサイズ設定
 let designSettings = {};       // ユーザー調整後の座標・フォントサイズ (LocalStorage保存用)
 let paperSizeSettings = { width: 105, height: 390 }; // 用紙サイズ設定 (mm, 全テンプレート共通)
@@ -195,6 +198,16 @@ async function idbGetPendingRecords() {
     });
 }
 
+// 削除待ち（墓標）レコードの取得: オフライン削除をオンライン復帰時にクラウドへ伝搬するため
+async function idbGetPendingDeletes() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_RECORDS, "readonly").objectStore(STORE_RECORDS).index("sync").getAll("pending_delete");
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+    });
+}
+
 async function idbKvGet(key) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -301,8 +314,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     await migrateFromLocalStorage();
     
     // 1. デザイン設定および名簿DBの復元
+    // （loadDbRecordsは非同期。awaitしないと空の名簿でrenderTableされてしまう）
     loadDesignSettings();
-    loadDbRecords();
+    await loadDbRecords();
     renderTable();
 
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
@@ -605,21 +619,22 @@ function updatePaperSizeUI() {
     if (hEl) hEl.textContent = paperSizeSettings.height.toFixed(1);
 }
 
-// --- 名簿データベース（履歴）のLocalStorage連携 ---
+// --- 名簿データベース（履歴）のIndexedDB連携 ---
 async function loadDbRecords() {
     try {
-        dbRecords = await idbGetAllRecords();
-        // UI更新は上位で呼ばれる renderTable 等で行う
+        const all = await idbGetAllRecords();
+        // 削除待ち（墓標）は一覧に表示しない
+        dbRecords = all.filter(r => r.sync !== "pending_delete");
+        // IndexedDBはキー順（≒古い順）で返すため、常に日時降順（新しい順）に揃える
+        dbRecords.sort((a, b) => {
+            const da = parseFlexibleDate(a.date);
+            const db_ = parseFlexibleDate(b.date);
+            return (db_ ? db_.getTime() : 0) - (da ? da.getTime() : 0);
+        });
     } catch (e) {
         console.error("IndexedDB名簿DBアクセスエラー:", e);
         dbRecords = [];
     }
-}
-
-function saveDbRecords() {
-    // IndexedDB化により、メモリ上の配列をLocalStorageに保存する処理は廃止
-    // レコード更新時は個別に idbPutRecord を呼ぶこと
-    // ここは空実装にしておく（古いコードとの互換性のため）
 }
 
 // --- テンプレートPDFの取得 (キャッシュ対応) ---
@@ -630,9 +645,10 @@ async function getTemplateBytes(templateKey) {
     
     const filename = config.templates[templateKey].template_file;
     showStatus("テンプレートPDF読み込み中...", true);
-    
-    // ブラウザのキャッシュを回避するため、クエリパラメータを付与
-    const response = await fetch(encodeURI(filename) + "?t=" + new Date().getTime());
+
+    // キャッシュのバージョン管理は Service Worker (CACHE_NAME) に一本化。
+    // （旧実装の ?t= キャッシュバスターはSWキャッシュにユニークキーを溜め続ける原因だった）
+    const response = await fetch(encodeURI(filename));
     if (!response.ok) {
         throw new Error(`テンプレートファイルが見つかりません: ${filename}`);
     }
@@ -1035,16 +1051,95 @@ function mmToPt(mm) {
     return mm * 72 / 25.4;
 }
 
+// ==========================================
+// レコード変換・共通ヘルパー
+// （レコードの形に関する知識をここに集約する）
+// ==========================================
+
+// 「[空]」タグの検出と除去（表示・印刷経路では必ず剥がす）
+function hasEmptyTag(str) {
+    return typeof str === "string" && str.includes("[空]");
+}
+function stripEmptyTag(str) {
+    if (typeof str !== "string") return str;
+    return str.replace(/\s*\[空\]\s*/g, "").trim();
+}
+
+// 保存済みamount（例: "金五萬圓也"）からフォーム入力値（例: "五"）を復元
+function parseAmountForForm(record) {
+    let val = stripEmptyTag(record.amount || "");
+    if (record.template === "10000en" || record.template === "1000en") {
+        if (val.startsWith("金")) val = val.substring(1);
+        if (val.endsWith("萬圓也") || val.endsWith("阡圓也") || val.endsWith("阡圆也")) {
+            val = val.substring(0, val.length - 3);
+        }
+    }
+    return val;
+}
+
+// ISO 8601 / "2026/6/10 12:00:00" 形式（GAS由来）の両方を安全にDate化
+function parseFlexibleDate(value) {
+    if (value instanceof Date) return isNaN(value) ? null : value;
+    if (typeof value !== "string" || !value) return null;
+    // まず標準パース (ISO等)
+    let d = new Date(value);
+    if (!isNaN(d)) return d;
+    // "YYYY/M/D H:MM(:SS)" 形式を手動パース (Safari対策)
+    const m = value.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (m) {
+        d = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+        if (!isNaN(d)) return d;
+    }
+    return null;
+}
+
+// 一覧表示用の日時フォーマット（パース不能なら原文を返す）
+function formatDateForDisplay(value) {
+    const d = parseFlexibleDate(value);
+    if (!d) return String(value || "");
+    return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+}
+
+// スプレッドシート行から決定的なIDを合成（復元を何度実行しても同じIDになる）
+function stableIdFromRow(timestamp, name, amount) {
+    const src = `${timestamp}|${name}|${amount}`;
+    let hash = 5381;
+    for (let i = 0; i < src.length; i++) {
+        hash = ((hash << 5) + hash + src.charCodeAt(i)) >>> 0; // djb2
+    }
+    return "rec_res_" + hash.toString(36);
+}
+
+// GASへのPOST送信（CORSで応答を検証する。失敗時は例外）
+// ※ Content-Typeヘッダを付けない = 単純リクエストとなりプリフライト不要
+async function postToGas(payload) {
+    const res = await fetch(gasUrl, {
+        method: "POST",
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.result !== "success") {
+        throw new Error(data.message || "GAS側でエラーが返されました");
+    }
+    return data;
+}
+
 // --- PDFの動的合成処理（コア機能） ---
-async function generatePDF(isPrinting = false) {
+// override = { template, name, amount } を渡すと、DOMを読まずにそのデータで合成する
+// （一括印刷でフォームDOMを書き換えずに済むようにするため）
+async function generatePDF(isPrinting = false, override = null) {
     if (!isAppReady) {
         return null;
     }
 
-    const nameInput = document.getElementById("nameInput").value.trim();
+    const tmpl = override ? override.template : currentTemplate;
+    const nameInput = override ? (override.name || "").trim() : document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
-    const amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
-    
+    const amountInput = override
+        ? (override.amount || "").trim()
+        : (tmpl === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim()));
+
     // 氏名がない場合は合成処理をスキップ (プレビュークリア状態に)
     if (!nameInput) {
         return null;
@@ -1052,28 +1147,39 @@ async function generatePDF(isPrinting = false) {
 
     try {
         // 1. テンプレートPDFの取得（IndexedDBから事前にロード済み）
-        const templateBytes = loadedTemplateBytes[currentTemplate];
+        const templateBytes = loadedTemplateBytes[tmpl];
         if (!templateBytes) {
-            throw new Error(`テンプレートデータが見つかりません: ${currentTemplate}`);
+            throw new Error(`テンプレートデータが見つかりません: ${tmpl}`);
         }
         // 2. pdf-libでPDFをロードまたは新規作成
         let pdfDoc;
         let firstPage;
         const includeBackground = document.getElementById("includeBackground") ? document.getElementById("includeBackground").checked : true;
 
-        // 用紙サイズ変更の計算 (原本との差分で translateContent + setSize)
-        const origDoc = await PDFLib.PDFDocument.load(templateBytes);
-        const origPage = origDoc.getPages()[0];
-        const origWidthPt = origPage.getSize().width;
-        const origHeightPt = origPage.getSize().height;
         const newWidthPt = mmToPt(paperSizeSettings.width);
         const newHeightPt = mmToPt(paperSizeSettings.height);
-        const shiftXPt = (newWidthPt - origWidthPt) / 2;
-        const shiftYPt = (newHeightPt - origHeightPt) / 2;
 
         if (includeBackground) {
             pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
             firstPage = pdfDoc.getPages()[0];
+            // 原本サイズをキャッシュ（白紙モードや次回以降の再ロードを不要にする）
+            if (!templatePageSizes[tmpl]) {
+                templatePageSizes[tmpl] = { w: firstPage.getSize().width, h: firstPage.getSize().height };
+            }
+        } else if (!templatePageSizes[tmpl]) {
+            // 白紙モードで原本サイズが未キャッシュの場合のみ一度だけロードする
+            const origDoc = await PDFLib.PDFDocument.load(templateBytes);
+            const origPage = origDoc.getPages()[0];
+            templatePageSizes[tmpl] = { w: origPage.getSize().width, h: origPage.getSize().height };
+        }
+
+        // 用紙サイズ変更の計算 (原本との差分で translateContent + setSize)
+        const origWidthPt = templatePageSizes[tmpl].w;
+        const origHeightPt = templatePageSizes[tmpl].h;
+        const shiftXPt = (newWidthPt - origWidthPt) / 2;
+        const shiftYPt = (newHeightPt - origHeightPt) / 2;
+
+        if (includeBackground) {
             // デザインをセンタリングしてからページサイズを変更
             firstPage.translateContent(shiftXPt, shiftYPt);
             firstPage.setSize(newWidthPt, newHeightPt);
@@ -1098,12 +1204,12 @@ async function generatePDF(isPrinting = false) {
         }
         
         // デザイン調整値の読み出し
-        const settings = designSettings[currentTemplate];
+        const settings = designSettings[tmpl];
 
         // 新テンプレート: 「奉納」のみ印刷済み → 金額・氏名をアプリ側で完全合成
         const fullAmount =
-            currentTemplate === '10000en' ? `金${amountInput}萬圓也` :
-            currentTemplate === '1000en'  ? `金${amountInput}阡圓也` :
+            tmpl === '10000en' ? `金${amountInput}萬圓也` :
+            tmpl === '1000en'  ? `金${amountInput}阡圓也` :
             amountInput; // free: 完全自由入力
         
         // 敬称の設定取得
@@ -1135,7 +1241,7 @@ async function generatePDF(isPrinting = false) {
             const width_pt = mmToPt(fieldVal.width_mm || 30);
             const height_pt = mmToPt(fieldVal.height_mm || 150);
             
-            const fieldConfig = config.templates[currentTemplate].fields[fieldKey];
+            const fieldConfig = config.templates[tmpl].fields[fieldKey];
             if (!fieldConfig) {
                 console.warn(`フィールド設定が見つかりません: ${fieldKey}`);
                 continue;
@@ -1255,9 +1361,11 @@ async function generatePDF(isPrinting = false) {
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
                 
                 // 枠の幅に収まるようにフォントサイズを縮小
-                let currentWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize) + (textValue.length - 1) * charSpacingPt;
-                if (currentWidth_pt > width_pt) {
-                    currentFontSize = (width_pt - (textValue.length - 1) * charSpacingPt) / (currentWidth_pt / currentFontSize);
+                // 字間(固定値)は縮小しても変わらないため、文字幅部分のみで比例縮小する
+                const textOnlyWidth_pt = fontToUse.widthOfTextAtSize(textValue, currentFontSize);
+                const totalSpacing_pt = (textValue.length - 1) * charSpacingPt;
+                if (textOnlyWidth_pt + totalSpacing_pt > width_pt) {
+                    currentFontSize = currentFontSize * (width_pt - totalSpacing_pt) / textOnlyWidth_pt;
                     if (currentFontSize < 10) currentFontSize = 10;
                 }
                 // 枠の高さにも収まるように縮小
@@ -1343,10 +1451,15 @@ async function generatePDF(isPrinting = false) {
 async function updatePreview() {
     const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
-    
+
+    // レースコンディション防止: この呼び出しの世代を記録し、
+    // 古い世代のレンダリングが後から完了しても描画させない
+    const gen = ++previewRenderGen;
+
     showStatus("PDF生成中...", true);
     const pdfBlob = await generatePDF(false);
-    
+    if (gen !== previewRenderGen) return; // より新しい更新が始まっている
+
     if (pdfBlob && pdfjsLib) {
         try {
             const arrayBuffer = await pdfBlob.arrayBuffer();
@@ -1383,7 +1496,8 @@ async function updatePreview() {
             };
             
             await page.render(renderContext).promise;
-            
+            if (gen !== previewRenderGen) return; // 描画中に新しい更新が始まった場合は破棄
+
             // レンダリング完了後にメインcanvasへ一括コピー
             pdfCanvas.width = offscreen.width;
             pdfCanvas.height = offscreen.height;
@@ -1422,13 +1536,20 @@ async function printPDF() {
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
-        
+
         // 別タブで開いて印刷を実行させる
         const newWindow = window.open(pdfUrl, "_blank");
         if (newWindow) {
-            newWindow.onload = () => {
-                newWindow.print();
+            // Blob URLタブでは onload が発火しないブラウザがあるため、
+            // フラグ付きでタイムアウトフォールバックも併用する
+            let printCalled = false;
+            const triggerPrint = () => {
+                if (printCalled) return;
+                printCalled = true;
+                try { newWindow.print(); } catch (e) { /* タブが閉じられた場合など */ }
             };
+            newWindow.onload = triggerPrint;
+            setTimeout(triggerPrint, 2000);
             showToast("印刷プレビューを別タブで開きました");
         } else {
             // ポップアップがブロックされた場合は直接ダウンロード
@@ -1438,8 +1559,10 @@ async function printPDF() {
             link.click();
             showToast("ポップアップがブロックされたため、PDFをダウンロードしました");
         }
+        // メモリリーク防止: 印刷/ダウンロード完了を見込んでからURLを解放
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
         showStatus("印刷データ出力完了", false);
-        
+
         // 印刷履歴への登録
         saveRecord(false); // 重複を避けるため静かに自動登録
     }
@@ -1450,27 +1573,14 @@ function saveRecord(showNotice = true) {
     const nameInput = document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
     let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
-    
-    // 【追加】「空」チェックが入っていればタグを付与
+
     const emptyCheck = document.getElementById("emptyCheck");
-    if (emptyCheck && emptyCheck.checked && amountInput !== "") {
-        amountInput += " [空]";
-    }
-    
+    const isEmpty = !!(emptyCheck && emptyCheck.checked && amountInput !== "");
+
     if (!nameInput) {
         if (showNotice) showToast("氏名を入力してください", "error");
         return;
     }
-
-    // 重複チェック (同一の氏名かつ金額かつテンプレートが直近にあればスキップ)
-    const isDuplicate = dbRecords.some(r => 
-        r.name === nameInput && 
-        r.amount === amountInput && 
-        r.template === currentTemplate &&
-        (new Date().getTime() - new Date(r.date).getTime() < 30000) // 30秒以内の同一データ
-    );
-    
-    if (isDuplicate) return;
 
     let dbAmount = amountInput;
     if (currentTemplate === "10000en") {
@@ -1478,23 +1588,62 @@ function saveRecord(showNotice = true) {
     } else if (currentTemplate === "1000en") {
         dbAmount = `金${amountInput || "一"}阡圓也`;
     }
+    // 「空」タグは金額文字列の末尾に付与（文中への混入を防ぐ）
+    if (isEmpty) {
+        dbAmount = stripEmptyTag(dbAmount) + " [空]";
+    }
 
-    const newRecord = {
-        id: "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
-        date: new Date().toISOString(),
-        template: currentTemplate,
-        name: nameInput,
-        amount: dbAmount,
-        sync: "pending" // IndexedDB Outbox パターン
-    };
-
-    dbRecords.unshift(newRecord); // メモリ上(UI表示用)に追加
-    
-    // IndexedDBへ保存し、同期を試行する
-    idbPutRecord(newRecord).then(() => {
-        renderTable();
-        pushPendingRecords();
+    // 重複チェック (同一の氏名かつ金額かつテンプレートが30秒以内にあればスキップ)
+    // ※ 保存形式(dbAmount)同士で比較する
+    const isDuplicate = dbRecords.some(r => {
+        const rd = parseFlexibleDate(r.date);
+        return r.name === nameInput &&
+            r.amount === dbAmount &&
+            r.template === currentTemplate &&
+            rd && (Date.now() - rd.getTime() < 30000);
     });
+    if (isDuplicate && !editingRecordId) return;
+
+    if (editingRecordId) {
+        const idx = dbRecords.findIndex(r => r.id === editingRecordId);
+        if (idx !== -1) {
+            dbRecords[idx].name = nameInput;
+            dbRecords[idx].amount = dbAmount;
+            dbRecords[idx].template = currentTemplate;
+            dbRecords[idx].sync = "pending";
+            dbRecords[idx].date = new Date().toISOString();
+            
+            idbPutRecord(dbRecords[idx]).then(() => {
+                renderTable();
+                pushPendingRecords();
+            });
+        }
+        
+        editingRecordId = null;
+        const btn = document.getElementById("btnRegister");
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> 登録';
+        const cancelBtn = document.getElementById("btnCancelEdit");
+        if (cancelBtn) cancelBtn.style.display = "none";
+        
+        if (showNotice) showToast("名簿のデータを更新しました！");
+    } else {
+        const newRecord = {
+            id: "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+            date: new Date().toISOString(),
+            template: currentTemplate,
+            name: nameInput,
+            amount: dbAmount,
+            sync: "pending" // IndexedDB Outbox パターン
+        };
+
+        dbRecords.unshift(newRecord); // メモリ上(UI表示用)に追加
+        
+        // IndexedDBへ保存し、同期を試行する
+        idbPutRecord(newRecord).then(() => {
+            renderTable();
+            pushPendingRecords();
+        });
+    }
     
     if (showNotice) {
         showToast("名簿に正常に登録しました！");
@@ -1503,10 +1652,24 @@ function saveRecord(showNotice = true) {
 
 async function deleteRecord(id) {
     if (confirm("このレコードを名簿から削除しますか？")) {
+        const record = dbRecords.find(r => r.id === id);
         dbRecords = dbRecords.filter(r => r.id !== id);
-        await idbDeleteRecord(id);
+
+        if (record) {
+            // 墓標(tombstone)方式: すぐに物理削除せず「削除待ち」として残す。
+            // オフラインで削除してもオンライン復帰時にクラウドへ削除が伝搬され、
+            // 「名簿フル復元」で削除済みデータが蘇る問題を防ぐ。
+            record.sync = "pending_delete";
+            await idbPutRecord(record);
+        } else {
+            await idbDeleteRecord(id);
+        }
+
         renderTable();
         showToast("名簿から削除しました");
+
+        // クラウドへの削除伝搬を試行（オフライン時は復帰時に自動送信される）
+        pushPendingRecords();
     }
 }
 
@@ -1518,32 +1681,44 @@ function loadRecordToForm(id) {
     // 1. テンプレートの変更
     selectTemplate(record.template);
     
-    // 2. フォーム入力値の設定
+    // 2. フォーム入力値の設定（[空]タグは剥がしてから復元する）
     document.getElementById("nameInput").value = record.name;
-    
+
+    const val = parseAmountForForm(record); // "金五萬圓也 [空]" → "五" など
     if (record.template === "10000en" || record.template === "1000en") {
-        // 履歴DBの "金五萬圓也" から "五" を抽出してUIに入力
-        let val = record.amount;
-        if (val.startsWith("金")) {
-            val = val.substring(1);
-        }
-        if (val.endsWith("萬圓也")) {
-            val = val.substring(0, val.length - 3);
-        } else if (val.endsWith("阡圓也")) {
-            val = val.substring(0, val.length - 3);
-        } else if (val.endsWith("阡圆也")) {
-            val = val.substring(0, val.length - 3);
-        }
         const amountSelect = document.getElementById("amountSelect");
         if (amountSelect) amountSelect.value = val;
         document.getElementById("amountInput").value = val;
     } else {
-        document.getElementById("amountInput").value = record.amount;
+        document.getElementById("amountInput").value = val;
+    }
+
+    // 「空」チェックボックスの状態も復元
+    const emptyCheck = document.getElementById("emptyCheck");
+    if (emptyCheck) emptyCheck.checked = hasEmptyTag(record.amount);
+
+    editingRecordId = id;
+    const btn = document.getElementById("btnRegister");
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-pen"></i> 更新';
+    
+    let cancelBtn = document.getElementById("btnCancelEdit");
+    if (!cancelBtn && btn) {
+        cancelBtn = document.createElement("button");
+        cancelBtn.id = "btnCancelEdit";
+        cancelBtn.className = "btn btn-secondary";
+        cancelBtn.style.marginLeft = "10px";
+        cancelBtn.innerHTML = '<i class="fa-solid fa-times"></i> キャンセル';
+        cancelBtn.onclick = () => {
+            clearForm();
+        };
+        btn.parentNode.insertBefore(cancelBtn, btn.nextSibling);
+    } else if (cancelBtn) {
+        cancelBtn.style.display = "inline-block";
     }
 
     // 3. プレビューの再描画
     updatePreview();
-    showToast("名簿データを入力フォームに読み込みました");
+    showToast("名簿データを読み込みました。修正後「更新」を押してください。");
 }
 
 // --- 名簿テーブルのレンダリング ---
@@ -1553,12 +1728,34 @@ function renderTable() {
     const searchInput = document.getElementById("searchInput").value.trim().toLowerCase();
     
     tbody.innerHTML = "";
-    
+
     // 検索フィルタリング
-    const filteredRecords = dbRecords.filter(r => 
-        r.name.toLowerCase().includes(searchInput) || 
+    const filteredRecords = dbRecords.filter(r =>
+        r.name.toLowerCase().includes(searchInput) ||
         r.amount.toLowerCase().includes(searchInput)
     );
+
+    // 並び替え（sortSelectはこれまでUIだけ存在し機能していなかった）
+    const sortSelect = document.getElementById("sortSelect");
+    const sortMode = sortSelect ? sortSelect.value : "date_desc";
+    const templateOrder = { "10000en": 0, "1000en": 1, "free": 2 };
+    const dateVal = r => { const d = parseFlexibleDate(r.date); return d ? d.getTime() : 0; };
+    switch (sortMode) {
+        case "date_asc":
+            filteredRecords.sort((a, b) => dateVal(a) - dateVal(b));
+            break;
+        case "template_desc": // 萬→阡→フ
+            filteredRecords.sort((a, b) => (templateOrder[a.template] ?? 9) - (templateOrder[b.template] ?? 9) || dateVal(b) - dateVal(a));
+            break;
+        case "template_asc": // フ→阡→萬
+            filteredRecords.sort((a, b) => (templateOrder[b.template] ?? 9) - (templateOrder[a.template] ?? 9) || dateVal(b) - dateVal(a));
+            break;
+        case "name_asc":
+            filteredRecords.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ja"));
+            break;
+        default: // date_desc
+            filteredRecords.sort((a, b) => dateVal(b) - dateVal(a));
+    }
 
     if (filteredRecords.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="no-data">登録されている名簿データはありません。</td></tr>`;
@@ -1567,11 +1764,10 @@ function renderTable() {
 
     filteredRecords.forEach(r => {
         const tr = document.createElement("tr");
-        
-        // 日付フォーマット
-        const d = new Date(r.date);
-        const dateStr = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-        
+
+        // 日付フォーマット（ISO/JPロケール混在に対応、パース不能でもNaNにしない）
+        const dateStr = formatDateForDisplay(r.date);
+
         // テンプレートバッジ
         let badgeClass = "badge-10000";
         let badgeText = "萬圓用";
@@ -1583,83 +1779,107 @@ function renderTable() {
             badgeText = "フリー";
         }
 
+        // XSS対策: レコード値はinnerHTMLのイベント属性に埋め込まず、
+        // DOM APIとクロージャで安全にバインドする
         tr.innerHTML = `
-            <td data-label=""><input type="checkbox" class="record-checkbox" value="${r.id}" onchange="updateBatchCount()" style="transform: scale(1.3);"></td>
-            <td data-label="日時">${dateStr}</td>
+            <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
+            <td data-label="日時">${escapeHTML(dateStr)}</td>
             <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
             <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
             <td data-label="金額/物品">${escapeHTML(r.amount)}</td>
             <td data-label="">
                 <div class="action-btns">
-                    <button class="btn-table btn-table-edit" onclick="loadRecordToForm('${r.id}')">
+                    <button class="btn-table btn-table-edit">
                         <i class="fa-solid fa-arrows-spin"></i>呼び出す
                     </button>
-                    <button class="btn-table btn-table-del" onclick="deleteRecord('${r.id}')">
+                    <button class="btn-table btn-table-del">
                         <i class="fa-solid fa-trash-can"></i>削除
                     </button>
                 </div>
             </td>
         `;
+        const checkbox = tr.querySelector(".record-checkbox");
+        checkbox.value = r.id;
+        checkbox.addEventListener("change", updateBatchCount);
+        tr.querySelector(".btn-table-edit").addEventListener("click", () => loadRecordToForm(r.id));
+        tr.querySelector(".btn-table-del").addEventListener("click", () => deleteRecord(r.id));
         tbody.appendChild(tr);
     });
 }
 
 // --- CSVエクスポート機能 ---
+function buildCsvContent(records) {
+    let csvContent = "\ufeff"; // Excelでの文字化けを防ぐためのBOM付きUTF-8
+    csvContent += "日時,テンプレート種類,奉納者氏名,金額/物品名\n";
+
+    records.forEach(r => {
+        const dateStr = formatDateForDisplay(r.date);
+        const templateStr = r.template === "10000en" ? "萬圓用" : (r.template === "1000en" ? "阡圓用" : "フリー用");
+
+        // カンマやダブルクォーテーションのエスケープ
+        const escapedName = `"${(r.name || "").replace(/"/g, '""')}"`;
+        const escapedAmount = `"${(r.amount || "").replace(/"/g, '""')}"`;
+
+        csvContent += `${dateStr},${templateStr},${escapedName},${escapedAmount}\n`;
+    });
+    return csvContent;
+}
+
+function downloadCsv(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 function exportCSV() {
     if (dbRecords.length === 0) {
         showToast("エクスポートするデータがありません", "error");
         return;
     }
-
-    let csvContent = "\ufeff"; // Excelでの文字化けを防ぐためのBOM付きUTF-8
-    csvContent += "日時,テンプレート種類,奉納者氏名,金額/物品名\n";
-
-    dbRecords.forEach(r => {
-        const d = new Date(r.date);
-        const dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
-        const templateStr = r.template === "10000en" ? "萬圓用" : (r.template === "1000en" ? "阡圓用" : "フリー用");
-        
-        // カンマやダブルクォーテーションのエスケープ
-        const escapedName = `"${r.name.replace(/"/g, '""')}"`;
-        const escapedAmount = `"${r.amount.replace(/"/g, '""')}"`;
-
-        csvContent += `${dateStr},${templateStr},${escapedName},${escapedAmount}\n`;
-    });
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `奉納名簿履歴_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(buildCsvContent(dbRecords), `奉納名簿履歴_${new Date().toISOString().slice(0,10)}.csv`);
     showToast("名簿データをCSVとして出力しました！");
 }
 
-// --- アコーディオンの開閉 ---
-function toggleAccordion() {
-    const accordion = document.getElementById("calibrationAccordion");
-    const arrow = document.getElementById("accordionArrow");
-    
-    accordion.classList.toggle("open");
-    if (accordion.classList.contains("open")) {
-        arrow.className = "fa-solid fa-chevron-up";
-    } else {
-        arrow.className = "fa-solid fa-chevron-down";
+// 選択レコードのみCSV出力（従来はボタンだけ存在し未実装だった）
+function batchExportCSV() {
+    const selectedIds = Array.from(document.querySelectorAll('.record-checkbox:checked')).map(cb => cb.value);
+    const selected = dbRecords.filter(r => selectedIds.includes(r.id));
+    if (selected.length === 0) {
+        showToast("エクスポートするレコードを選択してください", "error");
+        return;
     }
+    downloadCsv(buildCsvContent(selected), `奉納名簿選択分_${selected.length}件_${new Date().toISOString().slice(0,10)}.csv`);
+    showToast(`選択した${selected.length}件をCSVとして出力しました！`);
 }
 
-// #8 スマホでは微調整アコーディオンをデフォルトで開く
-if (window.innerWidth <= 768) {
-    window.addEventListener("DOMContentLoaded", () => {
-        const accordion = document.getElementById("calibrationAccordion");
-        const arrow = document.getElementById("accordionArrow");
-        if (accordion && !accordion.classList.contains("open")) {
-            accordion.classList.add("open");
-            if (arrow) arrow.className = "fa-solid fa-chevron-up";
+// 選択レコードの一括削除（従来はボタンだけ存在し未実装だった）
+async function batchDeleteRecords() {
+    const selectedIds = Array.from(document.querySelectorAll('.record-checkbox:checked')).map(cb => cb.value);
+    if (selectedIds.length === 0) {
+        showToast("削除するレコードを選択してください", "error");
+        return;
+    }
+    if (!confirm(`選択した ${selectedIds.length}件 のレコードを名簿から削除しますか？`)) return;
+
+    for (const id of selectedIds) {
+        const record = dbRecords.find(r => r.id === id);
+        if (record) {
+            // 個別削除と同じく墓標方式でクラウドへも削除を伝搬する
+            record.sync = "pending_delete";
+            await idbPutRecord(record);
         }
-    });
+    }
+    dbRecords = dbRecords.filter(r => !selectedIds.includes(r.id));
+    renderTable();
+    updateBatchCount();
+    showToast(`${selectedIds.length}件を名簿から削除しました`);
+    pushPendingRecords();
 }
 
 // #9 スマホ用PDF保存（直接ダウンロード）
@@ -1678,7 +1898,8 @@ async function mobilePrintPDF() {
         link.href = pdfUrl;
         link.download = `奉納ビラ_${nameInput}.pdf`;
         link.click();
-        URL.revokeObjectURL(pdfUrl);
+        // 即時revokeするとダウンロード開始前にURLが無効化されるブラウザがあるため遅延させる
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
         showToast("PDFを保存しました");
         showStatus("PDF保存完了", false);
         saveRecord(false);
@@ -1750,17 +1971,23 @@ async function mobilePrintAirPrint() {
 }
 
 // #7 長押しリピート機能（+/-ボタン）
+// 旧実装は存在しない .calib-btn を対象にしていたため機能していなかった。
+// 実在する調整ボタン（onclickがadjust系）を対象に、pointerイベントで実装し直した。
+// preventDefaultしないため通常のタップ（単発クリック）はそのまま動作する。
 (function setupLongPressRepeat() {
     document.addEventListener("DOMContentLoaded", () => {
-        document.querySelectorAll(".calib-btn").forEach(btn => {
+        const buttons = document.querySelectorAll('button[onclick^="adjust"]');
+
+        buttons.forEach(btn => {
             let intervalId = null;
             let timeoutId = null;
 
-            const startRepeat = (e) => {
-                e.preventDefault();
-                // 初回は通常のクリックで処理済み
+            const startRepeat = () => {
+                stopRepeat();
+                // 400ms保持でリピート開始（初回操作は通常のclickが担う）
                 timeoutId = setTimeout(() => {
                     intervalId = setInterval(() => {
+                        btn.dataset.lpRepeating = "1";
                         btn.click();
                     }, 80);
                 }, 400);
@@ -1771,20 +1998,45 @@ async function mobilePrintAirPrint() {
                 clearInterval(intervalId);
                 intervalId = null;
                 timeoutId = null;
+                // 直後のtrusted click抑止のため少しだけフラグを残し、その後必ず掃除する
+                // （pointerleave等でclickが発火しなかった場合にフラグが残り続けるのを防ぐ）
+                if (btn.dataset.lpRepeating) {
+                    setTimeout(() => { delete btn.dataset.lpRepeating; }, 300);
+                }
             };
 
-            btn.addEventListener("touchstart", startRepeat, { passive: false });
-            btn.addEventListener("touchend", stopRepeat);
-            btn.addEventListener("touchcancel", stopRepeat);
-            btn.addEventListener("mousedown", startRepeat);
-            btn.addEventListener("mouseup", stopRepeat);
-            btn.addEventListener("mouseleave", stopRepeat);
+            btn.addEventListener("pointerdown", startRepeat);
+            btn.addEventListener("pointerup", stopRepeat);
+            btn.addEventListener("pointercancel", stopRepeat);
+            btn.addEventListener("pointerleave", stopRepeat);
+            // 長押し中のスクロールによる誤操作を防ぐ
+            btn.style.touchAction = "manipulation";
         });
+
+        // リピート実行後の指離しで発火する「余分な1回分のclick」をキャプチャ段階で抑止
+        document.addEventListener("click", (e) => {
+            const btn = e.target.closest && e.target.closest('button[onclick^="adjust"]');
+            if (btn && btn.dataset.lpRepeating) {
+                // リピートによる合成click（isTrusted=false）は素通しし、
+                // 実際のポインタ操作由来のclickだけを1回無効化する
+                if (e.isTrusted) {
+                    delete btn.dataset.lpRepeating;
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+            }
+        }, true);
     });
 })();
 
 // --- フォームのクリア ---
 function clearForm() {
+    editingRecordId = null;
+    const btn = document.getElementById("btnRegister");
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> 登録';
+    const cancelBtn = document.getElementById("btnCancelEdit");
+    if (cancelBtn) cancelBtn.style.display = "none";
+    
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
     const amountSelect = document.getElementById("amountSelect");
@@ -1896,55 +2148,72 @@ async function buildSuggestData() {
 }
 
 // 履歴データをスプレッドシートへ自動追記（Outbox同期）
+// - 登録/更新 (sync: "pending") と 削除 (sync: "pending_delete") の両方を送信する
+// - CORSで応答を検証し、GASが success を返した場合のみ同期済みにする
+//   （旧実装の no-cors は失敗検知ができず、静かなデータ欠損の原因だった）
+let isPushingPendings = false; // 多重実行ガード (online/visibilitychange の同時発火対策)
 async function pushPendingRecords() {
-    if (!navigator.onLine || !gasUrl) return;
-    const pendings = await idbGetPendingRecords();
-    
-    updateSyncBadge(pendings.length);
-    if (pendings.length === 0) return;
-    
-    console.log(`未送信データ ${pendings.length}件を同期開始...`);
-    const token = await idbKvGet("api_token") || "GUEST_TOKEN_" + Math.random().toString(36).substr(2);
-    await idbKvSet("api_token", token);
-    
-    for (const record of pendings) {
-        let templateTypeStr = "フリー用";
-        if (record.template === "10000en") templateTypeStr = "萬圓用";
-        else if (record.template === "1000en") templateTypeStr = "阡圓用";
+    if (!navigator.onLine || !gasUrl || isPushingPendings) return;
+    isPushingPendings = true;
 
-        const payload = {
-            id: record.id,
-            timestamp: new Date(record.date).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
-            templateType: templateTypeStr,
-            name: record.name,
-            amount: record.amount,
-            token: token
-        };
+    try {
+        const pendings = await idbGetPendingRecords();
+        const pendingDeletes = await idbGetPendingDeletes();
 
-        try {
-            const res = await fetch(gasUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            // no-corsは成否判定が不完全だが、ネットワークエラーにならなければ送信成功とみなす
-            record.sync = "synced";
-            await idbPutRecord(record);
-            
-            // メモリ上の dbRecords も sync: "synced" に更新
-            const memRec = dbRecords.find(r => r.id === record.id);
-            if (memRec) memRec.sync = "synced";
-            
-        } catch (e) {
-            console.warn("GAS同期中にネットワークエラー。以降は中断します:", e);
-            break;
+        updateSyncBadge(pendings.length + pendingDeletes.length);
+        if (pendings.length === 0 && pendingDeletes.length === 0) return;
+
+        console.log(`未送信データ ${pendings.length}件 / 削除待ち ${pendingDeletes.length}件 を同期開始...`);
+        const token = await idbKvGet("api_token") || "GUEST_TOKEN_" + Math.random().toString(36).substr(2);
+        await idbKvSet("api_token", token);
+
+        // 1. 登録・更新の送信
+        for (const record of pendings) {
+            let templateTypeStr = "フリー用";
+            if (record.template === "10000en") templateTypeStr = "萬圓用";
+            else if (record.template === "1000en") templateTypeStr = "阡圓用";
+
+            const recDate = parseFlexibleDate(record.date);
+            const payload = {
+                id: record.id,
+                timestamp: (recDate || new Date()).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+                templateType: templateTypeStr,
+                name: record.name,
+                amount: record.amount,
+                token: token
+            };
+
+            try {
+                await postToGas(payload); // success応答を確認できた場合のみ次へ進む
+                record.sync = "synced";
+                await idbPutRecord(record);
+
+                const memRec = dbRecords.find(r => r.id === record.id);
+                if (memRec) memRec.sync = "synced";
+            } catch (e) {
+                console.warn("GAS同期に失敗しました。レコードは未送信のまま保持し、以降は中断します:", e);
+                break;
+            }
         }
+
+        // 2. 削除（墓標）の送信 — 成功したらローカルから物理削除
+        for (const record of pendingDeletes) {
+            try {
+                await postToGas({ id: record.id, action: "delete", token: token });
+                await idbDeleteRecord(record.id);
+            } catch (e) {
+                console.warn("GAS削除同期に失敗しました。墓標は保持し、以降は中断します:", e);
+                break;
+            }
+        }
+
+        const remaining = await idbGetPendingRecords();
+        const remainingDeletes = await idbGetPendingDeletes();
+        updateSyncBadge(remaining.length + remainingDeletes.length);
+        renderTable(); // バッジ表示などを更新
+    } finally {
+        isPushingPendings = false;
     }
-    
-    const remaining = await idbGetPendingRecords();
-    updateSyncBadge(remaining.length);
-    renderTable(); // バッジ表示などを更新
 }
 
 // 未送信バッジの更新
@@ -1960,10 +2229,9 @@ function updateSyncBadge(count) {
         badge = document.createElement("div");
         badge.id = "offlineQueueBadge";
         badge.style.cssText = "display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #fef3c7; color: #d97706; padding: 4px 10px; border-radius: 20px; border: 1px solid #fde68a; cursor: pointer; font-weight: 600;";
-        badge.title = "クリックして未送信データを強制同期";
+        badge.title = "クリックして未送信データを確認・送信";
         badge.onclick = () => {
-            showToast("手動同期を開始します...");
-            pushPendingRecords();
+            openQueueModal();
         };
         const header = document.querySelector("header");
         if (header) header.appendChild(badge);
@@ -2043,18 +2311,29 @@ async function restoreFromGAS() {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         
+        // 削除待ち（墓標）のIDは復元対象から除外する（削除の意思を尊重）
+        const tombstoneIds = new Set((await idbGetPendingDeletes()).map(r => r.id));
+
         let count = 0;
         for (const r of data.records) {
-            // クラウドから来たものは同期済みとする
+            // 日付をISO形式に正規化（GAS由来の "2026/6/10 12:00:00" はSafariでパース不能のため）
+            const parsedDate = parseFlexibleDate(r.timestamp);
+
+            // IDが無い行はハッシュで決定的なIDを合成する。
+            // （旧実装は毎回ランダムIDを振っていたため、復元を繰り返すとデータが増殖した）
+            const recordId = r.id || stableIdFromRow(String(r.timestamp || ""), String(r.name || ""), String(r.amount || ""));
+
+            if (tombstoneIds.has(recordId)) continue; // ローカルで削除済み（クラウド反映待ち）
+
             const record = {
-                id: r.id || "rec_res_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
-                date: r.timestamp || new Date().toISOString(),
+                id: recordId,
+                date: (parsedDate || new Date()).toISOString(),
                 template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
                 name: r.name,
                 amount: r.amount,
                 sync: "synced"
             };
-            // 既存のIDがあればスキップなどしても良いが、ここでは単純にPut
+            // putはID重複時に上書きとなるため、再実行しても増殖しない
             await idbPutRecord(record);
             count++;
         }
@@ -2182,53 +2461,60 @@ function renderSheetList() {
     }
     
     // 上限30件程度にする
+    // XSS対策: 候補値はイベント属性の文字列に埋め込まず、クロージャでバインドする
     filtered.slice(0, 30).forEach(item => {
         const div = document.createElement('div');
         div.className = 'list-item';
         div.style.position = 'relative';
         div.style.paddingRight = '55px'; // 削除ボタンのスペースを確保
-        
+
         div.innerHTML = `
-            <div style="display: flex; flex-direction: column; flex: 1;" onclick="selectSheetItem('${escapeSingleQuotes(item)}')">
+            <div class="list-item-main" style="display: flex; flex-direction: column; flex: 1; cursor: pointer;">
                 <span>${escapeHTML(item)}</span>
                 <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
             </div>
-            <button type="button" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: none; background: #fee2e2; color: #ef4444; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5;" onclick="deleteSuggestItem('${escapeSingleQuotes(item)}', '${isCloud ? 'cloud' : 'recent'}'); event.stopPropagation();">
+            <button type="button" class="list-item-del" aria-label="この候補を削除" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: none; background: #fee2e2; color: #ef4444; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5;">
                 <i class="fa-solid fa-xmark" style="font-size: 14px;"></i>
             </button>
         `;
+        div.querySelector('.list-item-main').addEventListener('click', () => selectSheetItem(item));
+        div.querySelector('.list-item-del').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteSuggestItem(item, isCloud ? 'cloud' : 'recent');
+        });
         content.appendChild(div);
     });
 }
 
-function escapeSingleQuotes(str) {
-    return str.replace(/'/g, "\\'");
-}
-
 // サジェスト候補の個別削除
-function deleteSuggestItem(val, type) {
+async function deleteSuggestItem(val, type) {
     if (confirm(`このサジェスト候補「${val}」を一覧から削除しますか？`)) {
+        let removedRecords = [];
         if (currentSheetTarget === 'name') {
             if (suggestData.names) {
                 suggestData.names = suggestData.names.filter(item => item !== val);
             }
             if (type === 'recent') {
+                removedRecords = dbRecords.filter(r => r.name === val);
                 dbRecords = dbRecords.filter(r => r.name !== val);
-                saveDbRecords();
-                renderTable();
             }
         } else {
             if (suggestData.items) {
                 suggestData.items = suggestData.items.filter(item => item !== val);
             }
             if (type === 'recent') {
+                removedRecords = dbRecords.filter(r => r.amount === val);
                 dbRecords = dbRecords.filter(r => r.amount !== val);
-                saveDbRecords();
-                renderTable();
             }
         }
-        
-        // LocalStorageにサジェストデータを保存
+
+        // IndexedDBにも反映（旧実装は空関数を呼んでおり、リロードで復活していた）
+        for (const r of removedRecords) {
+            try { await idbDeleteRecord(r.id); } catch (e) { console.warn("サジェスト削除のDB反映エラー:", e); }
+        }
+        if (removedRecords.length > 0) renderTable();
+
+        // キャッシュにサジェストデータを保存
         localStorage.setItem("pdf_mail_merge_suggests", JSON.stringify(suggestData));
         showToast("サジェスト候補を削除しました");
         renderSheetList(); // リスト再描画
@@ -2265,10 +2551,13 @@ function toggleSelectAll(checked) {
 // 選択件数の更新
 function updateBatchCount() {
     const count = document.querySelectorAll('.record-checkbox:checked').length;
-    const btn = document.getElementById('btnBatchPrint');
     const countSpan = document.getElementById('batchCount');
     if (countSpan) countSpan.textContent = count;
-    if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    // 一括印刷・選択分CSV・選択削除の3ボタンをまとめて表示制御
+    for (const id of ['btnBatchPrint', 'btnBatchExport', 'btnBatchDelete']) {
+        const btn = document.getElementById(id);
+        if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
 }
 
 // 一括印刷
@@ -2282,43 +2571,24 @@ async function batchPrint() {
     }
     
     showStatus(`一括印刷: ${selectedIds.length}件のPDFを生成中...`, true);
-    
-    // 現在のフォーム状態を保存
-    const origTemplate = currentTemplate;
-    const origName = document.getElementById('nameInput').value;
-    const origAmount = document.getElementById('amountInput').value;
-    const origSelect = document.getElementById('amountSelect') ? document.getElementById('amountSelect').value : '一';
-    
+
     try {
         const mergedPdf = await PDFLib.PDFDocument.create();
-        
+
         for (let i = 0; i < selectedIds.length; i++) {
             const record = dbRecords.find(r => r.id === selectedIds[i]);
             if (!record) continue;
-            
+
             showStatus(`一括印刷: ${i + 1}/${selectedIds.length} 件目を処理中...`, true);
-            
-            // レコードのテンプレートに切り替え（UIは更新せずに内部値のみ変更）
-            currentTemplate = record.template;
-            
-            // フォーム値を一時的に設定
-            document.getElementById('nameInput').value = record.name;
-            
-            // 金額をパース
-            if (record.template === '10000en' || record.template === '1000en') {
-                let val = record.amount;
-                if (val.startsWith('金')) val = val.substring(1);
-                if (val.endsWith('萬圓也')) val = val.substring(0, val.length - 3);
-                else if (val.endsWith('阡圓也')) val = val.substring(0, val.length - 3);
-                const amountSelect = document.getElementById('amountSelect');
-                if (amountSelect) amountSelect.value = val;
-                document.getElementById('amountInput').value = val;
-            } else {
-                document.getElementById('amountInput').value = record.amount;
-            }
-            
-            // PDF生成
-            const pdfBlob = await generatePDF(true);
+
+            // generatePDFのoverride引数でレコードデータを直接渡す
+            // （フォームDOMを書き換えないため、画面のチラつきや状態復元漏れが起きない）
+            // parseAmountForForm が「[空]」タグと金〜圓也の装飾を安全に剥がす
+            const pdfBlob = await generatePDF(true, {
+                template: record.template,
+                name: record.name,
+                amount: parseAmountForForm(record)
+            });
             if (pdfBlob) {
                 const pdfBytes = await pdfBlob.arrayBuffer();
                 const srcDoc = await PDFLib.PDFDocument.load(pdfBytes);
@@ -2326,28 +2596,28 @@ async function batchPrint() {
                 copiedPages.forEach(page => mergedPdf.addPage(page));
             }
         }
-        
-        // フォームの状態を元に戻す
-        currentTemplate = origTemplate;
-        document.getElementById('nameInput').value = origName;
-        document.getElementById('amountInput').value = origAmount;
-        const amountSelectRestore = document.getElementById('amountSelect');
-        if (amountSelectRestore) amountSelectRestore.value = origSelect;
-        
+
         if (mergedPdf.getPageCount() === 0) {
             showToast('PDFの生成に失敗しました', 'error');
             showStatus('準備完了', false);
             return;
         }
-        
+
         const mergedBytes = await mergedPdf.save();
         const blob = new Blob([mergedBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        
+
         // 印刷 or ダウンロード
         const newWindow = window.open(url, '_blank');
         if (newWindow) {
-            newWindow.onload = () => newWindow.print();
+            let printCalled = false;
+            const triggerPrint = () => {
+                if (printCalled) return;
+                printCalled = true;
+                try { newWindow.print(); } catch (e) { /* noop */ }
+            };
+            newWindow.onload = triggerPrint;
+            setTimeout(triggerPrint, 2000);
             showToast(`${selectedIds.length}件のPDFを一括印刷します`);
         } else {
             const link = document.createElement('a');
@@ -2356,23 +2626,14 @@ async function batchPrint() {
             link.click();
             showToast(`${selectedIds.length}件のPDFをダウンロードしました`);
         }
-        
+        setTimeout(() => URL.revokeObjectURL(url), 60000); // メモリリーク防止
+
         showStatus('一括印刷完了', false);
-        
-        // テンプレートUIを元に戻す
-        selectTemplate(currentTemplate);
-        
+
     } catch (e) {
         console.error('一括印刷エラー:', e);
         showToast('一括印刷に失敗しました: ' + e.message, 'error');
         showStatus('準備完了', false);
-        
-        // エラー時もフォームの状態を元に戻す
-        currentTemplate = origTemplate;
-        document.getElementById('nameInput').value = origName;
-        document.getElementById('amountInput').value = origAmount;
-        const amountSelectErr = document.getElementById('amountSelect');
-        if (amountSelectErr) amountSelectErr.value = origSelect;
     }
 }
 
@@ -2399,6 +2660,7 @@ function updateDirectValue(param, value) {
 // 集計（ダッシュボード）更新処理
 // ==========================================
 // 漢数字パース用関数
+// 「五萬」「十萬」「壱阡五百」「二萬五阡」等の複合表記も正しく合算する
 function parseKanjiNumber(str) {
     if (!str) return 0;
     // 1. 全角数字を半角に
@@ -2408,29 +2670,41 @@ function parseKanjiNumber(str) {
     if (arabicMatch && parseInt(arabicMatch, 10) > 0) {
         return parseInt(arabicMatch, 10);
     }
-    // 3. アラビア数字がなければ漢数字をパース
-    let total = 0;
-    let currentNum = 1;
-    let hasParsed = false;
+
+    // 3. 漢数字をパース
     const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9};
-    const unitMap = {'萬':10000, '万':10000, '阡':1000, '千':1000, '百':100, '十':10};
-    
-    for (let i = 0; i < halfStr.length; i++) {
-        let char = halfStr[i];
-        if (numMap[char] !== undefined) {
-            currentNum = numMap[char];
-            hasParsed = true;
-        } else if (unitMap[char] !== undefined) {
-            total += currentNum * unitMap[char];
-            currentNum = 1; // リセット
-            hasParsed = true;
+    const smallUnitMap = {'阡':1000, '千':1000, '百':100, '十':10};
+    const bigUnitMap = {'萬':10000, '万':10000, '億':100000000};
+
+    // 漢数字に関係する文字だけを抽出
+    const chars = Array.from(halfStr).filter(c =>
+        numMap[c] !== undefined || smallUnitMap[c] !== undefined || bigUnitMap[c] !== undefined
+    );
+    if (chars.length === 0) return 0;
+
+    // 標準的な2段階アルゴリズム:
+    //   section = 大単位(萬/億)ごとの区切り内の合計
+    //   例: 「二萬五阡」→ (2)×10000 + (5×1000) = 25000
+    //   例: 「十萬」  → (10)×10000 = 100000
+    let total = 0;      // 確定した合計
+    let section = 0;    // 現在の大単位区間の合計
+    let digit = 0;      // 直前の数字 (単位が続かなければそのまま加算)
+
+    for (const c of chars) {
+        if (numMap[c] !== undefined) {
+            digit = numMap[c];
+        } else if (smallUnitMap[c] !== undefined) {
+            // 「十」のように数字を伴わない場合は1として扱う
+            section += (digit === 0 ? 1 : digit) * smallUnitMap[c];
+            digit = 0;
+        } else if (bigUnitMap[c] !== undefined) {
+            section += digit;
+            total += (section === 0 ? 1 : section) * bigUnitMap[c];
+            section = 0;
+            digit = 0;
         }
     }
-    if (hasParsed) {
-        // 末尾に単位がない場合（例: 「五」だけなど）
-        return total > 0 ? total : currentNum;
-    }
-    return 0;
+    return total + section + digit;
 }
 
 function updateDashboardStats() {
@@ -2441,9 +2715,10 @@ function updateDashboardStats() {
 
     for (let r of dbRecords) {
         // テンプレート別カウント (枚数は「空」でもカウントする)
-        if (r.templateType === "萬圓用") count10000++;
-        else if (r.templateType === "阡圓用") count5000++;
-        else if (r.templateType === "フリー用") countFree++;
+        // ※ レコードのキーは template ("10000en"等)。templateType はGAS送信payload専用
+        if (r.template === "10000en") count10000++;
+        else if (r.template === "1000en") count5000++;
+        else if (r.template === "free") countFree++;
         
         // 金額抽出ロジック (「空」の場合は金額合算を除外)
         if (r.amount && !r.amount.includes('[空]')) {
@@ -2469,20 +2744,6 @@ function updateDashboardStats() {
 }
 
 
-function switchMainTab(tabId) {
-    document.getElementById("tabMain-history").classList.remove("active");
-    document.getElementById("tabMain-dashboard").classList.remove("active");
-    document.getElementById("mainTabContent-history").style.display = "none";
-    document.getElementById("mainTabContent-dashboard").style.display = "none";
-    
-    document.getElementById("tabMain-" + tabId).classList.add("active");
-    document.getElementById("mainTabContent-" + tabId).style.display = "block";
-    
-    if (tabId === "dashboard") {
-        updateDashboardStats();
-    }
-}
-
 // ==========================================
 // 手動キャッシュクリア ＆ 強制再同期
 // ==========================================
@@ -2490,18 +2751,29 @@ async function forceClearAppCache() {
     if (confirm("アプリのキャッシュ（フォントやPDF原本テンプレートなど）をすべてクリアし、最新ファイルを強制的に再ダウンロードします。よろしいですか？\n※デザインの微調整値や名簿の履歴は消去されません。")) {
         // 設定バージョンなどのLocalStorageフラグを削除
         localStorage.removeItem("pdf_mail_merge_config_version");
-        
-        // IndexedDB のファイルキャッシュを全削除
+
+        // IndexedDB のファイルキャッシュ（フォント・PDF原本）を全削除
+        // ※ 名簿(STORE_RECORDS)とKV(STORE_KV)は消さない
         try {
             const db = await openDB();
-            const tx = db.transaction(STORE_NAME, "readwrite");
-            tx.objectStore(STORE_NAME).clear();
+            const tx = db.transaction(STORE_FILES, "readwrite");
+            tx.objectStore(STORE_FILES).clear();
             await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
             console.log("IndexedDB キャッシュを強制クリアしました。");
         } catch (dbErr) {
             console.warn("IndexedDB強制クリアエラー:", dbErr);
         }
-        
+
+        // Service Worker のキャッシュも削除して最新ファイルを取得させる
+        try {
+            if (window.caches) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+            }
+        } catch (swErr) {
+            console.warn("SWキャッシュ削除エラー:", swErr);
+        }
+
         // ページをリロードして再起動
         window.location.reload();
     }
@@ -2530,79 +2802,109 @@ function closeQueueModal() {
     }
 }
 
-function renderQueueModalList() {
+async function renderQueueModalList() {
     const content = document.getElementById('queueModalContent');
     if (!content) return;
     content.innerHTML = '';
-    
-    let queue = [];
+
+    // IndexedDB Outbox から未送信（登録待ち＋削除待ち）を取得
+    let pendings = [];
+    let pendingDeletes = [];
     try {
-        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
+        pendings = await idbGetPendingRecords();
+        pendingDeletes = await idbGetPendingDeletes();
     } catch (e) {
-        queue = [];
+        console.warn("未送信キュー取得エラー:", e);
     }
-    
-    if (queue.length === 0) {
+
+    const items = [
+        ...pendings.map(r => ({ record: r, kind: "upsert" })),
+        ...pendingDeletes.map(r => ({ record: r, kind: "delete" }))
+    ];
+
+    if (items.length === 0) {
         content.innerHTML = '<div class="empty-message">未送信のデータはありません。</div>';
         setTimeout(() => closeQueueModal(), 1500); // キューが空なら自動で閉じる
         return;
     }
-    
-    queue.forEach((item, idx) => {
+
+    items.forEach(({ record, kind }) => {
         const div = document.createElement('div');
         div.className = 'list-item';
         div.style.position = 'relative';
         div.style.paddingRight = '110px'; // アクションボタン用スペース
-        
-        const payload = item.payload;
+
+        const templateStr = record.template === "10000en" ? "萬圓用" : (record.template === "1000en" ? "阡圓用" : "フリー用");
+        const kindLabel = kind === "delete"
+            ? '<span style="color: #ef4444; font-weight: bold;">[削除待ち]</span> '
+            : '';
+
         div.innerHTML = `
             <div style="display: flex; flex-direction: column; flex: 1;">
-                <span style="font-size: 14px; font-weight: bold; color: var(--text-primary);">${escapeHTML(payload.name)}</span>
-                <span style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHTML(payload.templateType)} | ${escapeHTML(payload.amount)}</span>
-                <span style="font-size: 10px; color: #94a3b8; margin-top: 4px;">登録日時: ${escapeHTML(payload.timestamp)}</span>
+                <span style="font-size: 14px; font-weight: bold; color: var(--text-primary);">${kindLabel}${escapeHTML(record.name || "")}</span>
+                <span style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${templateStr} | ${escapeHTML(record.amount || "")}</span>
+                <span style="font-size: 10px; color: #94a3b8; margin-top: 4px;">登録日時: ${escapeHTML(formatDateForDisplay(record.date))}</span>
             </div>
             <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; gap: 6px; z-index: 5;">
-                <button type="button" class="btn" style="padding: 6px 8px; font-size: 11px; background: #e0f2fe; color: #0284c7; min-height: 28px; width: auto; border: 1px solid #bae6fd; border-radius: 4px; font-weight: 600;" onclick="sendSingleQueueItem(${idx})">
+                <button type="button" class="btn queue-send-btn" style="padding: 6px 8px; font-size: 11px; background: #e0f2fe; color: #0284c7; min-height: 28px; width: auto; border: 1px solid #bae6fd; border-radius: 4px; font-weight: 600;">
                     送信
                 </button>
-                <button type="button" class="btn" style="padding: 6px 8px; font-size: 11px; background: #fee2e2; color: #ef4444; min-height: 28px; width: auto; border: 1px solid #fecaca; border-radius: 4px; font-weight: 600;" onclick="deleteSingleQueueItem(${idx})">
+                <button type="button" class="btn queue-drop-btn" style="padding: 6px 8px; font-size: 11px; background: #fee2e2; color: #ef4444; min-height: 28px; width: auto; border: 1px solid #fecaca; border-radius: 4px; font-weight: 600;">
                     除外
                 </button>
             </div>
         `;
+        div.querySelector('.queue-send-btn').addEventListener('click', () => sendSingleQueueItem(record.id, kind));
+        div.querySelector('.queue-drop-btn').addEventListener('click', () => deleteSingleQueueItem(record.id, kind));
         content.appendChild(div);
     });
 }
 
-// キューの個別送信
-async function sendSingleQueueItem(idx) {
+// キューの個別送信（応答を検証し、成功した場合のみ同期済みにする）
+async function sendSingleQueueItem(id, kind) {
     if (!navigator.onLine) {
         showToast("オフライン状態のため送信できません", "error");
         return;
     }
-    
-    let queue = [];
+    if (!gasUrl) {
+        showToast("GASのURLが設定されていません", "error");
+        return;
+    }
+
+    const all = await idbGetAllRecords();
+    const record = all.find(r => r.id === id);
+    if (!record) return;
+
+    showToast(`${record.name || ""}様 のデータを送信中...`);
+
     try {
-        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-    } catch (e) { return; }
-    
-    if (!queue[idx]) return;
-    const item = queue[idx];
-    
-    showToast(`${item.payload.name}様 のデータを送信中...`);
-    
-    try {
-        await fetch(gasUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(item.payload)
-        });
-        
-        // 成功したら配列から削除して保存
-        queue.splice(idx, 1);
-        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-        updateOfflineQueueBadge();
+        const token = await idbKvGet("api_token") || "GUEST_TOKEN_" + Math.random().toString(36).substr(2);
+        await idbKvSet("api_token", token);
+
+        if (kind === "delete") {
+            await postToGas({ id: record.id, action: "delete", token: token });
+            await idbDeleteRecord(record.id);
+        } else {
+            let templateTypeStr = "フリー用";
+            if (record.template === "10000en") templateTypeStr = "萬圓用";
+            else if (record.template === "1000en") templateTypeStr = "阡圓用";
+            const recDate = parseFlexibleDate(record.date);
+            await postToGas({
+                id: record.id,
+                timestamp: (recDate || new Date()).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+                templateType: templateTypeStr,
+                name: record.name,
+                amount: record.amount,
+                token: token
+            });
+            record.sync = "synced";
+            await idbPutRecord(record);
+            const memRec = dbRecords.find(r => r.id === record.id);
+            if (memRec) memRec.sync = "synced";
+        }
+
+        const remaining = (await idbGetPendingRecords()).length + (await idbGetPendingDeletes()).length;
+        updateSyncBadge(remaining);
         renderQueueModalList();
         showToast("データを正常に送信しました！");
     } catch (e) {
@@ -2610,21 +2912,30 @@ async function sendSingleQueueItem(idx) {
     }
 }
 
-// キューの個別削除
-function deleteSingleQueueItem(idx) {
-    let queue = [];
-    try {
-        queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-    } catch (e) { return; }
-    
-    if (!queue[idx]) return;
-    
-    if (confirm(`この未送信データ（${queue[idx].payload.name}様）を未送信リストから削除（除外）しますか？`)) {
-        queue.splice(idx, 1);
-        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-        updateOfflineQueueBadge();
+// キューからの個別除外（クラウドへ送信せずに未送信状態を解消する）
+async function deleteSingleQueueItem(id, kind) {
+    const all = await idbGetAllRecords();
+    const record = all.find(r => r.id === id);
+    if (!record) return;
+
+    const msg = kind === "delete"
+        ? `この削除待ちデータ（${record.name || ""}様）を取り消しますか？\n※ローカルからは既に削除済みです。クラウド上のデータは残ります。`
+        : `この未送信データ（${record.name || ""}様）をクラウドへ送信せず、送信済み扱いにしますか？\n※ローカルの名簿には残ります。`;
+
+    if (confirm(msg)) {
+        if (kind === "delete") {
+            // 墓標を破棄（クラウドへの削除は行わない）
+            await idbDeleteRecord(record.id);
+        } else {
+            record.sync = "synced";
+            await idbPutRecord(record);
+            const memRec = dbRecords.find(r => r.id === record.id);
+            if (memRec) memRec.sync = "synced";
+        }
+        const remaining = (await idbGetPendingRecords()).length + (await idbGetPendingDeletes()).length;
+        updateSyncBadge(remaining);
         renderQueueModalList();
-        showToast("未送信データを削除しました");
+        showToast("未送信リストから除外しました");
     }
 }
 
@@ -2635,5 +2946,6 @@ async function flushOfflineQueueFromModal() {
         return;
     }
     closeQueueModal();
-    await flushOfflineQueue();
+    showToast("未送信データの同期を開始します...");
+    await pushPendingRecords();
 }

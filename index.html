@@ -2,11 +2,13 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>奉納ビラ 差し込み印刷＆名簿管理システム</title>
     
     <!-- PWA対応 -->
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1295,13 +1297,13 @@
                     
                     <div class="dpad" style="display: grid; grid-template-columns: repeat(3, 55px); grid-template-rows: repeat(3, 55px); gap: 10px;">
                         <div></div>
-                        <button type="button" class="dpad-btn" onpointerdown="startDpad('up'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-up"></i></button>
+                        <button type="button" class="dpad-btn" aria-label="上へ移動" onpointerdown="startDpad('up'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-up"></i></button>
                         <div></div>
-                        <button type="button" class="dpad-btn" onpointerdown="startDpad('left'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button type="button" class="dpad-btn" aria-label="左へ移動" onpointerdown="startDpad('left'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-left"></i></button>
                         <div style="display: flex; justify-content: center; align-items: center; color: #cbd5e1;"><i class="fa-solid fa-circle" style="font-size: 12px;"></i></div>
-                        <button type="button" class="dpad-btn" onpointerdown="startDpad('right'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button type="button" class="dpad-btn" aria-label="右へ移動" onpointerdown="startDpad('right'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-right"></i></button>
                         <div></div>
-                        <button type="button" class="dpad-btn" onpointerdown="startDpad('down'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-down"></i></button>
+                        <button type="button" class="dpad-btn" aria-label="下へ移動" onpointerdown="startDpad('down'); event.preventDefault()" onpointerup="stopDpad()" onpointercancel="stopDpad()" onpointerleave="stopDpad()"><i class="fa-solid fa-chevron-down"></i></button>
                         <div></div>
                     </div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 12px; margin-bottom: 24px;">※長押しで連続移動できます</div>
@@ -1505,41 +1507,7 @@
             </div>
             </div> <!-- End 名簿一覧タブ -->
 
-            <!-- 集計ダッシュボードタブ -->
-            <div id="mainTabContent-dashboard" style="display: none; padding: 24px; background: linear-gradient(to right bottom, #ffffff, #f8fafc);">
-                <div style="display: flex; flex-wrap: wrap; gap: 16px;">
-                    <!-- 総合計エリア -->
-                    <div style="flex: 1; min-width: 200px; background: white; padding: 24px; border-radius: 12px; border: 1px solid #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                        <div style="font-size: 16px; color: #64748b; margin-bottom: 8px; font-weight: bold;">奉納金 合計 <span style="font-size: 12px; font-weight: normal;">(※「空」除外)</span></div>
-                        <div style="font-size: 36px; font-weight: 900; color: #b91c1c;">
-                            <span id="statTotalMoney">0</span> <span style="font-size: 18px; font-weight: normal; color: #475569;">円</span>
-                        </div>
-                    </div>
-                    <!-- 印刷枚数エリア -->
-                    <div style="flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                        <div style="font-size: 16px; color: #64748b; margin-bottom: 12px; font-weight: bold; text-align: center;">テンプレート別 印刷枚数</div>
-                        <div style="display: flex; justify-content: space-around; align-items: center; height: 100%;">
-                            <div style="text-align: center;">
-                                <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">萬圓用</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #334155;"><span id="statCount10000">0</span><span style="font-size: 14px; font-weight: normal;">枚</span></div>
-                            </div>
-                            <div style="text-align: center;">
-                                <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">阡圓用</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #334155;"><span id="statCount5000">0</span><span style="font-size: 14px; font-weight: normal;">枚</span></div>
-                            </div>
-                            <div style="text-align: center;">
-                                <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">フリー</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #334155;"><span id="statCountFree">0</span><span style="font-size: 14px; font-weight: normal;">枚</span></div>
-                            </div>
-                            <div style="text-align: center; border-left: 2px solid #e2e8f0; padding-left: 20px;">
-                                <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">総計</div>
-                                <div style="font-size: 28px; font-weight: bold; color: #0f172a;"><span id="statCountTotal">0</span><span style="font-size: 16px; font-weight: normal;">枚</span></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div> <!-- End 集計タブ -->
-        </div>
+<!-- 集計ダッシュボードは常時表示版（上部）に統一。旧タブ版はID重複とデッドUIのため削除 -->
 
         <!-- デバッグログ表示エリア -->
         <div id="debugLogContainer">
@@ -1623,7 +1591,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=36.0"></script>
+    <script src="app.js?v=40"></script>
 
 </body>
 </html>

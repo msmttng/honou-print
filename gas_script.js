@@ -121,6 +121,23 @@ function doPost(e) {
     const reqId = params.id || "";
     const token = params.token || "";
     
+    // 削除アクションの処理
+    if (params.action === "delete" && reqId) {
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const idVals = sheet.getRange(2, 5, lastRow - 1, 1).getValues();
+        for (let i = 0; i < idVals.length; i++) {
+          if (idVals[i][0] === reqId) {
+            sheet.deleteRow(i + 2);
+            return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "deleted" }))
+                                 .setMimeType(ContentService.MimeType.JSON);
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "not_found" }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     // 冪等性: reqId がある場合、すでに同じIDが登録されていないか確認
     if (reqId) {
       const lastRow = sheet.getLastRow();

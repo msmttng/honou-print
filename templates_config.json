@@ -1,5 +1,5 @@
-﻿{
-    "config_version": 18,
+{
+    "config_version": 20,
     "default_font": "HGSGyoshotai",
     "templates": {
         "10000en": {
@@ -77,5 +77,6 @@
                 }
             }
         }
-    }
+    },
+    "_note": "このファイルは参照用です。実行時の設定は app.js の getFallbackConfig() が正となります。変更する際は両方を同期してください。"
 }
