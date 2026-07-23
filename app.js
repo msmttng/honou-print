@@ -694,7 +694,7 @@ function selectTemplate(templateKey) {
     const amountAutocompleteWrapper = document.getElementById("amountAutocompleteWrapper");
     
     if (templateKey === "10000en" || templateKey === "1000en") {
-        amountLabel.textContent = "任意の金額の数字一文字 (例: 一, 二, 五)";
+        amountLabel.textContent = "任意の金額の数字一文字 (例: 壱, 弐, 伍)";
         if(amountAutocompleteWrapper) amountAutocompleteWrapper.style.display = "none";
         else amountInput.style.display = "none";
         if(amountSelect) amountSelect.style.display = "block";
@@ -1073,6 +1073,9 @@ function parseAmountForForm(record) {
         if (val.endsWith("萬圓也") || val.endsWith("阡圓也") || val.endsWith("阡圆也")) {
             val = val.substring(0, val.length - 3);
         }
+        // 旧データ（一/二/三/五）を大字（壱/弐/参/伍）に正規化してセレクトと一致させる
+        const daijiMap = {'一':'壱','二':'弐','三':'参','五':'伍'};
+        if (daijiMap[val]) val = daijiMap[val];
     }
     return val;
 }
@@ -1584,9 +1587,9 @@ function saveRecord(showNotice = true) {
 
     let dbAmount = amountInput;
     if (currentTemplate === "10000en") {
-        dbAmount = `金${amountInput || "一"}萬圓也`;
+        dbAmount = `金${amountInput || "壱"}萬圓也`;
     } else if (currentTemplate === "1000en") {
-        dbAmount = `金${amountInput || "一"}阡圓也`;
+        dbAmount = `金${amountInput || "壱"}阡圓也`;
     }
     // 「空」タグは金額文字列の末尾に付与（文中への混入を防ぐ）
     if (isEmpty) {
@@ -2040,7 +2043,7 @@ function clearForm() {
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
     const amountSelect = document.getElementById("amountSelect");
-    if (amountSelect) amountSelect.value = "一";
+    if (amountSelect) amountSelect.value = "壱";
     const emptyCheck = document.getElementById("emptyCheck");
     if (emptyCheck) emptyCheck.checked = false;
     updatePreview();
@@ -2672,7 +2675,7 @@ function parseKanjiNumber(str) {
     }
 
     // 3. 漢数字をパース
-    const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9};
+    const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '伍':5, '六':6, '七':7, '八':8, '九':9};
     const smallUnitMap = {'阡':1000, '千':1000, '百':100, '十':10};
     const bigUnitMap = {'萬':10000, '万':10000, '億':100000000};
 
