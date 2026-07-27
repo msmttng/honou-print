@@ -318,6 +318,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     loadDesignSettings();
     await loadDbRecords();
     renderTable();
+    setDefaultBagNo(true);
 
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
     config = getFallbackConfig();
@@ -998,6 +999,7 @@ function resetCalibration() {
 
 // --- リアルタイムプレビュー用デバウンス制御 ---
 function triggerAutoUpdate() {
+    updateAmountEcho();
     if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
     autoUpdateTimer = setTimeout(() => {
         updatePreview();
@@ -1452,6 +1454,7 @@ async function generatePDF(isPrinting = false, override = null) {
 
 // --- リアルタイムプレビュー更新（チラつき防止版） ---
 async function updatePreview() {
+    updateAmountEcho();
     const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
 
@@ -1526,6 +1529,47 @@ async function updatePreview() {
     }
 }
 
+// --- 金額の入力ミス防止（併記＋確認ダイアログ） ---
+function getComposedAmount() {
+    const amountSelect = document.getElementById("amountSelect");
+    const amountInputEl = document.getElementById("amountInput");
+    const raw = currentTemplate === "free"
+        ? (amountInputEl ? amountInputEl.value.trim() : "")
+        : (amountSelect ? amountSelect.value : (amountInputEl ? amountInputEl.value.trim() : ""));
+    let full;
+    if (currentTemplate === "10000en") full = `金${raw || "壱"}萬圓也`;
+    else if (currentTemplate === "1000en") full = `金${raw || "壱"}阡圓也`;
+    else full = raw;
+    return { raw: raw, full: full, yen: parseKanjiNumber(full) };
+}
+function updateAmountEcho() {
+    const el = document.getElementById("amountEcho");
+    if (!el) return;
+    const info = getComposedAmount();
+    if (currentTemplate === "free") {
+        if (info.yen > 0) {
+            el.innerHTML = `内容: <b>${escapeHTML(info.full)}</b> ＝ <b>${info.yen.toLocaleString()}円</b>`;
+            el.style.color = "#0369a1";
+        } else {
+            el.textContent = info.full ? `内容: ${info.full}` : "";
+            el.style.color = "#64748b";
+        }
+    } else {
+        el.innerHTML = `内容: <b>${escapeHTML(info.full)}</b> ＝ <b>${info.yen.toLocaleString()}円</b>`;
+        el.style.color = "#0369a1";
+    }
+}
+function confirmAmountBeforePrint() {
+    const name = (document.getElementById("nameInput").value || "").trim();
+    const info = getComposedAmount();
+    if ((currentTemplate === "10000en" || currentTemplate === "1000en") && info.yen <= 0) {
+        return confirm(`⚠ 金額が正しく認識できませんでした（${info.full}）。\nこのまま続けますか？`);
+    }
+    const yenStr = info.yen > 0 ? `（${info.yen.toLocaleString()}円）` : "";
+    const msg = `この内容で印刷・登録します。よろしいですか？\n\n奉納者: ${name || "（未入力）"} 様\n金額/物品: ${info.full} ${yenStr}`;
+    return confirm(msg);
+}
+
 // --- 印刷 / PDF保存アクション ---
 async function printPDF() {
     const nameInput = document.getElementById("nameInput").value.trim();
@@ -1533,6 +1577,7 @@ async function printPDF() {
         showToast("氏名を入力してから印刷してください", "error");
         return;
     }
+    if (!confirmAmountBeforePrint()) return;
 
     showStatus("印刷用データを準備中...", true);
     const pdfBlob = await generatePDF(true);
@@ -1571,11 +1616,29 @@ async function printPDF() {
     }
 }
 
+// --- 奉納袋番号（自動採番＋手修正） ---
+function nextBagNumber() {
+    let max = 0;
+    for (const r of dbRecords) {
+        const n = parseInt(r.bagNo, 10);
+        if (!isNaN(n) && n > max) max = n;
+    }
+    return max + 1;
+}
+// フォームの番号欄に次の番号をセット（force=true で既存値も上書き）
+function setDefaultBagNo(force) {
+    const el = document.getElementById("bagNoInput");
+    if (!el) return;
+    if (force || !el.value.trim()) el.value = nextBagNumber();
+}
+
 // --- データベース（履歴登録・表示）処理 ---
 function saveRecord(showNotice = true) {
     const nameInput = document.getElementById("nameInput").value.trim();
     const amountSelect = document.getElementById("amountSelect");
     let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
+    const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
+    const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
 
     const emptyCheck = document.getElementById("emptyCheck");
     const isEmpty = !!(emptyCheck && emptyCheck.checked && amountInput !== "");
@@ -1613,6 +1676,8 @@ function saveRecord(showNotice = true) {
             dbRecords[idx].name = nameInput;
             dbRecords[idx].amount = dbAmount;
             dbRecords[idx].template = currentTemplate;
+            dbRecords[idx].bagNo = bagNoInput;
+            dbRecords[idx].address = addressInput;
             dbRecords[idx].sync = "pending";
             dbRecords[idx].date = new Date().toISOString();
             
@@ -1636,10 +1701,13 @@ function saveRecord(showNotice = true) {
             template: currentTemplate,
             name: nameInput,
             amount: dbAmount,
+            bagNo: bagNoInput,
+            address: addressInput,
             sync: "pending" // IndexedDB Outbox パターン
         };
 
         dbRecords.unshift(newRecord); // メモリ上(UI表示用)に追加
+        setDefaultBagNo(true); // 次の番号へ自動で繰り上げ
         
         // IndexedDBへ保存し、同期を試行する
         idbPutRecord(newRecord).then(() => {
@@ -1686,6 +1754,8 @@ function loadRecordToForm(id) {
     
     // 2. フォーム入力値の設定（[空]タグは剥がしてから復元する）
     document.getElementById("nameInput").value = record.name;
+    if (document.getElementById("bagNoInput")) document.getElementById("bagNoInput").value = (record.bagNo || "").toString();
+    if (document.getElementById("addressInput")) document.getElementById("addressInput").value = record.address || "";
 
     const val = parseAmountForForm(record); // "金五萬圓也 [空]" → "五" など
     if (record.template === "10000en" || record.template === "1000en") {
@@ -1761,7 +1831,7 @@ function renderTable() {
     }
 
     if (filteredRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="no-data">登録されている名簿データはありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="no-data">登録されている名簿データはありません。</td></tr>`;
         return;
     }
 
@@ -1788,7 +1858,9 @@ function renderTable() {
             <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
             <td data-label="日時">${escapeHTML(dateStr)}</td>
             <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
+            <td data-label="番号">${escapeHTML((r.bagNo || "").toString())}</td>
             <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
+            <td data-label="住所">${escapeHTML(r.address || "")}</td>
             <td data-label="金額/物品">${escapeHTML(r.amount)}</td>
             <td data-label="">
                 <div class="action-btns">
@@ -1813,7 +1885,7 @@ function renderTable() {
 // --- CSVエクスポート機能 ---
 function buildCsvContent(records) {
     let csvContent = "\ufeff"; // Excelでの文字化けを防ぐためのBOM付きUTF-8
-    csvContent += "日時,テンプレート種類,奉納者氏名,金額/物品名\n";
+    csvContent += "日時,テンプレート種類,奉納袋番号,奉納者氏名,住所,金額/物品名\n";
 
     records.forEach(r => {
         const dateStr = formatDateForDisplay(r.date);
@@ -1822,8 +1894,10 @@ function buildCsvContent(records) {
         // カンマやダブルクォーテーションのエスケープ
         const escapedName = `"${(r.name || "").replace(/"/g, '""')}"`;
         const escapedAmount = `"${(r.amount || "").replace(/"/g, '""')}"`;
+        const escapedBagNo = `"${(r.bagNo || "").toString().replace(/"/g, '""')}"`;
+        const escapedAddress = `"${(r.address || "").replace(/"/g, '""')}"`;
 
-        csvContent += `${dateStr},${templateStr},${escapedName},${escapedAmount}\n`;
+        csvContent += `${dateStr},${templateStr},${escapedBagNo},${escapedName},${escapedAddress},${escapedAmount}\n`;
     });
     return csvContent;
 }
@@ -1892,6 +1966,7 @@ async function mobilePrintPDF() {
         showToast("氏名を入力してから保存してください", "error");
         return;
     }
+    if (!confirmAmountBeforePrint()) return;
     showStatus("PDF生成中...", true);
     const pdfBlob = await generatePDF(true);
     
@@ -1916,6 +1991,7 @@ async function mobilePrintAirPrint() {
         showToast("氏名を入力してから印刷してください", "error");
         return;
     }
+    if (!confirmAmountBeforePrint()) return;
 
     showStatus("印刷データ準備中...", true);
     
@@ -2042,6 +2118,8 @@ function clearForm() {
     
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
+    if (document.getElementById("addressInput")) document.getElementById("addressInput").value = "";
+    setDefaultBagNo(true);
     const amountSelect = document.getElementById("amountSelect");
     if (amountSelect) amountSelect.value = "壱";
     const emptyCheck = document.getElementById("emptyCheck");
@@ -2183,6 +2261,8 @@ async function pushPendingRecords() {
                 templateType: templateTypeStr,
                 name: record.name,
                 amount: record.amount,
+                bagNo: record.bagNo || "",
+                address: record.address || "",
                 token: token
             };
 
@@ -2334,6 +2414,8 @@ async function restoreFromGAS() {
                 template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
                 name: r.name,
                 amount: r.amount,
+                bagNo: r.bagNo || "",
+                address: r.address || "",
                 sync: "synced"
             };
             // putはID重複時に上書きとなるため、再実行しても増殖しない

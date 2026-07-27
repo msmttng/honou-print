@@ -33,7 +33,7 @@ function doGet(e) {
       const hLastRow = sheet.getLastRow();
       if (hLastRow >= 2) {
         // A列からE列まで取得 (日時, 種類, 氏名, 金額, ID)
-        const historyData = sheet.getRange(2, 1, hLastRow - 1, 5).getValues();
+        const historyData = sheet.getRange(2, 1, hLastRow - 1, 8).getValues();
         for (let r = 0; r < historyData.length; r++) {
           const row = historyData[r];
           records.push({
@@ -41,7 +41,9 @@ function doGet(e) {
             templateType: row[1],
             name: row[2],
             amount: row[3],
-            id: row[4] || ""
+            id: row[4] || "",
+            bagNo: row[6] || "",
+            address: row[7] || ""
           });
         }
       }
@@ -111,15 +113,22 @@ function doPost(e) {
     // 履歴シートがない場合は自動作成
     if (!sheet) {
       sheet = ss.insertSheet("履歴");
-      sheet.appendRow(["日時", "台紙種類", "奉納者氏名", "金額/物品名", "ID", "Token"]);
+      sheet.appendRow(["日時", "台紙種類", "奉納者氏名", "金額/物品名", "ID", "Token", "奉納袋番号", "住所"]);
     }
     
+    // 既存シートに新カラム（奉納袋番号・住所）のヘッダが無ければ補う
+    if (sheet.getRange(1, 7).getValue() === "") {
+      sheet.getRange(1, 7, 1, 2).setValues([["奉納袋番号", "住所"]]);
+    }
+
     const timestamp = params.timestamp || new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
     const templateType = params.templateType || "";
     const name = params.name || "";
     const amount = params.amount || "";
     const reqId = params.id || "";
     const token = params.token || "";
+    const bagNo = params.bagNo || "";
+    const address = params.address || "";
     
     // 削除アクションの処理
     if (params.action === "delete" && reqId) {
@@ -147,7 +156,7 @@ function doPost(e) {
         for (let i = 0; i < idVals.length; i++) {
           if (idVals[i][0] === reqId) {
             // すでに存在する場合は上書きして終了（再送時の重複回避）
-            sheet.getRange(i + 2, 1, 1, 6).setValues([[timestamp, templateType, name, amount, reqId, token]]);
+            sheet.getRange(i + 2, 1, 1, 8).setValues([[timestamp, templateType, name, amount, reqId, token, bagNo, address]]);
             return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "updated" }))
                                  .setMimeType(ContentService.MimeType.JSON);
           }
@@ -156,7 +165,7 @@ function doPost(e) {
     }
     
     // 新規追加
-    sheet.appendRow([timestamp, templateType, name, amount, reqId, token]);
+    sheet.appendRow([timestamp, templateType, name, amount, reqId, token, bagNo, address]);
     
     return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "inserted" }))
                          .setMimeType(ContentService.MimeType.JSON);
