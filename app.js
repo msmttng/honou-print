@@ -1273,8 +1273,25 @@ async function generatePDF(isPrinting = false, override = null) {
             const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
-                // 縦書きの描画処理
-                let chars = Array.from(textValue);
+                // 縦書きの描画処理（(株) ㈱ (有) ㈲ やカッコ類を縦書き表記へ自動最適化）
+                let normText = textValue
+                    .replace(/㈱/g, "︵株︶")
+                    .replace(/㈲/g, "︵有︶")
+                    .replace(/\(株\)/gi, "︵株︶")
+                    .replace(/（株）/g, "︵株︶")
+                    .replace(/\[株\]/g, "︵株︶")
+                    .replace(/\(有\)/gi, "︵有︶")
+                    .replace(/（有）/g, "︵有︶")
+                    .replace(/\[有\]/g, "︵有︶")
+                    .replace(/\(社\)/gi, "︵社︶")
+                    .replace(/（社）/g, "︵社︶")
+                    .replace(/\(財\)/gi, "︵財︶")
+                    .replace(/（財）/g, "︵財︶")
+                    .replace(/\(/g, "︵").replace(/\)/g, "︶")
+                    .replace(/\[/g, "︵").replace(/\]/g, "︶")
+                    .replace(/（/g, "︵").replace(/）/g, "︶");
+
+                let chars = Array.from(normText);
                 let honorificChars = [];
                 let honorificSpacingPt = 0;
                 
@@ -1350,11 +1367,11 @@ async function generatePDF(isPrinting = false, override = null) {
                     }
                     
                     let charToDraw = item.char;
-                    if (item.char === "ー" || item.char === "─" || item.char === "―" || item.char === "-") {
+                    if ("ー─―-～〜~".includes(item.char)) {
                         charToDraw = "丨";
-                    } else if (item.char === "（") {
+                    } else if ("（([".includes(item.char)) {
                         charToDraw = "︵";
-                    } else if (item.char === "）") {
+                    } else if ("）)]".includes(item.char)) {
                         charToDraw = "︶";
                     }
                     
