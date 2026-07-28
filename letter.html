@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案内状・御礼状 作成 - 奉納ビラ印刷システム</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&family=Noto+Sans+JP:wght@400;700&family=Shippori+Mincho+B1:wght@400;600&family=Yuji+Syuku&family=Zen+Maru+Gothic:wght@400;500&family=Kaisei+Tokumin:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: "HGSGyoshotai";
+    src: url("hgs_gyoshotai.ttf") format("truetype");
+    font-display: swap;
+  }
+  :root {
+    --primary: #8C2D38; --primary-dark: #4A1C1D; --bg: #f8fafc;
+    --border: #cbd5e1; --text: #1e293b; --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Noto Sans JP", sans-serif; background: var(--bg); color: var(--text); }
+
+  header.appbar { background: var(--primary-dark); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  header.appbar h1 { font-size: 16px; font-weight: 700; }
+  header.appbar a { color: #fff; text-decoration: none; font-size: 13px; opacity: .85; }
+
+  .tabs { display: flex; gap: 6px; padding: 10px 16px 0; }
+  .tab-btn { padding: 10px 22px; border: 1px solid var(--border); border-bottom: none; background: #e2e8f0; border-radius: 10px 10px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .tab-btn.active { background: #fff; color: var(--primary); }
+
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 14px; color: var(--primary-dark); border-left: 4px solid var(--primary); padding-left: 8px; margin-bottom: 12px; }
+  .form-group { margin-bottom: 12px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], select, textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
+  textarea { min-height: 130px; line-height: 1.7; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-secondary { background: #e2e8f0; color: var(--text); }
+  .btn-block { width: 100%; justify-content: center; }
+
+  /* 宛名リスト */
+  .recipient-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .recipient-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; cursor: pointer; }
+  .recipient-item:hover { background: #fdf2f4; }
+  .recipient-item .addr { color: var(--muted); font-size: 11px; }
+  .count-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ===== はがきプレビュー ===== */
+  .preview-wrap { display: flex; flex-wrap: wrap; gap: 16px; }
+  .hagaki {
+    width: 300px; height: 444px; /* 100x148mm 比率 */
+    background: #fff; border: 1px solid var(--border); border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08); position: relative; overflow: hidden;
+  }
+  .hagaki-label { position: absolute; left: 6px; bottom: 4px; font-size: 10px; color: #94a3b8; }
+
+  /* 裏面（返信面/本文面）: 縦書き */
+  .ura-body {
+    position: absolute; inset: 24px 20px; writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl;
+    font-size: 15px; line-height: 2.1; letter-spacing: 2px;
+  }
+  .ura-title { font-size: 19px; font-weight: 600; margin-left: 10px; }
+  .rsvp-block { margin-left: 8px; }
+  .rsvp-choice { margin: 8px 0; }
+  .maru { border: 1.5px solid transparent; border-radius: 50%; padding: 1px 2px; }
+  .fill-line { text-decoration: underline; text-underline-offset: 4px; }
+
+  /* 表面（宛名面） */
+  .omote-zip { position: absolute; top: 24px; right: 18px; display: flex; gap: 3px; }
+  .omote-zip span { width: 22px; height: 30px; border: 1.5px solid #d48; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+  .omote-addr { position: absolute; top: 72px; right: 30px; writing-mode: vertical-rl; font-size: 15px; line-height: 1.9; height: 330px; letter-spacing: 2px; }
+  .omote-name { position: absolute; top: 90px; left: 50%; transform: translateX(50%); writing-mode: vertical-rl; font-size: 26px; letter-spacing: 8px; height: 320px; }
+  .omote-sender { position: absolute; bottom: 20px; left: 18px; writing-mode: vertical-rl; font-size: 11px; line-height: 1.8; height: 200px; color: #111; }
+
+  /* ===== 印刷 ===== */
+  .print-area { display: none; }
+  @media print {
+    body > *:not(.print-area) { display: none !important; }
+    .print-area { display: block; }
+    @page { size: 100mm 148mm; margin: 0; }
+    .print-hagaki { width: 100mm; height: 148mm; position: relative; overflow: hidden; page-break-after: always; }
+    .print-hagaki .ura-body { inset: 10mm 8mm; font-size: 4.6mm; }
+    .print-hagaki .ura-title { font-size: 6mm; }
+    .print-hagaki .omote-zip { top: 8mm; right: 6mm; }
+    .print-hagaki .omote-zip span { width: 7mm; height: 10mm; font-size: 5mm; border-width: .4mm; }
+    .print-hagaki .omote-addr { top: 24mm; right: 10mm; font-size: 5mm; height: 110mm; }
+    .print-hagaki .omote-name { top: 30mm; font-size: 9mm; height: 106mm; }
+    .print-hagaki .omote-sender { bottom: 7mm; left: 6mm; font-size: 3.6mm; height: 66mm; }
+  }
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <a href="index.html">← 戻る</a>
+  <h1>案内状・御礼状 作成</h1>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" id="tabAnnai" onclick="switchMode('annai')">案内状</button>
+  <button class="tab-btn" id="tabOrei" onclick="switchMode('orei')">御礼状</button>
+</div>
+
+<div class="layout">
+  <!-- ===== 左パネル: 設定 ===== -->
+  <div>
+    <div class="panel" style="margin-bottom: 14px;">
+      <h2>書体・差出人（共通）</h2>
+      <div class="form-group">
+        <label>書体</label>
+        <select id="fontSelect" onchange="applyFontAndRender()">
+          <option value="HGSGyoshotai">行書体（毛筆・既存）</option>
+          <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
+          <option value="'Noto Serif JP', serif" selected>明朝体（標準・正式）</option>
+          <option value="'Shippori Mincho B1', serif">しっぽり明朝（上品）</option>
+          <option value="'Kaisei Tokumin', serif">解星 特ミン（楷書風）</option>
+          <option value="'Zen Maru Gothic', sans-serif">丸ゴシック（親しみ）</option>
+          <option value="'Noto Sans JP', sans-serif">ゴシック体（現代的）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>差出人（宛名面の左下に印字）</label>
+        <textarea id="senderText" style="min-height:70px;" oninput="renderAll()" placeholder="例：&#10;穴守稲荷神社 奉賛会&#10;東京都大田区羽田五丁目2番7号"></textarea>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom: 14px;" id="annaiPanel">
+      <h2>案内状の内容（裏面＝出欠返信面）</h2>
+      <div class="form-group">
+        <label>表題</label>
+        <input type="text" id="annaiTitle" value="例大祭 直会のご案内" oninput="renderAll()">
+      </div>
+      <div class="form-group">
+        <label>日程①（縦書き・漢数字推奨）</label>
+        <div class="row2">
+          <input type="text" id="date1" value="七月二十九日（土）" oninput="renderAll()">
+          <input type="text" id="time1" value="十七時三十分" oninput="renderAll()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>日程②（不要なら空欄）</label>
+        <div class="row2">
+          <input type="text" id="date2" value="七月三十日（日）" oninput="renderAll()">
+          <input type="text" id="time2" value="十五時" oninput="renderAll()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>記入欄ラベル</label>
+        <div class="row2">
+          <input type="text" id="fieldLabel1" value="団体名" oninput="renderAll()">
+          <input type="text" id="fieldLabel2" value="代表者名" oninput="renderAll()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>結びの文</label>
+        <input type="text" id="annaiClosing" value="よろしくお願いします。" oninput="renderAll()">
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom: 14px; display: none;" id="oreiPanel">
+      <h2>御礼状の内容</h2>
+      <div class="form-group">
+        <label>テンプレート（選んでから自由に修正できます）</label>
+        <select id="oreiTemplate" onchange="loadOreiTemplate()">
+          <option value="hounou">奉納御礼</option>
+          <option value="sairei">祭礼終了のご報告と御礼</option>
+          <option value="kishin">御寄進御礼</option>
+          <option value="free">汎用（白紙から）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>表題</label>
+        <input type="text" id="oreiTitle" value="御礼" oninput="renderAll()">
+      </div>
+      <div class="form-group">
+        <label>本文（縦書きで印刷されます。改行＝改列）</label>
+        <textarea id="oreiBody" style="min-height:200px;" oninput="renderAll()"></textarea>
+      </div>
+      <div class="form-group">
+        <label>差出人署名（本文末尾）</label>
+        <input type="text" id="oreiSign" value="" oninput="renderAll()" placeholder="例：穴守稲荷神社 宮司 ○○○○">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>宛名（奉納者名簿から選択）</h2>
+      <input type="text" id="recipientSearch" placeholder="氏名で検索..." oninput="renderRecipients()" style="margin-bottom:8px;">
+      <div class="recipient-list" id="recipientList"></div>
+      <div class="count-note"><span id="selCount">0</span> 名選択中（住所未登録の方は宛名面の住所が空欄になります）</div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn btn-secondary" onclick="toggleAllRecipients()">全選択/解除</button>
+        <button class="btn btn-primary btn-block" onclick="printAll()">🖨 選択した宛名で印刷</button>
+      </div>
+      <div class="count-note" style="margin-top:8px;">※印刷は「裏面→表面」の順に1名ずつ出力されます。プリンタの両面設定（短辺とじ）を使うと1枚に収まります。</div>
+    </div>
+  </div>
+
+  <!-- ===== 右パネル: プレビュー ===== -->
+  <div class="panel">
+    <h2>プレビュー（左：裏面 ／ 右：表面・宛名）</h2>
+    <div class="preview-wrap">
+      <div class="hagaki"><div id="uraPreview"></div><span class="hagaki-label">裏面</span></div>
+      <div class="hagaki"><div id="omotePreview"></div><span class="hagaki-label">表面（宛名）</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="print-area" id="printArea"></div>
+
+<script>
+// ================= 状態 =================
+let mode = 'annai';
+let dbRecords = [];
+const selectedIds = new Set();
+
+// ================= 御礼状テンプレート（仮・後日差し替え可） =================
+const OREI_TEMPLATES = {
+  hounou: "拝啓　時下ますますご清栄のこととお慶び申し上げます。\nこのたびは当社例大祭に際し、ご丁重なる御奉納を賜り、誠にありがたく厚く御礼申し上げます。\nおかげをもちまして、祭礼を滞りなく斎行することができました。\n皆様のご健勝とご多幸を心よりご祈念申し上げます。\n敬具",
+  sairei: "拝啓　益々ご清祥のこととお慶び申し上げます。\n先般の例大祭には、格別のご支援ご協力を賜り、誠にありがとうございました。\nおかげさまで諸行事を無事に終えることができましたことをご報告申し上げますとともに、心より御礼申し上げます。\n敬具",
+  kishin: "拝啓　時下ますますご隆昌のこととお慶び申し上げます。\nこのたびはご丁重なる御寄進を賜り、誠に恐縮に存じます。\nご厚志は大切に活用させていただきます。\n略儀ながら書中をもちまして御礼申し上げます。\n敬具",
+  free: ""
+};
+
+// ================= IndexedDB（本体アプリと同じDBを読む） =================
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("PdfMailMergeDB", 2);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function loadRecords() {
+  try {
+    const db = await openDB();
+    await new Promise((resolve) => {
+      const tx = db.transaction("records", "readonly");
+      const req = tx.objectStore("records").getAll();
+      req.onsuccess = () => {
+        const all = req.result || [];
+        // 削除待ちを除外し、氏名で重複排除（最新を採用）
+        const map = new Map();
+        all.filter(r => r.sync !== "pending_delete")
+           .sort((a,b) => new Date(a.date) - new Date(b.date))
+           .forEach(r => map.set(r.name, r));
+        dbRecords = [...map.values()].sort((a,b) => (a.name||"").localeCompare(b.name||"", "ja"));
+        resolve();
+      };
+      req.onerror = () => resolve();
+    });
+  } catch (e) { console.warn("名簿の読み込みに失敗:", e); }
+  renderRecipients();
+}
+
+// ================= UI =================
+function switchMode(m) {
+  mode = m;
+  document.getElementById("tabAnnai").classList.toggle("active", m === 'annai');
+  document.getElementById("tabOrei").classList.toggle("active", m === 'orei');
+  document.getElementById("annaiPanel").style.display = m === 'annai' ? "block" : "none";
+  document.getElementById("oreiPanel").style.display = m === 'orei' ? "block" : "none";
+  renderAll();
+}
+function loadOreiTemplate() {
+  const key = document.getElementById("oreiTemplate").value;
+  document.getElementById("oreiBody").value = OREI_TEMPLATES[key] || "";
+  const titles = { hounou: "御奉納御礼", sairei: "御礼", kishin: "御寄進御礼", free: "御礼" };
+  document.getElementById("oreiTitle").value = titles[key] || "御礼";
+  renderAll();
+}
+function applyFontAndRender() { renderAll(); }
+function currentFont() { return document.getElementById("fontSelect").value; }
+
+function renderRecipients() {
+  const q = (document.getElementById("recipientSearch").value || "").trim();
+  const list = document.getElementById("recipientList");
+  list.innerHTML = "";
+  dbRecords
+    .filter(r => !q || (r.name || "").includes(q))
+    .forEach(r => {
+      const div = document.createElement("div");
+      div.className = "recipient-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selectedIds.has(r.id);
+      cb.addEventListener("change", () => {
+        cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
+        updateSelCount(); renderAll();
+      });
+      const span = document.createElement("span");
+      span.innerHTML = `${escapeHTML(r.name || "")} <span class="addr">${escapeHTML(r.address || "（住所未登録）")}</span>`;
+      div.appendChild(cb); div.appendChild(span);
+      div.addEventListener("click", (e) => { if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); } });
+      list.appendChild(div);
+    });
+  updateSelCount();
+}
+function toggleAllRecipients() {
+  const q = (document.getElementById("recipientSearch").value || "").trim();
+  const visible = dbRecords.filter(r => !q || (r.name || "").includes(q));
+  const allSelected = visible.every(r => selectedIds.has(r.id));
+  visible.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
+  renderRecipients(); renderAll();
+}
+function updateSelCount() { document.getElementById("selCount").textContent = selectedIds.size; }
+function escapeHTML(s) { return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// ================= 面のHTML生成 =================
+function buildUraHTML() {
+  const font = currentFont();
+  if (mode === 'annai') {
+    const t = v => escapeHTML(document.getElementById(v).value);
+    const line2 = document.getElementById("date2").value.trim()
+      ? `<div class="rsvp-block"><div>${t('date2')}</div><div>${t('time2')}</div><div class="rsvp-choice">参加 ・ 不参加 （　　名）</div></div>` : "";
+    return `<div class="ura-body" style="font-family:${font};">
+      <div class="ura-title">${t('annaiTitle')}</div>
+      <div class="rsvp-block"><div>${t('date1')}</div><div>${t('time1')}</div><div class="rsvp-choice">参加 ・ 不参加 （　　名）</div></div>
+      ${line2}
+      <div>${t('fieldLabel1')}〔<span class="fill-line">　　　　　　　</span>〕</div>
+      <div>${t('fieldLabel2')}〔<span class="fill-line">　　　　　　　</span>〕</div>
+      <div>${t('annaiClosing')}</div>
+    </div>`;
+  } else {
+    const title = escapeHTML(document.getElementById("oreiTitle").value);
+    const body = escapeHTML(document.getElementById("oreiBody").value).replace(/\n/g, "<br>");
+    const sign = escapeHTML(document.getElementById("oreiSign").value);
+    return `<div class="ura-body" style="font-family:${font}; font-size:13px; line-height:2;">
+      <div class="ura-title">${title}</div>
+      <div style="margin-left:6px;">${body}</div>
+      ${sign ? `<div style="margin-left:10px;">${sign}</div>` : ""}
+    </div>`;
+  }
+}
+function buildOmoteHTML(record) {
+  const font = currentFont();
+  const addr = escapeHTML(record ? (record.address || "") : "東京都大田区羽田○丁目○番○号");
+  const name = escapeHTML(record ? (record.name || "") : "奉納 太郎");
+  const sender = escapeHTML(document.getElementById("senderText").value).replace(/\n/g, "<br>");
+  // 郵便番号: 住所から7桁を推定（例: 144-0043 / 1440043）
+  let zip = "";
+  const m = (record ? (record.address || "") : "").match(/(\d{3})[-‐ー]?(\d{4})/);
+  if (m) zip = m[1] + m[2];
+  const zipBoxes = [...Array(7)].map((_, i) => `<span>${zip[i] || ""}</span>`).join("");
+  return `
+    <div class="omote-zip">${zipBoxes}</div>
+    <div class="omote-addr" style="font-family:${font};">${addr}</div>
+    <div class="omote-name" style="font-family:${font};">${name}　様</div>
+    <div class="omote-sender" style="font-family:${font};">${sender}</div>`;
+}
+
+// ================= プレビュー =================
+function renderAll() {
+  document.getElementById("uraPreview").innerHTML = buildUraHTML();
+  const first = dbRecords.find(r => selectedIds.has(r.id));
+  document.getElementById("omotePreview").innerHTML = buildOmoteHTML(first || null);
+}
+
+// ================= 印刷 =================
+function printAll() {
+  const targets = dbRecords.filter(r => selectedIds.has(r.id));
+  if (targets.length === 0) { alert("宛名を1名以上選択してください"); return; }
+  const area = document.getElementById("printArea");
+  let html = "";
+  for (const r of targets) {
+    html += `<div class="print-hagaki">${buildUraHTML()}</div>`;
+    html += `<div class="print-hagaki">${buildOmoteHTML(r)}</div>`;
+  }
+  area.innerHTML = html;
+  window.print();
+}
+
+// ================= 起動 =================
+window.addEventListener("DOMContentLoaded", () => {
+  loadOreiTemplate();
+  loadRecords();
+  renderAll();
+});
+</script>
+</body>
+</html>
