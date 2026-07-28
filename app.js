@@ -320,6 +320,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderTable();
     setDefaultBagNo(true);
 
+    // 拡張設定（用紙サイズ・連番・領収書）の初期化
+    const savedPreset = localStorage.getItem("pdf_mail_merge_paper_preset") || "tanzaku";
+    const presetSelect = document.getElementById("paperPresetSelect");
+    if (presetSelect) presetSelect.value = savedPreset;
+    onPaperPresetChange(savedPreset);
+
+    const savedAutoBag = localStorage.getItem("pdf_mail_merge_auto_bag_toggle");
+    const bagToggle = document.getElementById("autoBagNoToggle");
+    if (bagToggle) bagToggle.checked = savedAutoBag !== "false";
+    toggleAutoBagNo();
+
+    const savedReceipt = localStorage.getItem("pdf_mail_merge_receipt_opt") === "true";
+    const receiptChk = document.getElementById("printReceiptCheck");
+    if (receiptChk) receiptChk.checked = savedReceipt;
+
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
     config = getFallbackConfig();
 
@@ -1708,6 +1723,7 @@ function saveRecord(showNotice = true) {
 
         dbRecords.unshift(newRecord); // メモリ上(UI表示用)に追加
         setDefaultBagNo(true); // 次の番号へ自動で繰り上げ
+        incrementAutoBagSeq(); // ⚡自動連番カウントアップ
         
         // IndexedDBへ保存し、同期を試行する
         idbPutRecord(newRecord).then(() => {
@@ -3034,3 +3050,448 @@ async function flushOfflineQueueFromModal() {
     showToast("未送信データの同期を開始します...");
     await pushPendingRecords();
 }
+
+// =================================-------------------
+// 🚀 追加拡張機能: GASコードコピー、用紙サイズプリセット、自動連番、CSVインポート、設定出入力
+// =================================-------------------
+
+// 1. GASコードをワンクリックでクリップボードへコピー
+function copyGasCodeToClipboard() {
+    const gasCodeText = `/**
+ * 奉納ビラ 印刷＆名簿管理システム 用 Google Apps Script
+ */
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (e.parameter && e.parameter.mode === "restore") {
+    let records = [];
+    const sheet = ss.getSheetByName("履歴");
+    if (sheet) {
+      const hLastRow = getRealLastRow(sheet);
+      if (hLastRow >= 2) {
+        const historyData = sheet.getRange(2, 1, hLastRow - 1, 8).getValues();
+        for (let r = 0; r < historyData.length; r++) {
+          const row = historyData[r];
+          if (row[0] === "" && row[1] === "" && row[2] === "") continue;
+          records.push({ timestamp: row[0], name: row[1], amount: row[2] || row[3] || "", bagNo: row[4] || "", address: row[5] || "", id: row[6] || "", token: row[7] || "" });
+        }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ records: records })).setMimeType(ContentService.MimeType.JSON);
+  }
+  const data = { "names": [], "items": [] };
+  const allSheets = ss.getSheets();
+  for (let i = 0; i < allSheets.length; i++) {
+    const s = allSheets[i];
+    if (s.getName().startsWith("履歴")) {
+      const hLastRow = getRealLastRow(s);
+      if (hLastRow >= 2) {
+        const historyData = s.getRange(2, 2, hLastRow - 1, 3).getValues();
+        for (let r = 0; r < historyData.length; r++) {
+          const hName = historyData[r][0];
+          if (hName) data.names.push(hName.toString().trim());
+          const hAmount = historyData[r][1], hItem = historyData[r][2];
+          [hAmount, hItem].forEach(val => {
+            if (val) {
+              const str = val.toString().trim();
+              if (!/^[¥\\0-9,]+$/.test(str) && !str.includes("合計")) data.items.push(str);
+            }
+          });
+        }
+      }
+    }
+  }
+  data.names = data.names.filter((v, i, a) => a.indexOf(v) === i);
+  data.items = data.items.filter((v, i, a) => a.indexOf(v) === i);
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try {
+    if (!lock.tryLock(10000)) return ContentService.createTextOutput(JSON.stringify({ result: "error", message: "System busy." })).setMimeType(ContentService.MimeType.JSON);
+    const params = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName("履歴") || ss.insertSheet("履歴");
+    setupHeaders(sheet);
+    const timestamp = params.timestamp || new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+    const name = params.name || "", rawAmount = (params.amount || "").toString().trim(), reqId = params.id || "", token = params.token || "", bagNo = params.bagNo || "", address = params.address || "";
+    const isKuu = rawAmount.includes("[空]") || rawAmount.includes("空"), parsedAmount = parseAmount(rawAmount);
+    let amountVal = "", itemVal = "";
+    if (isKuu || parsedAmount === null) itemVal = rawAmount; else amountVal = parsedAmount;
+
+    if (params.action === "delete" && reqId) {
+      const dataLastRow = getRealDataLastRow(sheet);
+      if (dataLastRow >= 2) {
+        const idVals = sheet.getRange(2, 7, dataLastRow - 1, 1).getValues();
+        for (let i = 0; i < idVals.length; i++) {
+          if (idVals[i][0] === reqId) { sheet.deleteRow(i + 2); applyFormattingAndSummary(sheet); updateDashboardSheet(ss); return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "deleted" })).setMimeType(ContentService.MimeType.JSON); }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "not_found" })).setMimeType(ContentService.MimeType.JSON);
+    }
+    const realDataLastRow = getRealDataLastRow(sheet);
+    let targetRow = realDataLastRow + 1;
+    if (reqId && realDataLastRow >= 2) {
+      const idVals = sheet.getRange(2, 7, realDataLastRow - 1, 1).getValues();
+      for (let i = 0; i < idVals.length; i++) {
+        if (idVals[i][0] === reqId) { targetRow = i + 2; break; }
+      }
+    }
+    sheet.getRange(targetRow, 1, 1, 8).setValues([[timestamp, name, amountVal, itemVal, bagNo, address, reqId, token]]);
+    applyFormattingAndSummary(sheet);
+    updateDashboardSheet(ss);
+    return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "processed" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ result: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  } finally { lock.releaseLock(); }
+}
+
+function setupHeaders(sheet) {
+  sheet.getRange(1, 1, 1, 8).setValues([["日時", "奉納者氏名", "金額", "物品 / [空]", "奉納袋番号", "住所", "ID", "Token"]]);
+}
+
+function parseAmount(valStr) {
+  if (!valStr || valStr.includes("空")) return null;
+  let cleaned = valStr.replace(/[¥\\,円金也\s]/g, "");
+  if (/^\d+$/.test(cleaned)) return "¥" + parseInt(cleaned, 10).toLocaleString("ja-JP");
+  const kanjiMap = { '零':0, '一':1, '二':2, '三':3, '四':4, '五':5, '伍':5, '六':6, '七':7, '八':8, '九':9, '壱':1, '弐':2, '参':3 };
+  const unitMap = { '十':10, '拾':10, '百':100, '佰':100, '千':1000, '阡':1000, '万':10000, '萬':10000 };
+  let total = 0, section = 0, number = 0;
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (kanjiMap[char] !== undefined) number = kanjiMap[char];
+    else if (/\d/.test(char)) number = parseInt(char, 10);
+    else if (unitMap[char] !== undefined) {
+      const unit = unitMap[char];
+      if (unit === 10000) { section = (section + number) * unit; total += section; section = 0; }
+      else section += (number === 0 ? 1 : number) * unit;
+      number = 0;
+    }
+  }
+  total += section + number;
+  return total > 0 ? "¥" + total.toLocaleString("ja-JP") : null;
+}
+
+function getRealDataLastRow(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 1;
+  const values = sheet.getRange(1, 1, lastRow, 8).getValues();
+  let dataLast = 1;
+  for (let r = 1; r < lastRow; r++) {
+    if (values[r][1] === "合計金額" || (values[r][2] && values[r][2].toString().startsWith("合計金額")) || (values[r][3] && values[r][3].toString().startsWith("物品まとめ"))) break;
+    if (values[r][0] || values[r][1] || values[r][2] || values[r][3] || values[r][4] || values[r][5] || values[r][6] || values[r][7]) dataLast = r + 1;
+  }
+  return dataLast;
+}
+function getRealLastRow(sheet) { return sheet.getLastRow(); }
+
+function applyFormattingAndSummary(sheet) {
+  const dataLastRow = getRealDataLastRow(sheet), maxRow = sheet.getLastRow();
+  if (maxRow > dataLastRow) sheet.getRange(dataLastRow + 1, 1, maxRow - dataLastRow, 8).clearContent().clearFormat();
+  sheet.getRange(1, 1, 1, 8).setBackground("#4A1C1D").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  if (dataLastRow >= 2) {
+    sheet.getRange(2, 1, dataLastRow - 1, 8).setFontColor("#1E293B").setFontWeight("normal").setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
+    for (let r = 2; r <= dataLastRow; r++) sheet.getRange(r, 1, 1, 8).setBackground(r % 2 === 0 ? "#FFFFFF" : "#FDF2F4");
+    sheet.getRange(2, 1, dataLastRow - 1, 1).setHorizontalAlignment("center");
+    sheet.getRange(2, 2, dataLastRow - 1, 1).setHorizontalAlignment("left");
+    sheet.getRange(2, 3, dataLastRow - 1, 1).setHorizontalAlignment("right");
+    sheet.getRange(2, 4, dataLastRow - 1, 1).setHorizontalAlignment("left");
+    sheet.getRange(2, 5, dataLastRow - 1, 1).setHorizontalAlignment("center");
+    sheet.getRange(2, 6, dataLastRow - 1, 2).setHorizontalAlignment("left");
+    let totalAmount = 0, itemsList = [];
+    const cData = sheet.getRange(2, 3, dataLastRow - 1, 2).getValues();
+    for (let i = 0; i < cData.length; i++) {
+      if (cData[i][0]) { const num = parseInt(cData[i][0].toString().replace(/[¥\\,]/g, ""), 10); if (!isNaN(num)) totalAmount += num; }
+      if (cData[i][1] && cData[i][1].toString().trim() !== "") itemsList.push(cData[i][1].toString().trim());
+    }
+    const summaryRow1 = dataLastRow + 3, summaryRow2 = summaryRow1 + 1;
+    sheet.getRange(summaryRow1, 2).setValue("合計金額").setFontWeight("bold").setHorizontalAlignment("right");
+    sheet.getRange(summaryRow1, 3).setValue("¥" + totalAmount.toLocaleString("ja-JP")).setFontWeight("bold").setHorizontalAlignment("right");
+    sheet.getRange(summaryRow1, 1, 1, 8).setBackground("#EAD7DA").setBorder(true, false, false, false, false, false, "#4A1C1D", SpreadsheetApp.BorderStyle.DOUBLE);
+    const itemsSummaryStr = itemsList.length > 0 ? "物品まとめ (" + itemsList.length + "件): " + itemsList.join(" / ") : "物品まとめ: なし";
+    sheet.getRange(summaryRow2, 2).setValue("物品まとめ").setFontWeight("bold").setHorizontalAlignment("right");
+    sheet.getRange(summaryRow2, 4).setValue(itemsSummaryStr).setFontWeight("bold").setHorizontalAlignment("left");
+    sheet.getRange(summaryRow2, 1, 1, 8).setBackground("#FDF2F4");
+  }
+}
+
+function updateDashboardSheet(ss) {
+  let dSheet = ss.getSheetByName("集計") || ss.insertSheet("集計", 0);
+  dSheet.clear();
+  const historySheet = ss.getSheetByName("履歴");
+  if (!historySheet) return;
+  const dataLastRow = getRealDataLastRow(historySheet);
+  const now = new Date(), todayStr = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/M/d"), monthStr = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/M");
+  let todayTotal = 0, todayCount = 0, todayItemsCount = 0, monthTotal = 0, monthCount = 0, allTotal = 0, allCount = 0, allItemsCount = 0;
+  let breakdown = { "10,000円": { count: 0, sum: 0 }, "5,000円": { count: 0, sum: 0 }, "3,000円": { count: 0, sum: 0 }, "その他（1,000円等）": { count: 0, sum: 0 }, "物品（[空]等）": { count: 0, sum: 0 } };
+  if (dataLastRow >= 2) {
+    const rawData = historySheet.getRange(2, 1, dataLastRow - 1, 4).getValues();
+    for (let r = 0; r < rawData.length; r++) {
+      const dateVal = rawData[r][0] ? rawData[r][0].toString() : "", amtVal = rawData[r][2] ? rawData[r][2].toString() : "", itemVal = rawData[r][3] ? rawData[r][3].toString() : "";
+      const num = parseInt(amtVal.replace(/[¥\\,]/g, ""), 10), isNum = !isNaN(num) && num > 0;
+      allCount++;
+      if (isNum) {
+        allTotal += num;
+        if (num === 10000) { breakdown["10,000円"].count++; breakdown["10,000円"].sum += num; }
+        else if (num === 5000) { breakdown["5,000円"].count++; breakdown["5,000円"].sum += num; }
+        else if (num === 3000) { breakdown["3,000円"].count++; breakdown["3,000円"].sum += num; }
+        else { breakdown["その他（1,000円等）"].count++; breakdown["その他（1,000円等）"].sum += num; }
+      } else if (itemVal !== "") { allItemsCount++; breakdown["物品（[空]等）"].count++; }
+      if (dateVal.includes(todayStr)) { todayCount++; if (isNum) todayTotal += num; if (itemVal !== "") todayItemsCount++; }
+      if (dateVal.includes(monthStr)) { monthCount++; if (isNum) monthTotal += num; }
+    }
+  }
+  dSheet.getRange("A1:F2").merge().setValue("奉納会計・集計ダッシュボード").setBackground("#4A1C1D").setFontColor("#FFFFFF").setFontSize(18).setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dSheet.getRange("A4:F4").merge().setValue("最終更新日時: " + Utilities.formatDate(now, "Asia/Tokyo", "yyyy年MM月dd日 HH:mm:ss")).setFontColor("#64748B").setFontSize(10).setHorizontalAlignment("right");
+  dSheet.getRange("A6:B6").merge().setValue("☀️ 本日の奉納").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("A7:B7").merge().setValue("¥" + todayTotal.toLocaleString("ja-JP")).setBackground("#FDF2F4").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("A8:B8").merge().setValue("奉納件数: " + todayCount + "件 (物品: " + todayItemsCount + "件)").setBackground("#FDF2F4").setFontSize(10).setHorizontalAlignment("center");
+  dSheet.getRange("C6:D6").merge().setValue("📅 今月の奉納 (" + monthStr + ")").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("C7:D7").merge().setValue("¥" + monthTotal.toLocaleString("ja-JP")).setBackground("#FDF2F4").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("C8:D8").merge().setValue("奉納件数: " + monthCount + "件").setBackground("#FDF2F4").setFontSize(10).setHorizontalAlignment("center");
+  dSheet.getRange("E6:F6").merge().setValue("🏆 全 累 計").setBackground("#4A1C1D").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("E7:F7").merge().setValue("¥" + allTotal.toLocaleString("ja-JP")).setBackground("#F7E8EC").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
+  dSheet.getRange("E8:F8").merge().setValue("全件数: " + allCount + "件 (物品: " + allItemsCount + "件)").setBackground("#F7E8EC").setFontSize(10).setHorizontalAlignment("center");
+  dSheet.getRange("A10:F10").merge().setValue("📊 金額・金種別 内訳集計").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("left");
+  dSheet.getRange("A11:D11").setValues([["区分・金種", "件数", "小計 (金額)", "構成比"]]).setBackground("#EAD7DA").setFontWeight("bold").setHorizontalAlignment("center");
+  let rowIdx = 12;
+  ["10,000円", "5,000円", "3,000円", "その他（1,000円等）", "物品（[空]等）"].forEach(cat => {
+    const item = breakdown[cat];
+    const ratio = allCount > 0 ? (item.count / allCount * 100).toFixed(1) + "%" : "0.0%";
+    const sumStr = cat.includes("物品") ? "-" : "¥" + item.sum.toLocaleString("ja-JP");
+    dSheet.getRange(rowIdx, 1, 1, 4).setValues([[cat, item.count + " 件", sumStr, ratio]]);
+    dSheet.getRange(rowIdx, 1).setHorizontalAlignment("left");
+    dSheet.getRange(rowIdx, 2, 1, 3).setHorizontalAlignment("right");
+    rowIdx++;
+  });
+  dSheet.getRange(rowIdx, 1, 1, 4).setValues([["総合計", allCount + " 件", "¥" + allTotal.toLocaleString("ja-JP"), "100.0%"]]).setFontWeight("bold").setBackground("#EAD7DA");
+  dSheet.getRange(rowIdx, 1).setHorizontalAlignment("left");
+  dSheet.getRange(rowIdx, 2, 1, 3).setHorizontalAlignment("right");
+  dSheet.getRange("A6:F8").setBorder(true, true, true, true, true, true, "#8C2D38", SpreadsheetApp.BorderStyle.SOLID);
+  dSheet.getRange("A11:D" + rowIdx).setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
+  dSheet.setColumnWidth(1, 160); dSheet.setColumnWidth(2, 100); dSheet.setColumnWidth(3, 140); dSheet.setColumnWidth(4, 100); dSheet.setColumnWidth(5, 140); dSheet.setColumnWidth(6, 140);
+}`;
+
+    navigator.clipboard.writeText(gasCodeText).then(() => {
+        alert("📋 配布用 GASコードをクリップボードにコピーしました！\n\n【次の手順】\n1. 自分のGoogleスプレッドシートを開きます\n2. メニュー「拡張機能」 ➡️ 「Apps Script」を開きます\n3. コードを全消去して Ctrl + V で貼り付けます\n4. 「デプロイ」 ➡️ 「新しいデプロイ」 (アクセス権: 全員) を実行してください。");
+    }).catch(err => {
+        alert("コピーに失敗しました。手動でコピーしてください。");
+    });
+}
+
+// 2. 用紙サイズプリセット設定
+function onPaperPresetChange(val) {
+    const customDiv = document.getElementById("customPaperDimensions");
+    const wInput = document.getElementById("paperWidthInput");
+    const hInput = document.getElementById("paperHeightInput");
+    
+    if (val === "tanzaku") {
+        if (customDiv) customDiv.style.display = "none";
+        paperSizeSettings.width = 105;
+        paperSizeSettings.height = 390;
+    } else if (val === "a4") {
+        if (customDiv) customDiv.style.display = "none";
+        paperSizeSettings.width = 210;
+        paperSizeSettings.height = 297;
+    } else if (val === "b5") {
+        if (customDiv) customDiv.style.display = "none";
+        paperSizeSettings.width = 182;
+        paperSizeSettings.height = 257;
+    } else if (val === "custom") {
+        if (customDiv) customDiv.style.display = "grid";
+        if (wInput) paperSizeSettings.width = parseFloat(wInput.value) || 105;
+        if (hInput) paperSizeSettings.height = parseFloat(hInput.value) || 390;
+    }
+    localStorage.setItem("pdf_mail_merge_paper_preset", val);
+    localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
+    if (typeof updatePreview === "function") updatePreview();
+}
+
+function saveCustomPaperSize() {
+    const wInput = document.getElementById("paperWidthInput");
+    const hInput = document.getElementById("paperHeightInput");
+    if (wInput && hInput) {
+        paperSizeSettings.width = parseFloat(wInput.value) || 105;
+        paperSizeSettings.height = parseFloat(hInput.value) || 390;
+        localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
+        if (typeof updatePreview === "function") updatePreview();
+    }
+}
+
+// 3. 奉納袋番号の自動連番管理
+function toggleAutoBagNo() {
+    const toggle = document.getElementById("autoBagNoToggle");
+    const bagInput = document.getElementById("bagNoInput");
+    if (toggle && toggle.checked) {
+        const nextNo = getNextAutoBagNo();
+        if (bagInput && !bagInput.value) bagInput.value = nextNo;
+    }
+    localStorage.setItem("pdf_mail_merge_auto_bag_toggle", toggle ? toggle.checked : true);
+}
+
+function getNextAutoBagNo() {
+    const datePrefix = new Date().toLocaleDateString("ja-JP", { month: "2-digit", day: "2-digit" }).replace(/\//g, "");
+    let lastSeq = parseInt(localStorage.getItem("pdf_mail_merge_bag_seq_" + datePrefix) || "1", 10);
+    return `${datePrefix}-${String(lastSeq).padStart(3, '0')}`;
+}
+
+function incrementAutoBagSeq() {
+    const toggle = document.getElementById("autoBagNoToggle");
+    if (toggle && toggle.checked) {
+        const datePrefix = new Date().toLocaleDateString("ja-JP", { month: "2-digit", day: "2-digit" }).replace(/\//g, "");
+        let lastSeq = parseInt(localStorage.getItem("pdf_mail_merge_bag_seq_" + datePrefix) || "1", 10);
+        localStorage.setItem("pdf_mail_merge_bag_seq_" + datePrefix, (lastSeq + 1).toString());
+        const bagInput = document.getElementById("bagNoInput");
+        if (bagInput) bagInput.value = `${datePrefix}-${String(lastSeq + 1).padStart(3, '0')}`;
+    }
+}
+
+// 4. 設定のみのJSONエクスポート
+function exportSettingsOnly() {
+    const settingsData = {
+        appVersion: "43",
+        exportDate: new Date().toISOString(),
+        gasUrl: localStorage.getItem("pdf_mail_merge_gas_url") || "",
+        designSettings: designSettings,
+        paperPreset: localStorage.getItem("pdf_mail_merge_paper_preset") || "tanzaku",
+        paperSize: paperSizeSettings,
+        receiptOption: localStorage.getItem("pdf_mail_merge_receipt_opt") === "true"
+    };
+    const jsonStr = JSON.stringify(settingsData, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `honou_settings_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// 5. CSV一括インポートモーダル制御
+let parsedCsvRecords = [];
+
+function openCsvImportModal() {
+    const modal = document.getElementById("csvImportModal");
+    const overlay = document.getElementById("csvImportModalOverlay");
+    if (modal && overlay) {
+        modal.classList.add("open");
+        overlay.classList.add("open");
+    }
+}
+
+function closeCsvImportModal() {
+    const modal = document.getElementById("csvImportModal");
+    const overlay = document.getElementById("csvImportModalOverlay");
+    if (modal && overlay) {
+        modal.classList.remove("open");
+        overlay.classList.remove("open");
+    }
+}
+
+function handleCsvFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        let text = evt.target.result;
+        parseAndPreviewCsv(text);
+    };
+    reader.readAsText(file, "utf-8");
+}
+
+function parseAndPreviewCsv(text) {
+    const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== "");
+    if (lines.length === 0) { alert("CSVファイルが空です"); return; }
+
+    parsedCsvRecords = [];
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    
+    let nameIdx = headers.findIndex(h => h.includes("氏名") || h.includes("名前") || h.includes("奉納者"));
+    let amountIdx = headers.findIndex(h => h.includes("金額") || h.includes("物品") || h.includes("初穂料"));
+    let bagNoIdx = headers.findIndex(h => h.includes("番号") || h.includes("袋"));
+    let addressIdx = headers.findIndex(h => h.includes("住所"));
+
+    if (nameIdx === -1) nameIdx = 0;
+    if (amountIdx === -1) amountIdx = 1;
+
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+        if (cols.length <= nameIdx) continue;
+
+        const name = cols[nameIdx] || "";
+        const amount = amountIdx !== -1 && cols[amountIdx] ? cols[amountIdx] : "";
+        const bagNo = bagNoIdx !== -1 && cols[bagNoIdx] ? cols[bagNoIdx] : "";
+        const address = addressIdx !== -1 && cols[addressIdx] ? cols[addressIdx] : "";
+
+        if (name) {
+            parsedCsvRecords.push({ name, amount, bagNo, address, templateType: amount.includes("萬") ? "10000en" : "free" });
+        }
+    }
+
+    const container = document.getElementById("csvPreviewTableContainer");
+    const countText = document.getElementById("csvCountText");
+    const previewArea = document.getElementById("csvPreviewArea");
+    const btnExec = document.getElementById("btnExecuteCsvImport");
+
+    if (container && parsedCsvRecords.length > 0) {
+        let html = `<table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead><tr style="background: #f1f5f9; text-align: left;">
+                <th style="padding: 6px; border: 1px solid #cbd5e1;">氏名</th>
+                <th style="padding: 6px; border: 1px solid #cbd5e1;">金額/物品</th>
+                <th style="padding: 6px; border: 1px solid #cbd5e1;">袋番号</th>
+                <th style="padding: 6px; border: 1px solid #cbd5e1;">住所</th>
+            </tr></thead><tbody>`;
+        
+        parsedCsvRecords.slice(0, 5).forEach(r => {
+            html += `<tr>
+                <td style="padding: 6px; border: 1px solid #cbd5e1;">${r.name}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1;">${r.amount}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1;">${r.bagNo}</td>
+                <td style="padding: 6px; border: 1px solid #cbd5e1;">${r.address}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+        if (countText) countText.textContent = `検出された名簿件数: 全 ${parsedCsvRecords.length} 件`;
+        if (previewArea) previewArea.style.display = "block";
+        if (btnExec) btnExec.disabled = false;
+    }
+}
+
+async function executeCsvImport() {
+    if (parsedCsvRecords.length === 0) return;
+
+    showToast(`名簿 ${parsedCsvRecords.length} 件を一括インポート中...`);
+    let imported = 0;
+
+    for (const rec of parsedCsvRecords) {
+        const id = "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+        const recordData = {
+            id: id,
+            timestamp: new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+            templateType: rec.templateType,
+            name: rec.name,
+            honorific: "様",
+            amount: rec.amount,
+            bagNo: rec.bagNo,
+            address: rec.address,
+            sync: "pending"
+        };
+        await idbPutRecord(recordData);
+        dbRecords.unshift(recordData);
+        if (suggestData.names && !suggestData.names.includes(rec.name)) suggestData.names.push(rec.name);
+        if (rec.amount && suggestData.items && !suggestData.items.includes(rec.amount)) suggestData.items.push(rec.amount);
+        imported++;
+    }
+
+    closeCsvImportModal();
+    showToast(`${imported} 件の名簿を一括インポートしました！`);
+    if (gasUrl) pushPendingRecords().catch(() => {});
+}
+
+function saveReceiptOption() {
+    const chk = document.getElementById("printReceiptCheck");
+    if (chk) localStorage.setItem("pdf_mail_merge_receipt_opt", chk.checked);
+}
+
