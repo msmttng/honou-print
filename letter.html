@@ -40,6 +40,7 @@
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-secondary { background: #e2e8f0; color: var(--text); }
   .btn-block { width: 100%; justify-content: center; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
 
   /* 宛名リスト */
   .recipient-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
@@ -51,29 +52,26 @@
   /* ===== はがきプレビュー ===== */
   .preview-wrap { display: flex; flex-wrap: wrap; gap: 16px; }
   .hagaki {
-    width: 300px; height: 444px; /* 100x148mm 比率 */
+    width: 300px; height: 444px; /* 100x148mm → 3px/mm */
     background: #fff; border: 1px solid var(--border); border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,.08); position: relative; overflow: hidden;
   }
-  .hagaki-label { position: absolute; left: 6px; bottom: 4px; font-size: 10px; color: #94a3b8; }
+  .hagaki-label { position: absolute; left: 6px; bottom: 4px; font-size: 10px; color: #94a3b8; pointer-events: none; }
 
-  /* 裏面（返信面/本文面）: 縦書き */
-  .ura-body {
-    position: absolute; inset: 24px 20px; writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl;
-    font-size: 15px; line-height: 2.1; letter-spacing: 2px;
-  }
-  .ura-title { font-size: 19px; font-weight: 600; margin-left: 10px; }
-  .rsvp-block { margin-left: 8px; }
-  .rsvp-choice { margin: 8px 0; }
-  .maru { border: 1.5px solid transparent; border-radius: 50%; padding: 1px 2px; }
-  .fill-line { text-decoration: underline; text-underline-offset: 4px; }
+  /* 移動可能ブロック */
+  .drag { cursor: grab; }
+  .drag:hover { outline: 1.5px dashed #8C2D38; outline-offset: 2px; }
+  .drag.selected { outline: 2px solid #2563eb; outline-offset: 2px; cursor: grabbing; }
+
+  /* 裏面: 縦書きブロック（個別配置） */
+  .ura-block { position: absolute; writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; font-size: 15px; line-height: 2.1; letter-spacing: 2px; white-space: pre-line; }
 
   /* 表面（宛名面） */
-  .omote-zip { position: absolute; top: 24px; right: 18px; display: flex; gap: 3px; }
+  .omote-zip { position: absolute; display: flex; gap: 3px; }
   .omote-zip span { width: 22px; height: 30px; border: 1.5px solid #d48; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
-  .omote-addr { position: absolute; top: 72px; right: 30px; writing-mode: vertical-rl; font-size: 15px; line-height: 1.9; height: 330px; letter-spacing: 2px; }
-  .omote-name { position: absolute; top: 90px; left: 50%; transform: translateX(50%); writing-mode: vertical-rl; font-size: 26px; letter-spacing: 8px; height: 320px; }
-  .omote-sender { position: absolute; bottom: 20px; left: 18px; writing-mode: vertical-rl; font-size: 11px; line-height: 1.8; height: 200px; color: #111; }
+  .omote-block { position: absolute; writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; letter-spacing: 2px; white-space: pre-line; }
+
+  .hint-bar { font-size: 12px; color: var(--muted); margin: 8px 0; line-height: 1.6; }
 
   /* ===== 印刷 ===== */
   .print-area { display: none; }
@@ -82,13 +80,7 @@
     .print-area { display: block; }
     @page { size: 100mm 148mm; margin: 0; }
     .print-hagaki { width: 100mm; height: 148mm; position: relative; overflow: hidden; page-break-after: always; }
-    .print-hagaki .ura-body { inset: 10mm 8mm; font-size: 4.6mm; }
-    .print-hagaki .ura-title { font-size: 6mm; }
-    .print-hagaki .omote-zip { top: 8mm; right: 6mm; }
-    .print-hagaki .omote-zip span { width: 7mm; height: 10mm; font-size: 5mm; border-width: .4mm; }
-    .print-hagaki .omote-addr { top: 24mm; right: 10mm; font-size: 5mm; height: 110mm; }
-    .print-hagaki .omote-name { top: 30mm; font-size: 9mm; height: 106mm; }
-    .print-hagaki .omote-sender { bottom: 7mm; left: 6mm; font-size: 3.6mm; height: 66mm; }
+    /* 印刷時は px→mm 換算(3px=1mm)でJSがインラインstyleを付与する */
   }
 </style>
 </head>
@@ -111,7 +103,7 @@
       <h2>書体・差出人（共通）</h2>
       <div class="form-group">
         <label>書体</label>
-        <select id="fontSelect" onchange="applyFontAndRender()">
+        <select id="fontSelect" onchange="renderAll()">
           <option value="HGSGyoshotai">行書体（毛筆・既存）</option>
           <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
           <option value="'Noto Serif JP', serif" selected>明朝体（標準・正式）</option>
@@ -187,6 +179,11 @@
 
     <div class="panel">
       <h2>宛名（奉納者名簿から選択）</h2>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button class="btn btn-secondary btn-sm" onclick="loadRecords()">端末の名簿を再読込</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadFromGAS()">☁ スプレッドシートから取得</button>
+      </div>
+      <div class="count-note" id="gasStatus" style="margin: 0 0 8px;"></div>
       <input type="text" id="recipientSearch" placeholder="氏名で検索..." oninput="renderRecipients()" style="margin-bottom:8px;">
       <div class="recipient-list" id="recipientList"></div>
       <div class="count-note"><span id="selCount">0</span> 名選択中（住所未登録の方は宛名面の住所が空欄になります）</div>
@@ -201,9 +198,16 @@
   <!-- ===== 右パネル: プレビュー ===== -->
   <div class="panel">
     <h2>プレビュー（左：裏面 ／ 右：表面・宛名）</h2>
+    <div class="hint-bar">
+      ✋ 文字ブロックは<b>ドラッグで移動</b>できます。クリックで選択後、<b>矢印キー</b>で微調整（Shift+矢印＝大きく移動）。位置は自動保存され、印刷にもそのまま反映されます。
+    </div>
+    <div style="margin-bottom: 8px;">
+      <button class="btn btn-secondary btn-sm" onclick="resetOffsets()">配置をリセット（この面の種類のみ）</button>
+      <span class="count-note" id="posInfo" style="margin-left: 8px;"></span>
+    </div>
     <div class="preview-wrap">
-      <div class="hagaki"><div id="uraPreview"></div><span class="hagaki-label">裏面</span></div>
-      <div class="hagaki"><div id="omotePreview"></div><span class="hagaki-label">表面（宛名）</span></div>
+      <div class="hagaki" id="uraHagaki"><div id="uraPreview" style="position:absolute; inset:0;"></div><span class="hagaki-label">裏面</span></div>
+      <div class="hagaki" id="omoteHagaki"><div id="omotePreview" style="position:absolute; inset:0;"></div><span class="hagaki-label">表面（宛名）</span></div>
     </div>
   </div>
 </div>
@@ -215,6 +219,43 @@
 let mode = 'annai';
 let dbRecords = [];
 const selectedIds = new Set();
+let selectedBlockKey = null;
+
+// 位置オフセット {key: {x, y}} 単位: プレビューpx (3px = 1mm)
+const OFFSET_STORE = "letter_offsets_v2";
+let offsets = {};
+try { offsets = JSON.parse(localStorage.getItem(OFFSET_STORE) || "{}"); } catch (e) { offsets = {}; }
+function saveOffsets() { try { localStorage.setItem(OFFSET_STORE, JSON.stringify(offsets)); } catch (e) {} }
+function off(key) { return offsets[key] || { x: 0, y: 0 }; }
+
+// ================= ブロック定義（基準位置: プレビューpx） =================
+// 裏面（案内状）
+const URA_ANNAI_BLOCKS = [
+  { key: "annai_title",  x: 244, y: 24,  fs: 19, bold: true,  text: () => val("annaiTitle") },
+  { key: "annai_d1",     x: 196, y: 24,  fs: 15, text: () => val("date1") + "\n" + val("time1") },
+  { key: "annai_r1",     x: 158, y: 40,  fs: 14, text: () => "参加 ・ 不参加 （　　名）" },
+  { key: "annai_d2",     x: 120, y: 24,  fs: 15, text: () => val("date2") ? (val("date2") + "\n" + val("time2")) : "" },
+  { key: "annai_r2",     x: 82,  y: 40,  fs: 14, text: () => val("date2") ? "参加 ・ 不参加 （　　名）" : "" },
+  { key: "annai_f1",     x: 54,  y: 30,  fs: 14, text: () => val("fieldLabel1") + "〔　　　　　　　〕" },
+  { key: "annai_f2",     x: 30,  y: 30,  fs: 14, text: () => val("fieldLabel2") + "〔　　　　　　　〕" },
+  { key: "annai_close",  x: 6,   y: 60,  fs: 13, text: () => val("annaiClosing") },
+];
+// 裏面（御礼状）
+const URA_OREI_BLOCKS = [
+  { key: "orei_title", x: 250, y: 26, fs: 19, bold: true, text: () => val("oreiTitle") },
+  { key: "orei_body",  x: 40,  y: 26, fs: 12.5, lh: 2.0, text: () => val("oreiBody") },
+  { key: "orei_sign",  x: 12,  y: 60, fs: 12,  text: () => val("oreiSign") },
+];
+// 表面（宛名面）
+const OMOTE_BLOCKS = [
+  { key: "omote_zip",    x: 0,  y: 0,  zip: true },          // 郵便番号枠 (基準: right:18,top:24)
+  { key: "omote_addr",   x: 250, y: 72, fs: 15, text: (r) => r ? (r.address || "") : "東京都大田区羽田○丁目○番○号" },
+  { key: "omote_name",   x: 140, y: 90, fs: 26, ls: 8, text: (r) => (r ? (r.name || "") : "奉納 太郎") + "　様" },
+  { key: "omote_sender", x: 18, y: 224, fs: 11, lh: 1.8, text: () => val("senderText") },
+];
+
+function val(id) { const el = document.getElementById(id); return el ? el.value : ""; }
+function escapeHTML(s) { return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 // ================= 御礼状テンプレート（仮・後日差し替え可） =================
 const OREI_TEMPLATES = {
@@ -224,13 +265,23 @@ const OREI_TEMPLATES = {
   free: ""
 };
 
-// ================= IndexedDB（本体アプリと同じDBを読む） =================
+// ================= 名簿の取得（端末IndexedDB） =================
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open("PdfMailMergeDB", 2);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+function mergeRecords(list) {
+  // 氏名で重複排除。住所が入っている方を優先して残す
+  const map = new Map();
+  [...dbRecords, ...list].forEach(r => {
+    if (!r || !r.name) return;
+    const cur = map.get(r.name);
+    if (!cur || (!cur.address && r.address)) map.set(r.name, { ...cur, ...r });
+  });
+  dbRecords = [...map.values()].sort((a, b) => (a.name || "").localeCompare(b.name || "", "ja"));
 }
 async function loadRecords() {
   try {
@@ -239,24 +290,58 @@ async function loadRecords() {
       const tx = db.transaction("records", "readonly");
       const req = tx.objectStore("records").getAll();
       req.onsuccess = () => {
-        const all = req.result || [];
-        // 削除待ちを除外し、氏名で重複排除（最新を採用）
-        const map = new Map();
-        all.filter(r => r.sync !== "pending_delete")
-           .sort((a,b) => new Date(a.date) - new Date(b.date))
-           .forEach(r => map.set(r.name, r));
-        dbRecords = [...map.values()].sort((a,b) => (a.name||"").localeCompare(b.name||"", "ja"));
+        const all = (req.result || []).filter(r => r.sync !== "pending_delete");
+        mergeRecords(all);
         resolve();
       };
       req.onerror = () => resolve();
     });
-  } catch (e) { console.warn("名簿の読み込みに失敗:", e); }
+  } catch (e) { console.warn("端末名簿の読み込みに失敗:", e); }
   renderRecipients();
+  renderAll();
+}
+
+// ================= 名簿の取得（スプレッドシート/GAS） =================
+function getGasUrl() {
+  // 本体アプリと同じ保存キーを利用
+  try { const u = localStorage.getItem("pdf_mail_merge_gas_url"); if (u) return u; } catch (e) {}
+  return "";
+}
+async function loadFromGAS() {
+  const status = document.getElementById("gasStatus");
+  let gasUrl = getGasUrl();
+  if (!gasUrl) {
+    gasUrl = prompt("スプレッドシート連携（GAS）のURLを入力してください（本体アプリで設定済みなら自動で使われます）", "https://script.google.com/macros/s/…/exec") || "";
+    if (!gasUrl.trim()) return;
+    try { localStorage.setItem("pdf_mail_merge_gas_url", gasUrl.trim()); } catch (e) {}
+  }
+  status.textContent = "☁ スプレッドシートから取得中...";
+  try {
+    const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "mode=restore&t=" + Date.now();
+    const res = await fetch(fetchUrl);
+    const data = await res.json();
+    if (!data.records || !Array.isArray(data.records)) throw new Error("応答形式が不正です");
+    // GASの新旧どちらの列構成でも読めるように防御的にマッピング
+    const list = data.records.map((r, i) => ({
+      id: r.id || ("gas_" + i + "_" + (r.name || "")),
+      name: (r.name || "").toString().trim(),
+      address: (r.address || "").toString().trim(),
+      bagNo: (r.bagNo || "").toString().trim(),
+      sync: "synced"
+    })).filter(r => r.name);
+    mergeRecords(list);
+    renderRecipients();
+    renderAll();
+    status.textContent = `☁ スプレッドシートから ${list.length}件 取得しました（氏名で統合済み）`;
+  } catch (e) {
+    status.textContent = "取得に失敗しました: " + e.message;
+  }
 }
 
 // ================= UI =================
 function switchMode(m) {
   mode = m;
+  selectedBlockKey = null;
   document.getElementById("tabAnnai").classList.toggle("active", m === 'annai');
   document.getElementById("tabOrei").classList.toggle("active", m === 'orei');
   document.getElementById("annaiPanel").style.display = m === 'annai' ? "block" : "none";
@@ -270,7 +355,6 @@ function loadOreiTemplate() {
   document.getElementById("oreiTitle").value = titles[key] || "御礼";
   renderAll();
 }
-function applyFontAndRender() { renderAll(); }
 function currentFont() { return document.getElementById("fontSelect").value; }
 
 function renderRecipients() {
@@ -300,61 +384,133 @@ function renderRecipients() {
 function toggleAllRecipients() {
   const q = (document.getElementById("recipientSearch").value || "").trim();
   const visible = dbRecords.filter(r => !q || (r.name || "").includes(q));
-  const allSelected = visible.every(r => selectedIds.has(r.id));
+  const allSelected = visible.length > 0 && visible.every(r => selectedIds.has(r.id));
   visible.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
   renderRecipients(); renderAll();
 }
 function updateSelCount() { document.getElementById("selCount").textContent = selectedIds.size; }
-function escapeHTML(s) { return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-// ================= 面のHTML生成 =================
-function buildUraHTML() {
-  const font = currentFont();
-  if (mode === 'annai') {
-    const t = v => escapeHTML(document.getElementById(v).value);
-    const line2 = document.getElementById("date2").value.trim()
-      ? `<div class="rsvp-block"><div>${t('date2')}</div><div>${t('time2')}</div><div class="rsvp-choice">参加 ・ 不参加 （　　名）</div></div>` : "";
-    return `<div class="ura-body" style="font-family:${font};">
-      <div class="ura-title">${t('annaiTitle')}</div>
-      <div class="rsvp-block"><div>${t('date1')}</div><div>${t('time1')}</div><div class="rsvp-choice">参加 ・ 不参加 （　　名）</div></div>
-      ${line2}
-      <div>${t('fieldLabel1')}〔<span class="fill-line">　　　　　　　</span>〕</div>
-      <div>${t('fieldLabel2')}〔<span class="fill-line">　　　　　　　</span>〕</div>
-      <div>${t('annaiClosing')}</div>
-    </div>`;
-  } else {
-    const title = escapeHTML(document.getElementById("oreiTitle").value);
-    const body = escapeHTML(document.getElementById("oreiBody").value).replace(/\n/g, "<br>");
-    const sign = escapeHTML(document.getElementById("oreiSign").value);
-    return `<div class="ura-body" style="font-family:${font}; font-size:13px; line-height:2;">
-      <div class="ura-title">${title}</div>
-      <div style="margin-left:6px;">${body}</div>
-      ${sign ? `<div style="margin-left:10px;">${sign}</div>` : ""}
-    </div>`;
-  }
+// ================= ブロック描画 =================
+function blockStyle(b, forPrint) {
+  const o = off(b.key);
+  const unit = forPrint ? (v) => (v / 3).toFixed(2) + "mm" : (v) => v + "px";
+  const fs = forPrint ? ((b.fs || 15) / 3).toFixed(2) + "mm" : (b.fs || 15) + "px";
+  const ls = (b.ls !== undefined ? b.ls : 2);
+  return `left:${unit(b.x + o.x)}; top:${unit(b.y + o.y)}; font-size:${fs}; ` +
+         `letter-spacing:${forPrint ? (ls / 3).toFixed(2) + "mm" : ls + "px"}; ` +
+         (b.lh ? `line-height:${b.lh}; ` : "line-height:2.1; ") +
+         (b.bold ? "font-weight:600; " : "") +
+         `font-family:${currentFont()};`;
 }
-function buildOmoteHTML(record) {
-  const font = currentFont();
-  const addr = escapeHTML(record ? (record.address || "") : "東京都大田区羽田○丁目○番○号");
-  const name = escapeHTML(record ? (record.name || "") : "奉納 太郎");
-  const sender = escapeHTML(document.getElementById("senderText").value).replace(/\n/g, "<br>");
-  // 郵便番号: 住所から7桁を推定（例: 144-0043 / 1440043）
+function buildZipHTML(record, forPrint) {
+  const o = off("omote_zip");
   let zip = "";
   const m = (record ? (record.address || "") : "").match(/(\d{3})[-‐ー]?(\d{4})/);
   if (m) zip = m[1] + m[2];
-  const zipBoxes = [...Array(7)].map((_, i) => `<span>${zip[i] || ""}</span>`).join("");
-  return `
-    <div class="omote-zip">${zipBoxes}</div>
-    <div class="omote-addr" style="font-family:${font};">${addr}</div>
-    <div class="omote-name" style="font-family:${font};">${name}　様</div>
-    <div class="omote-sender" style="font-family:${font};">${sender}</div>`;
+  const boxes = [...Array(7)].map((_, i) => `<span>${zip[i] || ""}</span>`).join("");
+  const pos = forPrint
+    ? `top:${((24 + o.y) / 3).toFixed(2)}mm; right:${((18 - o.x) / 3).toFixed(2)}mm;`
+    : `top:${24 + o.y}px; right:${18 - o.x}px;`;
+  const boxCss = forPrint ? `--zw:7mm;` : "";
+  return `<div class="omote-zip drag" data-key="omote_zip" style="${pos}">${boxes}</div>`;
+}
+function buildUraHTML(forPrint) {
+  const blocks = mode === 'annai' ? URA_ANNAI_BLOCKS : URA_OREI_BLOCKS;
+  return blocks
+    .filter(b => (b.text ? (b.text() || "").trim() !== "" : true))
+    .map(b => `<div class="ura-block drag" data-key="${b.key}" style="${blockStyle(b, forPrint)}">${escapeHTML(b.text ? b.text() : "")}</div>`)
+    .join("");
+}
+function buildOmoteHTML(record, forPrint) {
+  let html = buildZipHTML(record, forPrint);
+  html += OMOTE_BLOCKS.filter(b => !b.zip)
+    .map(b => `<div class="omote-block drag" data-key="${b.key}" style="${blockStyle(b, forPrint)}">${escapeHTML(b.text ? b.text(record) : "")}</div>`)
+    .join("");
+  return html;
 }
 
-// ================= プレビュー =================
+// ================= プレビュー描画＋ドラッグ =================
 function renderAll() {
-  document.getElementById("uraPreview").innerHTML = buildUraHTML();
+  document.getElementById("uraPreview").innerHTML = buildUraHTML(false);
   const first = dbRecords.find(r => selectedIds.has(r.id));
-  document.getElementById("omotePreview").innerHTML = buildOmoteHTML(first || null);
+  document.getElementById("omotePreview").innerHTML = buildOmoteHTML(first || null, false);
+  attachDragHandlers();
+  updatePosInfo();
+}
+function updatePosInfo() {
+  const info = document.getElementById("posInfo");
+  if (!selectedBlockKey) { info.textContent = ""; return; }
+  const o = off(selectedBlockKey);
+  info.textContent = `選択中: ${selectedBlockKey}　移動量 横 ${(o.x / 3).toFixed(1)}mm / 縦 ${(o.y / 3).toFixed(1)}mm`;
+}
+function attachDragHandlers() {
+  document.querySelectorAll(".drag").forEach(el => {
+    const key = el.dataset.key;
+    if (selectedBlockKey === key) el.classList.add("selected");
+    // マウス
+    el.addEventListener("mousedown", (e) => startDrag(e, el, key, e.clientX, e.clientY));
+    // タッチ
+    el.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      startDrag(e, el, key, t.clientX, t.clientY);
+    }, { passive: false });
+  });
+}
+function startDrag(e, el, key, startX, startY) {
+  e.preventDefault();
+  selectedBlockKey = key;
+  document.querySelectorAll(".drag.selected").forEach(x => x.classList.remove("selected"));
+  el.classList.add("selected");
+  const base = { ...off(key) };
+  const move = (cx, cy) => {
+    offsets[key] = { x: Math.round(base.x + (cx - startX)), y: Math.round(base.y + (cy - startY)) };
+    saveOffsets();
+    renderAll();
+    // 再描画後も選択を維持
+    const nel = document.querySelector(`.drag[data-key="${key}"]`);
+    if (nel) nel.classList.add("selected");
+  };
+  const onMouseMove = (ev) => move(ev.clientX, ev.clientY);
+  const onTouchMove = (ev) => { const t = ev.touches[0]; move(t.clientX, t.clientY); ev.preventDefault(); };
+  const cleanup = () => {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", cleanup);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", cleanup);
+  };
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", cleanup);
+  window.addEventListener("touchmove", onTouchMove, { passive: false });
+  window.addEventListener("touchend", cleanup);
+  updatePosInfo();
+}
+// 矢印キーで微調整
+window.addEventListener("keydown", (e) => {
+  if (!selectedBlockKey) return;
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+    // 入力欄にフォーカスがあるときは無効
+    const tag = (document.activeElement || {}).tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    e.preventDefault();
+    const step = e.shiftKey ? 9 : 1; // 3mm / 約0.33mm
+    const o = { ...off(selectedBlockKey) };
+    if (e.key === "ArrowUp") o.y -= step;
+    if (e.key === "ArrowDown") o.y += step;
+    if (e.key === "ArrowLeft") o.x -= step;
+    if (e.key === "ArrowRight") o.x += step;
+    offsets[selectedBlockKey] = o;
+    saveOffsets();
+    renderAll();
+  }
+});
+function resetOffsets() {
+  const keys = mode === 'annai'
+    ? [...URA_ANNAI_BLOCKS.map(b => b.key), ...OMOTE_BLOCKS.map(b => b.key)]
+    : [...URA_OREI_BLOCKS.map(b => b.key), ...OMOTE_BLOCKS.map(b => b.key)];
+  keys.forEach(k => delete offsets[k]);
+  saveOffsets();
+  selectedBlockKey = null;
+  renderAll();
 }
 
 // ================= 印刷 =================
@@ -364,10 +520,14 @@ function printAll() {
   const area = document.getElementById("printArea");
   let html = "";
   for (const r of targets) {
-    html += `<div class="print-hagaki">${buildUraHTML()}</div>`;
-    html += `<div class="print-hagaki">${buildOmoteHTML(r)}</div>`;
+    html += `<div class="print-hagaki">${buildUraHTML(true)}</div>`;
+    html += `<div class="print-hagaki">${buildOmoteHTML(r, true)}</div>`;
   }
   area.innerHTML = html;
+  // 印刷用: 郵便番号枠のサイズをmmに変換
+  area.querySelectorAll(".omote-zip span").forEach(s => {
+    s.style.width = "7mm"; s.style.height = "10mm"; s.style.fontSize = "5mm"; s.style.borderWidth = "0.4mm";
+  });
   window.print();
 }
 
