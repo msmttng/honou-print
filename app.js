@@ -331,9 +331,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (bagToggle) bagToggle.checked = savedAutoBag !== "false";
     toggleAutoBagNo();
 
-    const savedReceipt = localStorage.getItem("pdf_mail_merge_receipt_opt") === "true";
-    const receiptChk = document.getElementById("printReceiptCheck");
-    if (receiptChk) receiptChk.checked = savedReceipt;
+    const savedIssuer = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "";
+    const issuerInput = document.getElementById("receiptIssuerInput");
+    if (issuerInput) issuerInput.value = savedIssuer;
 
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
     config = getFallbackConfig();
@@ -3493,5 +3493,96 @@ async function executeCsvImport() {
 function saveReceiptOption() {
     const chk = document.getElementById("printReceiptCheck");
     if (chk) localStorage.setItem("pdf_mail_merge_receipt_opt", chk.checked);
+}
+
+// 6. 発行者名の保存
+function saveReceiptIssuer(val) {
+    localStorage.setItem("pdf_mail_merge_receipt_issuer", val || "");
+}
+
+// 7. 単独での奉納受領証（領収書）印刷
+async function printReceiptSingle() {
+    const nameInput = document.getElementById("nameInput").value.trim();
+    const amountSelect = document.getElementById("amountSelect");
+    let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
+    const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
+    const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
+    const issuerName = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "奉納事業実行委員会";
+
+    if (!nameInput) {
+        showToast("奉納者氏名を入力してください", "error");
+        return;
+    }
+
+    let displayAmount = amountInput;
+    if (currentTemplate === "10000en") displayAmount = `一金 ${amountInput || "一"}萬圓也`;
+    else if (currentTemplate === "1000en") displayAmount = `一金 ${amountInput || "一"}阡圓也`;
+
+    showToast("📄 奉納受領証（領収書）を発行中...");
+
+    const todayStr = new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+    const receiptHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>奉納受領証 - ${nameInput} 様</title>
+            <style>
+                body { font-family: 'Yu Mincho', '游明朝', 'Hiragino Mincho ProN', serif; padding: 40px; margin: 0; background: #fff; }
+                .container { border: 3px double #4a1c1d; padding: 30px; position: relative; min-height: 440px; border-radius: 8px; }
+                .header { text-align: center; border-bottom: 2px solid #4a1c1d; padding-bottom: 12px; margin-bottom: 24px; }
+                .title { font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #4a1c1d; }
+                .date-no { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 24px; color: #334155; }
+                .name-box { font-size: 22px; font-weight: bold; border-bottom: 1.5px solid #333; padding-bottom: 6px; margin-bottom: 24px; width: 75%; }
+                .amount-box { font-size: 24px; font-weight: bold; text-align: center; background: #fdf2f4; border: 2px solid #8c2d38; padding: 14px; margin-bottom: 24px; border-radius: 6px; }
+                .proviso { font-size: 15px; margin-bottom: 30px; line-height: 1.6; }
+                .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
+                .issuer { font-size: 18px; font-weight: bold; line-height: 1.6; text-align: right; }
+                .stamp-box { border: 1px dashed #94a3b8; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #64748b; text-align: center; border-radius: 4px; }
+                .note { font-size: 11px; color: #64748b; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+            </style>
+        </head>
+        <body onload="window.print()">
+            <div class="container">
+                <div class="header">
+                    <div class="title">奉 納 受 領 証</div>
+                </div>
+                <div class="date-no">
+                    <div>No. ${bagNoInput || '----'}</div>
+                    <div>日付: ${todayStr}</div>
+                </div>
+                <div class="name-box">
+                    ${nameInput} 様
+                </div>
+                <div class="amount-box">
+                    金額 / 奉納: ${displayAmount}
+                </div>
+                <div class="proviso">
+                    但し 奉納金（初穂料）として、正に受領いたしました。
+                </div>
+                <div class="footer">
+                    <div class="stamp-box">
+                        非課税<br>(印紙不要)
+                    </div>
+                    <div class="issuer">
+                        ${issuerName}<br>
+                        <span style="font-size: 12px; font-weight: normal; color: #475569;">${addressInput ? '（住所: ' + addressInput + '）' : ''}</span>
+                    </div>
+                </div>
+                <div class="note">
+                    ※宗教法人法・印紙税法に基づき、奉納金・初穂料につき収入印紙は非課税となります。
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+
+    const printWin = window.open("", "_blank");
+    if (printWin) {
+        printWin.document.write(receiptHtml);
+        printWin.document.close();
+    } else {
+        alert("ポップアップがブロックされました。ブラウザの設定でポップアップ許可をしてください。");
+    }
 }
 
