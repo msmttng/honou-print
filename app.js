@@ -1032,6 +1032,19 @@ function initDesignSettings() {
     updatePaperSizeUI();
 }
 
+// 縦書き用組文字スタンプ対象マッピング（㍿ のみ除く）
+const KUMI_STAMP_MAP = {
+    "㈱": "（株）",
+    "㈲": "（有）",
+    "㈳": "（社）",
+    "㈶": "（財）",
+    "㈴": "（名）",
+    "㈾": "（資）",
+    "㈿": "（協）",
+    "㊑": "（有）",
+    "㊒": "（株）"
+};
+
 // 縦書き描画用トークン分割（（株）(株) ㈱ （有） (有) ㈲ （代） などの括弧囲み漢字1文字を1マススタンプ化）
 function tokenizeVertical(s) {
     if (!s) return [];
@@ -1993,28 +2006,25 @@ async function generatePDF(isPrinting = false, override = null) {
 
             if (isVertical) {
                 // 縦書きの描画処理
-                // 1. 前処理: 半角 () [] を全角 （） に正規化（縦書きに半角括弧は使わない）
-                let normText = textValue
-                    .replace(/\(/g, "（").replace(/\)/g, "）")
-                    .replace(/\[/g, "（").replace(/\]/g, "）");
-
-                let chars = Array.from(normText);
-                let honorificChars = [];
+                // 前処理: textValue および 敬称文字列をトークン分割
+                const nameTokens = tokenizeVertical(textValue);
+                let honorificTokens = [];
                 let honorificSpacingPt = 0;
                 
                 // 氏名フィールドかつ敬称ありの時
                 if (fieldKey === "name" && nameInput && honorific !== "なし") {
-                    honorificChars = Array.from(honorific === "custom" ? (nameSettings.honorific || "") : honorific);
+                    const honorificText = honorific === "custom" ? (nameSettings.honorific || "") : honorific;
+                    honorificTokens = tokenizeVertical(honorificText);
                     honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
                 }
                 
-                const totalCharsCount = chars.length + honorificChars.length;
+                const totalTokensCount = nameTokens.length + honorificTokens.length;
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
                 
                 // 枠の高さに収まるようにフォントサイズを縮小（すべての文字で文字送りを維持）
-                let currentHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                let currentHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
                 if (currentHeight_pt > height_pt) {
-                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (totalCharsCount * 1.02);
+                    currentFontSize = (height_pt - (totalTokensCount - 1) * charSpacingPt - honorificSpacingPt) / (totalTokensCount * 1.02);
                     const minAllowedSize = Math.max(14, baseFontSize * 0.6); // 下限ガード
                     if (currentFontSize < minAllowedSize) currentFontSize = minAllowedSize;
                 }
