@@ -1837,51 +1837,29 @@ async function generatePDF(isPrinting = false, override = null) {
                         currentY -= honorificSpacingPt; // 敬称スペースの適用
                     }
                     
-                    const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
-                    
-                    let drawX = x_pt;
-                    if (alignment === "center") {
-                        drawX = x_pt - (charWidth / 2);
-                    } else if (alignment === "right") {
-                        drawX = x_pt - charWidth;
-                    }
-                    
                     let charToDraw = item.char;
                     const rotateTargetChars = "（）「」『』【】〔〕ー〜～-―─・";
                     const isRotateChar = rotateTargetChars.includes(charToDraw);
 
-                    const baseDrawOptions = {
-                        x: drawX,
-                        y: currentY,
-                        size: currentFontSize,
-                        font: fontToUse,
-                        color: PDFLib.rgb(0.1, 0.1, 0.1)
-                    };
+                    // ★ 列の縦中心線 (全文字共通)。回転文字専用のXを作らない！
+                    const cellCenterX = x_pt;
                     
-                    if (isRotateChar) {
-                        // 修正1: 回転の基準点を「文字枠の中心 (cx, cy)」にする幾何計算
-                        // カッコ回転位置微調整用オフセット (mm単位)
-                        const PAREN_OFFSET = { x: 0.0, y: 0.0 };
-                        
-                        const cx = x_pt; // 文字マスのX軸中心
-                        const cy = currentY + (currentFontSize * 0.45); // 文字マスのY軸中心
-                        
-                        let rotX = cx + (charWidth / 2) + mmToPt(PAREN_OFFSET.x);
-                        let rotY = cy - (currentFontSize / 2) + mmToPt(PAREN_OFFSET.y);
+                    // ★ セルの縦中心Y
+                    const cellCenterY = currentY + (currentFontSize * 0.35);
 
-                        // 全角括弧のem枠内の偏り補正
-                        if (charToDraw === "（" || charToDraw === "「" || charToDraw === "『" || charToDraw === "【" || charToDraw === "〔") {
-                            rotY += currentFontSize * 0.10;
-                        } else if (charToDraw === "）" || charToDraw === "」" || charToDraw === "』" || charToDraw === "】" || charToDraw === "〕") {
-                            rotY -= currentFontSize * 0.10;
-                        } else if ("ー〜～-―─".includes(charToDraw)) {
-                            rotX = cx + (currentFontSize * 0.38) + mmToPt(PAREN_OFFSET.x);
-                        }
+                    if (isRotateChar) {
+                        // 全角括弧のem枠偏り微調整用 (文字サイズ比 0.0〜0.1)
+                        const PAREN_NUDGE = { x: 0.0, y: 0.0 };
+
+                        let rotX = cellCenterX + (currentFontSize * PAREN_NUDGE.x);
+                        let rotY = cellCenterY + (currentFontSize * PAREN_NUDGE.y);
 
                         const rotDrawOptions = {
-                            ...baseDrawOptions,
                             x: rotX,
                             y: rotY,
+                            size: currentFontSize,
+                            font: fontToUse,
+                            color: PDFLib.rgb(0.1, 0.1, 0.1),
                             rotate: PDFLib.degrees(-90)
                         };
 
@@ -1892,6 +1870,23 @@ async function generatePDF(isPrinting = false, override = null) {
                             firstPage.drawText(charToDraw, { ...rotDrawOptions, x: rotX + 0.3, y: rotY + 0.3 });
                         }
                     } else {
+                        // 通常文字の描画（変更しない）
+                        const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
+                        let drawX = x_pt;
+                        if (alignment === "center") {
+                            drawX = x_pt - (charWidth / 2);
+                        } else if (alignment === "right") {
+                            drawX = x_pt - charWidth;
+                        }
+
+                        const baseDrawOptions = {
+                            x: drawX,
+                            y: currentY,
+                            size: currentFontSize,
+                            font: fontToUse,
+                            color: PDFLib.rgb(0.1, 0.1, 0.1)
+                        };
+
                         firstPage.drawText(charToDraw, baseDrawOptions);
                         if (fieldVal.bold) {
                             firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3 });
@@ -1900,7 +1895,7 @@ async function generatePDF(isPrinting = false, override = null) {
                         }
                     }
                     
-                    // 1文字分の縦高さを均等維持
+                    // ★ 回転文字でも通常文字でも、必ず1セル分の縦送り (spacing) を実行
                     currentY -= spacing;
                 }
             } else {
