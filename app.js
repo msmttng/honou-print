@@ -1136,6 +1136,31 @@ function getFontFamilyCss(fontKey) {
     return "'HGSGyoshotai', serif";
 }
 
+const fontBase64Cache = {};
+
+async function getFontDataUrlForCss(fontKey) {
+    if (fontBase64Cache[fontKey]) {
+        return fontBase64Cache[fontKey];
+    }
+    try {
+        if (fontKey === "HGSGyoshotai") {
+            const fontUrl = "./hgs_gyoshotai.ttf";
+            const resp = await fetch(fontUrl);
+            const blob = await resp.blob();
+            const dataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+            fontBase64Cache[fontKey] = dataUrl;
+            return dataUrl;
+        }
+    } catch (e) {
+        console.warn("フォントBase64変換警告:", e);
+    }
+    return "";
+}
+
 async function renderVerticalTextToPng(htmlContent, fontKey, fontSizePt, charSpacingPt) {
     const box = document.getElementById("nameRenderBox");
     if (!box) return null;
@@ -1150,84 +1175,143 @@ async function renderVerticalTextToPng(htmlContent, fontKey, fontSizePt, charSpa
     box.style.visibility = "visible";
     box.innerHTML = htmlContent;
 
-    // フォント準備を待機
-    if (document.fonts && document.fonts.ready) {
-        await document.fonts.ready;
+    // 1. フォント読み込み完了を待機
+    try {
+        if (document.fonts) {
+            await document.fonts.load(`${fontSizePt}pt ${fontFamilyCss}`);
+            await document.fonts.ready;
+        }
+    } catch (fErr) {
+        console.warn("font load wait warning:", fErr);
     }
 
-    const rect = box.getBoundingClientRect();
-    const widthPx = Math.max(1, Math.ceil(rect.width) + 6);
-    const heightPx = Math.max(1, Math.ceil(rect.height) + 6);
+    // 2. 方式 1: html2canvas 方式 (Tainted Canvas のリスクが一切なく完全・安全・高画質)
+    if (typeof html2canvas === "function") {
+        try {
+            const canvas = await html2canvas(box, {
+                backgroundColor: null,
+                scale: 3.0,
+                logging: false,
+                useCORS: true
+            });
+            box.style.visibility = "hidden";
 
-    const svgStr = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}">
-            <style>
-                .render-body {
-                    margin: 0;
-                    padding: 2px;
-                    background: transparent;
-                    font-family: ${fontFamilyCss};
-                    font-size: ${fontSizeCss};
-                    letter-spacing: ${letterSpacingCss};
-                    writing-mode: vertical-rl;
-                    -webkit-writing-mode: vertical-rl;
-                    white-space: nowrap;
-                    line-height: 1;
-                    color: #1a1a1a;
-                }
-                .tcu {
-                    text-combine-upright: all;
-                    -webkit-text-combine: all;
-                    font-size: 0.88em;
-                }
-            </style>
-            <foreignObject width="100%" height="100%">
-                <div xmlns="http://www.w3.org/1999/xhtml" class="render-body">
-                    ${htmlContent}
-                </div>
-            </foreignObject>
-        </svg>
-    `;
+            const dataUrl = canvas.toDataURL("image/png");
+            const base64Str = dataUrl.split(",")[1];
+            const binaryStr = atob(base64Str);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
 
-    const img = new Image();
-    const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
+            const widthPx = canvas.width / 3.0;
+            const heightPx = canvas.height / 3.0;
 
-    await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = (err) => {
-            console.warn("SVG load warning:", err);
-            resolve();
+            addAppLog("info", `html2canvas方式で縦書きPNG生成完了 (${fontKey})`);
+            return {
+                pngBytes: bytes,
+                widthPt: pxToPt(widthPx),
+                heightPt: pxToPt(heightPx),
+                aspect: widthPx / heightPx
+            };
+        } catch (hErr) {
+            console.warn("html2canvas 失敗、SVG方式にフォールバック:", hErr);
+        }
+    }
+
+    // 3. 方式 2: SVG foreignObject (Base64 フォント埋め込み ＆ Try-Catch 安全ガード)
+    try {
+        const fontDataUrl = await getFontDataUrlForCss(fontKey);
+        const rect = box.getBoundingClientRect();
+        const widthPx = Math.max(1, Math.ceil(rect.width) + 6);
+        const heightPx = Math.max(1, Math.ceil(rect.height) + 6);
+
+        const fontStyleRule = fontDataUrl ? `
+            @font-face {
+                font-family: ${fontFamilyCss};
+                src: url(${fontDataUrl});
+            }
+        ` : '';
+
+        const svgStr = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}">
+                <style>
+                    ${fontStyleRule}
+                    .render-body {
+                        margin: 0;
+                        padding: 2px;
+                        background: transparent;
+                        font-family: ${fontFamilyCss};
+                        font-size: ${fontSizeCss};
+                        letter-spacing: ${letterSpacingCss};
+                        writing-mode: vertical-rl;
+                        -webkit-writing-mode: vertical-rl;
+                        white-space: nowrap;
+                        line-height: 1;
+                        color: #1a1a1a;
+                    }
+                    .tcu {
+                        text-combine-upright: all;
+                        -webkit-text-combine: all;
+                        font-size: 0.88em;
+                    }
+                </style>
+                <foreignObject width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" class="render-body">
+                        ${htmlContent}
+                    </div>
+                </foreignObject>
+            </svg>
+        `;
+
+        const img = new Image();
+        const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(svgBlob);
+
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+            img.src = url;
+        });
+
+        if (img.decode) {
+            try { await img.decode(); } catch (dErr) {}
+        }
+
+        const scale = 3.0;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.floor(widthPx * scale);
+        canvas.height = Math.floor(heightPx * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+
+        box.style.visibility = "hidden";
+
+        const dataUrl = canvas.toDataURL("image/png");
+        const base64Str = dataUrl.split(",")[1];
+        const binaryStr = atob(base64Str);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        addAppLog("info", `SVG foreignObject方式で縦書きPNG生成完了 (${fontKey})`);
+        return {
+            pngBytes: bytes,
+            widthPt: pxToPt(widthPx),
+            heightPt: pxToPt(heightPx),
+            aspect: widthPx / heightPx
         };
-        img.src = url;
-    });
-
-    const scale = 3.0;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(widthPx * scale);
-    canvas.height = Math.floor(heightPx * scale);
-    const ctx = canvas.getContext("2d");
-    ctx.scale(scale, scale);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-
-    box.style.visibility = "hidden";
-
-    const dataUrl = canvas.toDataURL("image/png");
-    const base64Str = dataUrl.split(",")[1];
-    const binaryStr = atob(base64Str);
-    const len = binaryStr.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
+    } catch (svgErr) {
+        console.error("SVG描画エラー (Tainted Canvas 等):", svgErr);
+        addAppLog("error", "SVG 描画エラー: " + (svgErr.message || svgErr), svgErr.stack || "");
+        box.style.visibility = "hidden";
+        return null;
     }
-
-    return {
-        pngBytes: bytes,
-        widthPt: pxToPt(widthPx),
-        heightPt: pxToPt(heightPx),
-        aspect: widthPx / heightPx
-    };
 }
 
 function onFontChange(fontValue) {
