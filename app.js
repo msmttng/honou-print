@@ -72,6 +72,148 @@ let isPdfGenerating = false;       // PDF生成中ガード
 let pendingPdfUpdate = false;      // PDF生成後追い要求
 let duplicatePendingAction = null; // 重複確認モーダルのコールバック
 
+// --- 住所・郵便番号自動補完辞書 (町名の長い順 ZIP_DICT) ---
+const ZIP_DICT = [
+  ["羽田旭町", "144-0042", "東京都大田区"],
+  ["羽田空港", "144-0041", "東京都大田区"],
+  ["蒲田本町", "144-0053", "東京都大田区"],
+  ["大森本町", "143-0011", "東京都大田区"],
+  ["大森東", "143-0012", "東京都大田区"],
+  ["大森中", "143-0014", "東京都大田区"],
+  ["大森西", "143-0015", "東京都大田区"],
+  ["大森南", "143-0013", "東京都大田区"],
+  ["大森北", "143-0016", "東京都大田区"],
+  ["東糀谷", "144-0033", "東京都大田区"],
+  ["西糀谷", "144-0034", "東京都大田区"],
+  ["新蒲田", "144-0054", "東京都大田区"],
+  ["東蒲田", "144-0031", "東京都大田区"],
+  ["西蒲田", "144-0051", "東京都大田区"],
+  ["南蒲田", "144-0035", "東京都大田区"],
+  ["東矢口", "146-0094", "東京都大田区"],
+  ["本羽田", "144-0044", "東京都大田区"],
+  ["羽田", "144-0043", "東京都大田区"],
+  ["萩中", "144-0047", "東京都大田区"],
+  ["蒲田", "144-0052", "東京都大田区"],
+  ["矢口", "146-0093", "東京都大田区"],
+  ["池上", "146-0082", "東京都大田区"],
+  ["久が原", "146-0085", "東京都大田区"],
+  ["雪谷大塚町", "145-0067", "東京都大田区"],
+  ["田園調布", "145-0071", "東京都大田区"],
+  ["南千束", "145-0062", "東京都大田区"],
+  ["北千束", "145-0063", "東京都大田区"],
+  ["石川町", "145-0061", "東京都大田区"],
+  ["中央", "143-0024", "東京都大田区"],
+  ["山王", "143-0023", "東京都大田区"],
+  ["鋼管通", "210-0852", "神奈川県川崎市川崎区"],
+  ["富士見", "210-0011", "神奈川県川崎市川崎区"],
+  ["中瀬", "210-0818", "神奈川県川崎市川崎区"],
+  ["追分町", "210-0835", "神奈川県川崎市川崎区"],
+  ["伊勢町", "210-0805", "神奈川県川崎市川崎区"],
+  ["殿町", "210-0821", "神奈川県川崎市川崎区"],
+  ["大師本町", "210-0816", "神奈川県川崎市川崎区"],
+  ["川崎区", "210-0851", "神奈川県川崎市川崎区"]
+];
+
+let lastNormalizedAddress = "";
+let addressDebounceTimer = null;
+
+function normalizeAddress(v) {
+    if (!v) return "";
+    let s = String(v).normalize("NFKC").trim();
+    s = s.replace(/[－ー―\u2010-\u2015\u2212\uFF0D]/g, "-");
+
+    // 仕様2: /^〒?\d{3}-?\d{4}/ で始まる場合
+    const zipMatch = s.match(/^〒?\s*(\d{3})-?(\d{4})(.*)/);
+    if (zipMatch) {
+        const z1 = zipMatch[1];
+        const z2 = zipMatch[2];
+        const fullZip = `${z1}-${z2}`;
+        let rest = zipMatch[3].trim().replace(/^[-_\s]+/, "");
+
+        const matchItem = ZIP_DICT.find(item => item[1] === fullZip);
+        if (matchItem) {
+            const [town, zip, prefCity] = matchItem;
+            if (!rest) {
+                return `〒${fullZip} ${prefCity}${town}`;
+            } else {
+                if (rest.startsWith(prefCity + town)) {
+                    return `〒${fullZip} ${rest}`;
+                } else if (rest.startsWith(town)) {
+                    return `〒${fullZip} ${prefCity}${rest}`;
+                } else {
+                    if (!rest.includes(prefCity)) {
+                        if (!rest.includes(town)) {
+                            return `〒${fullZip} ${prefCity}${town}${rest}`;
+                        } else {
+                            return `〒${fullZip} ${prefCity}${rest}`;
+                        }
+                    }
+                    return `〒${fullZip} ${rest}`;
+                }
+            }
+        }
+        return `〒${fullZip} ${rest}`.trim();
+    }
+
+    // 仕様3: それ以外の場合、ZIP_DICTを町名の長い順に走査
+    for (const item of ZIP_DICT) {
+        const [town, zip, prefCity] = item;
+        const pos = s.indexOf(town);
+        if (pos !== -1) {
+            const before = s.substring(0, pos);
+            const isMatchCondition = (
+                before === "" ||
+                before === prefCity ||
+                before === "東京都" ||
+                before === "東京都大田区" ||
+                before === "神奈川県" ||
+                before === "神奈川県川崎市" ||
+                before === "神奈川県川崎市川崎区"
+            );
+
+            if (isMatchCondition) {
+                const restAddress = s.substring(pos);
+                return `〒${zip} ${prefCity}${restAddress}`;
+            }
+        }
+    }
+
+    // 仕様4: 一致しなければ変化させない
+    return s;
+}
+
+function handleAddressInput() {
+    if (addressDebounceTimer) clearTimeout(addressDebounceTimer);
+    addressDebounceTimer = setTimeout(() => {
+        applyAddressNormalization();
+    }, 500);
+}
+
+function applyAddressNormalization() {
+    const el = document.getElementById("addressInput");
+    if (!el) return;
+    const currentVal = el.value;
+    if (!currentVal.trim()) return;
+
+    const normalized = normalizeAddress(currentVal);
+    if (normalized && normalized !== currentVal && normalized !== lastNormalizedAddress) {
+        lastNormalizedAddress = normalized;
+        el.value = normalized;
+        showZipNotice();
+        triggerAutoUpdate();
+    }
+}
+
+function showZipNotice() {
+    const notice = document.getElementById("zipNotice");
+    if (notice) {
+        notice.style.display = "block";
+        setTimeout(() => {
+            notice.style.display = "none";
+        }, 2000);
+    }
+}
+
 // かな正規化 (ひらがな⇄カタカナ部分一致)
 function kanaNormalize(str) {
     if (!str) return "";
@@ -2908,7 +3050,6 @@ async function restoreFromGAS() {
 // ボトムシート（サジェストUI）制御ロジック
 // ==========================================
 let currentSheetTarget = 'name'; // 'name' or 'amount'
-let currentSheetTab = 'recent'; // 'recent' or 'cloud'
 
 function openBottomSheet(target) {
     currentSheetTarget = target;
@@ -2937,11 +3078,6 @@ function closeBottomSheet() {
     const sheet = document.getElementById('bottomSheet');
     if (overlay) overlay.classList.remove('active');
     if (sheet) sheet.classList.remove('active');
-}
-
-function switchSheetTab(tabId) {
-    currentSheetTab = tabId;
-    renderSheetList();
 }
 
 function handleSheetSearch() {

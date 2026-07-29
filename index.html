@@ -1309,7 +1309,8 @@
                     </div>
                     <div>
                         <label for="addressInput">住所</label>
-                        <input type="text" id="addressInput" class="form-control" placeholder="住所（任意）">
+                        <input type="text" id="addressInput" class="form-control" placeholder="住所（任意）" oninput="handleAddressInput()">
+                        <div id="zipNotice" style="font-size: 11px; color: #0284c7; font-weight: bold; margin-top: 4px; display: none;">〒を自動付加しました</div>
                     </div>
                 </div>
 
@@ -1711,7 +1712,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px;">
-            奉納ビラ印刷システム v55 (2026/07/29 更新)
+            奉納ビラ印刷システム v56 (2026/07/29 更新)
         </footer>
     </div>
 
@@ -1745,10 +1746,7 @@
             </div>
         </div>
         
-        <div class="tabs" id="sheetTabsContainer">
-            <button class="tab-btn active" id="tab-recent" onclick="switchSheetTab('recent')">最近の履歴</button>
-            <button class="tab-btn" id="tab-cloud" onclick="switchSheetTab('cloud')">クラウド同期</button>
-        </div>
+
         
         <div class="sheet-content" id="sheetListContent">
             <!-- 動的リスト -->
@@ -1822,7 +1820,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=55"></script>
+    <script src="app.js?v=56"></script>
 
 </body>
 </html>
