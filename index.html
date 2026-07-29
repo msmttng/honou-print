@@ -1493,23 +1493,32 @@
 
                             <div style="width: 100%; border-top: 1px solid #cbd5e1; margin: 12px 0;"></div>
 
-                            <!-- 括弧・記号の位置調整セクション -->
+                            <!-- 括弧・記号・組文字の位置調整セクション -->
                             <div style="width: 100%; display: flex; flex-direction: column; gap: 10px;">
                                 <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">
-                                    <i class="fa-solid fa-arrows-rotate"></i> 括弧・記号の位置調整 (書体別)
+                                    <i class="fa-solid fa-arrows-rotate"></i> 括弧・組文字の位置調整 (書体別)
                                 </div>
 
-                                <div style="display: flex; flex-direction: column; gap: 4px;">
-                                    <label style="font-size: 11px; color: var(--text-secondary);">対象の書体</label>
-                                    <select id="fontSelect" onchange="onFontChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white; font-size: 13px;">
-                                        <option value="HGSGyoshotai" selected>行書体（毛筆・標準）</option>
-                                        <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
-                                        <option value="'Noto Serif JP', serif">明朝体（標準・正式）</option>
-                                        <option value="'Shippori Mincho B1', serif">しっぽり明朝（上品）</option>
-                                        <option value="'Kaisei Tokumin', serif">解星 特ミン（楷書風）</option>
-                                        <option value="'Zen Maru Gothic', sans-serif">丸ゴシック（親しみ）</option>
-                                        <option value="'Noto Sans JP', sans-serif">ゴシック体（現代的）</option>
-                                    </select>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <label style="font-size: 11px; color: var(--text-secondary);">対象の書体</label>
+                                        <select id="fontSelect" onchange="onFontChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white; font-size: 13px;">
+                                            <option value="HGSGyoshotai" selected>行書体（毛筆・標準）</option>
+                                            <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
+                                            <option value="'Noto Serif JP', serif">明朝体（標準・正式）</option>
+                                            <option value="'Shippori Mincho B1', serif">しっぽり明朝（上品）</option>
+                                            <option value="'Kaisei Tokumin', serif">解星 特ミン（楷書風）</option>
+                                            <option value="'Zen Maru Gothic', sans-serif">丸ゴシック（親しみ）</option>
+                                            <option value="'Noto Sans JP', sans-serif">ゴシック体（現代的）</option>
+                                        </select>
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <label style="font-size: 11px; color: var(--text-secondary);">調整グループ</label>
+                                        <select id="parenGroupSelect" onchange="onParenGroupChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white; font-size: 13px;">
+                                            <option value="rotate" selected>括弧・記号 (回転)</option>
+                                            <option value="kumi">㈱㈲などの組文字 (非回転)</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
@@ -1796,7 +1805,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px;">
-            奉納ビラシステム v64 (2026/07/29 更新)
+            奉納ビラシステム v65 (2026/07/29 更新)
         </footer>
     </div>
 
@@ -1904,7 +1913,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=64"></script>
+    <script src="app.js?v=65"></script>
 
 </body>
 </html>
