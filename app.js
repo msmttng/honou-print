@@ -1151,32 +1151,22 @@ function getCurrentFontKey() {
     return fontSelect && fontSelect.value ? fontSelect.value : "HGSGyoshotai";
 }
 
-function getCurrentGroupKey() {
-    const sel = document.getElementById("parenGroupSelect");
-    return sel && sel.value ? sel.value : "rotate";
-}
-
-function getCurrentFontParenSetting(groupKey = null) {
+function getCurrentFontParenSetting() {
     const fontKey = getCurrentFontKey();
-    const grp = groupKey || getCurrentGroupKey();
     if (!parenSettingsPerFont[fontKey]) {
         parenSettingsPerFont[fontKey] = {
-            rotate: { offsetX: 0.0, offsetY: 0.0, scale: 100 },
-            kumi:   { offsetX: 0.0, offsetY: 0.0, scale: 100 }
+            kumi: { offsetX: 0.0, offsetY: 0.0, scale: 100 }
         };
     }
-    // 旧構造の互換吸収
-    if (!parenSettingsPerFont[fontKey].rotate) {
-        const oldObj = { ...parenSettingsPerFont[fontKey] };
-        parenSettingsPerFont[fontKey] = {
-            rotate: { offsetX: oldObj.offsetX || 0.0, offsetY: oldObj.offsetY || 0.0, scale: oldObj.scale || 100 },
-            kumi:   { offsetX: 0.0, offsetY: 0.0, scale: 100 }
+    if (!parenSettingsPerFont[fontKey].kumi) {
+        const oldObj = parenSettingsPerFont[fontKey].rotate || parenSettingsPerFont[fontKey];
+        parenSettingsPerFont[fontKey].kumi = {
+            offsetX: oldObj.offsetX || 0.0,
+            offsetY: oldObj.offsetY || 0.0,
+            scale: oldObj.scale || 100
         };
     }
-    if (!parenSettingsPerFont[fontKey][grp]) {
-        parenSettingsPerFont[fontKey][grp] = { offsetX: 0.0, offsetY: 0.0, scale: 100 };
-    }
-    return parenSettingsPerFont[fontKey][grp];
+    return parenSettingsPerFont[fontKey].kumi;
 }
 
 function updateParenUI() {
@@ -1210,21 +1200,15 @@ function adjustParenSetting(param, delta) {
 
 function resetParenSettings() {
     const fontKey = getCurrentFontKey();
-    const grp = getCurrentGroupKey();
-    if (parenSettingsPerFont[fontKey] && parenSettingsPerFont[fontKey][grp]) {
-        parenSettingsPerFont[fontKey][grp] = { offsetX: 0.0, offsetY: 0.0, scale: 100 };
-    }
+    parenSettingsPerFont[fontKey] = {
+        kumi: { offsetX: 0.0, offsetY: 0.0, scale: 100 }
+    };
     saveParenSettings();
     updateParenUI();
     triggerAutoUpdate();
 }
 
 function onFontChange(fontValue) {
-    updateParenUI();
-    triggerAutoUpdate();
-}
-
-function onParenGroupChange(groupValue) {
     updateParenUI();
     triggerAutoUpdate();
 }
@@ -2039,20 +2023,16 @@ async function generatePDF(isPrinting = false, override = null) {
                     
                     let charToDraw = item.char;
                     const isKumiChar = Boolean(KUMI_STAMP_MAP[charToDraw]);
-                    const rotateTargetChars = "（）「」『』【】〔〕ー〜～-―─・";
-                    const isRotateChar = rotateTargetChars.includes(charToDraw);
 
-                    // ★ 列の縦中心線 (全文字共通)。
+                    // 列の縦中心線
                     const cellCenterX = x_pt;
-                    
-                    // ★ セルの縦中心Y
                     const cellCenterY = currentY + (currentFontSize * 0.35);
 
                     if (isKumiChar) {
                         // ★ 組文字 (㈱ ㈲ 等) 専用合成スタンプ描画 (非回転)
                         const fontKey = getCurrentFontKey();
                         const stampObj = await getKumiStampPngBytes(pdfDoc, charToDraw, fontKey, currentFontSize);
-                        const parenSetting = getCurrentFontParenSetting("kumi");
+                        const parenSetting = getCurrentFontParenSetting();
 
                         let rotX = cellCenterX + mmToPt(parenSetting.offsetX || 0.0);
                         let rotY = cellCenterY + mmToPt(parenSetting.offsetY || 0.0);
@@ -2072,34 +2052,8 @@ async function generatePDF(isPrinting = false, override = null) {
                             width: targetW,
                             height: targetH
                         });
-                    } else if (isRotateChar) {
-                        const parenSetting = getCurrentFontParenSetting("rotate");
-
-                        // 左右(offsetX)/上下(offsetY) の位置補正値 (mm -> pt 換算) をセル中心座標に加算
-                        let rotX = cellCenterX + mmToPt(parenSetting.offsetX || 0.0);
-                        let rotY = cellCenterY + mmToPt(parenSetting.offsetY || 0.0);
-
-                        // 大きさ(%) の補正 (回転文字のフォントサイズにのみ乗算)
-                        const rotScale = (parenSetting.scale || 100) / 100.0;
-                        const rotFontSize = currentFontSize * rotScale;
-
-                        const rotDrawOptions = {
-                            x: rotX,
-                            y: rotY,
-                            size: rotFontSize,
-                            font: fontToUse,
-                            color: PDFLib.rgb(0.1, 0.1, 0.1),
-                            rotate: PDFLib.degrees(-90)
-                        };
-
-                        firstPage.drawText(charToDraw, rotDrawOptions);
-                        if (fieldVal.bold) {
-                            firstPage.drawText(charToDraw, { ...rotDrawOptions, x: rotX + 0.3 });
-                            firstPage.drawText(charToDraw, { ...rotDrawOptions, y: rotY + 0.3 });
-                            firstPage.drawText(charToDraw, { ...rotDrawOptions, x: rotX + 0.3, y: rotY + 0.3 });
-                        }
                     } else {
-                        // 通常文字の描画（変更しない）
+                        // 通常文字の描画（括弧・記号含むすべての文字を回転せずそのまま縦に置く）
                         const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
                         let drawX = x_pt;
                         if (alignment === "center") {
