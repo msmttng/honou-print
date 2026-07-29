@@ -208,6 +208,17 @@ async function idbGetPendingDeletes() {
     });
 }
 
+// 全レコードの削除（フル復元時の完全リフレッシュ用）
+async function idbClearAllRecords() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_RECORDS, "readwrite");
+        tx.objectStore(STORE_RECORDS).clear();
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
 async function idbKvGet(key) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -1129,8 +1140,8 @@ function formatDateForDisplay(value) {
 }
 
 // スプレッドシート行から決定的なIDを合成（復元を何度実行しても同じIDになる）
-function stableIdFromRow(timestamp, name, amount) {
-    const src = `${timestamp}|${name}|${amount}`;
+function stableIdFromRow(timestamp, name, amount, bagNo = "", address = "", idx = 0) {
+    const src = `${timestamp}|${name}|${amount}|${bagNo}|${address}|${idx}`;
     let hash = 5381;
     for (let i = 0; i < src.length; i++) {
         hash = ((hash << 5) + hash + src.charCodeAt(i)) >>> 0; // djb2
@@ -2422,7 +2433,7 @@ async function restoreFromGAS() {
         showToast("GASのURLを設定してください", "error");
         return;
     }
-    if (!confirm("クラウド（スプレッドシート）から最新の名簿データをダウンロードし、ローカルを更新します。よろしいですか？")) return;
+    if (!confirm("クラウド（スプレッドシート）から最新の名簿全件を復元します。\n端末のローカルデータを全クリアし、スプレッドシートの正解データで完全上書き同期します。よろしいですか？")) return;
     
     const btn = document.getElementById("btnRestoreGAS");
     if (btn) btn.innerHTML = "復元中...";
@@ -2431,37 +2442,31 @@ async function restoreFromGAS() {
         const response = await fetch(fetchUrl);
         const data = await response.json();
         if (data.error) throw new Error(data.error);
-        
-        // 削除待ち（墓標）のIDは復元対象から除外する
-        const tombstoneIds = new Set((await idbGetPendingDeletes()).map(r => r.id));
 
-        // 過去の破損レコード（氏名欄に金額や合計金額が入っている旧データ）をローカルから一括クレンジング削除
-        const existingAll = await idbGetAllRecords();
-        for (const ex of existingAll) {
-            const exName = String(ex.name ?? "").trim();
-            if (exName.startsWith("¥") || exName.startsWith("\\") || exName.startsWith("合計") || exName.startsWith("物品まとめ")) {
-                if (ex.id) await idbDeleteRecord(ex.id);
-            }
-        }
+        // 名簿フル復元時は、端末側の旧データ・旧削除墓標も含めて全クリアし、クラウドの正解データで100%上書きする
+        await idbClearAllRecords();
 
         let count = 0;
-        for (const r of data.records) {
+        const records = data.records || [];
+        for (let i = 0; i < records.length; i++) {
+            const r = records[i];
             const nm = String(r.name ?? "").trim();
             if (!nm || nm.startsWith("¥") || nm.startsWith("\\") || nm.startsWith("合計") || nm.startsWith("物品まとめ")) continue;
 
             const parsedDate = parseFlexibleDate(r.timestamp);
-            const recordId = r.id || stableIdFromRow(String(r.timestamp || ""), nm, String(r.amount || ""));
-
-            if (tombstoneIds.has(recordId)) continue; // ローカルで削除済み
+            const bag = String(r.bagNo ?? "");
+            const addr = String(r.address ?? "");
+            const amt = String(r.amount ?? "");
+            const recordId = r.id || stableIdFromRow(String(r.timestamp || ""), nm, amt, bag, addr, i);
 
             const record = {
                 id: recordId,
                 date: (parsedDate || new Date()).toISOString(),
                 template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
                 name: nm,
-                amount: String(r.amount ?? ""),
-                bagNo: String(r.bagNo ?? ""),
-                address: String(r.address ?? ""),
+                amount: amt,
+                bagNo: bag,
+                address: addr,
                 sync: "synced"
             };
             await idbPutRecord(record);
@@ -2469,7 +2474,7 @@ async function restoreFromGAS() {
         }
         await loadDbRecords();
         renderTable();
-        showToast(`クラウドから ${count}件の正解データを同期・更新しました`);
+        showToast(`クラウドから ${count}件の名簿全件を完全復元しました`);
     } catch (e) {
         showToast("復元失敗: " + e.message, "error");
     } finally {
