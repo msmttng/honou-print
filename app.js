@@ -1394,9 +1394,75 @@ function updateParenUI() {
     const yEl = document.getElementById("paren-val-offsetY");
     const sEl = document.getElementById("paren-val-scale");
 
-    if (xEl) xEl.textContent = (setting.offsetX >= 0 ? "+" : "") + setting.offsetX.toFixed(1);
-    if (yEl) yEl.textContent = (setting.offsetY >= 0 ? "+" : "") + setting.offsetY.toFixed(1);
-    if (sEl) sEl.textContent = Math.round(setting.scale) + "%";
+    if (xEl && xEl.tagName !== 'INPUT') xEl.textContent = (setting.offsetX >= 0 ? "+" : "") + setting.offsetX.toFixed(1);
+    if (yEl && yEl.tagName !== 'INPUT') yEl.textContent = (setting.offsetY >= 0 ? "+" : "") + setting.offsetY.toFixed(1);
+    if (sEl && sEl.tagName !== 'INPUT') sEl.textContent = Math.round(setting.scale) + "%";
+}
+
+function setParenSettingDirect(param, rawVal) {
+    const setting = getCurrentFontParenSetting();
+    let val = Number(rawVal);
+    if (!Number.isFinite(val)) {
+        val = param === 'scale' ? 100 : 0.0;
+    }
+
+    if (param === "offsetX" || param === "offsetY") {
+        val = parseFloat(val.toFixed(1));
+        if (val < -20.0) val = -20.0;
+        if (val > 20.0) val = 20.0;
+        setting[param] = val;
+    } else if (param === "scale") {
+        val = Math.round(val);
+        if (val < 30) val = 30;
+        if (val > 200) val = 200;
+        setting.scale = val;
+    }
+
+    saveParenSettings();
+    updateParenUI();
+    triggerAutoUpdate();
+}
+
+function makeParenValueEditable(param) {
+    const span = document.getElementById(`paren-val-${param}`);
+    if (!span || span.tagName === 'INPUT') return;
+    const setting = getParenSettingSafe();
+    let currentVal = setting[param];
+
+    const input = document.createElement('input');
+    input.id = `paren-val-${param}`;
+    input.type = 'number';
+    input.step = param === 'scale' ? '1' : '0.1';
+    input.style.width = '42px';
+    input.style.fontSize = '12px';
+    input.style.textAlign = 'center';
+    input.style.fontFamily = 'monospace';
+    input.style.border = '1px solid #4f46e5';
+    input.style.borderRadius = '4px';
+    input.style.padding = '1px 2px';
+    input.value = currentVal;
+
+    const commitValue = () => {
+        let parsed = parseFloat(input.value);
+        if (!Number.isFinite(parsed)) {
+            parsed = param === 'scale' ? 100 : 0.0;
+        }
+        setParenSettingDirect(param, parsed);
+    };
+
+    input.onblur = commitValue;
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        }
+    };
+
+    if (span.parentNode) {
+        span.parentNode.replaceChild(input, span);
+        input.focus();
+        input.select();
+    }
 }
 
 function adjustParenSetting(param, delta) {
@@ -2283,7 +2349,9 @@ async function generatePDF(isPrinting = false, override = null) {
                                 height: targetH
                             });
                         } else {
-                            console.warn("Invalid stamp draw dimensions:", { drawX, drawY, targetW, targetH });
+                            const errDetail = `Invalid stamp draw parameters! drawX=${drawX}, drawY=${drawY}, targetW=${targetW}, targetH=${targetH}, setting=${JSON.stringify(parenSetting)}`;
+                            console.error(errDetail);
+                            addAppLog("error", errDetail, new Error().stack || "");
                         }
                     } else {
                         // 通常文字の描画（括弧・記号含むすべての文字を回転せずそのまま縦に置く）
