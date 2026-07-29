@@ -1098,7 +1098,7 @@
         <!-- ヘッダー -->
         <header>
             <h1><i class="fa-solid fa-file-pdf"></i> 奉納ビラ 印刷＆名簿管理</h1>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 8px; text-align: center;">v49 (2026/07/29 更新)</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 8px; text-align: center;">v50 (2026/07/29 更新)</div>
             <div style="text-align: center; margin-bottom: 10px;">
                 <a href="letter.html" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px;">
                     <i class="fa-solid fa-envelope-open-text"></i> 案内状・御礼状 作成
@@ -1490,8 +1490,9 @@
                 <!-- 総合計エリア -->
                 <div style="flex: 1; min-width: 200px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <div style="font-size: 14px; color: #64748b; margin-bottom: 4px; font-weight: bold;">奉納金 合計</div>
-                    <div style="font-size: 28px; font-weight: 900; color: #b91c1c;">
-                        <span id="statTotalMoney">0</span> <span style="font-size: 16px; font-weight: normal; color: #475569;">円</span>
+                    <div style="font-size: 26px; font-weight: 900; color: #b91c1c; text-align: center;">
+                        <span id="statTotalMoney">0</span> <span style="font-size: 15px; font-weight: normal; color: #475569;">円</span>
+                        <span id="statEmptyMoneyWrap" style="font-size: 15px; font-weight: 600; color: #64748b; margin-left: 4px; display: inline-block;">（[空] <span id="statEmptyMoney">0</span> 円）</span>
                     </div>
                 </div>
                 <!-- 奉納件数エリア -->
@@ -1675,7 +1676,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=48"></script>
+    <script src="app.js?v=50"></script>
 
 </body>
 </html>

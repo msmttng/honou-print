@@ -2838,6 +2838,7 @@ function parseKanjiNumber(str) {
 
 function updateDashboardStats() {
     let totalMoney = 0;
+    let emptyTotalMoney = 0;
     let moneyCount = 0;
     let itemCount = 0;
     let validRecords = [];
@@ -2851,20 +2852,32 @@ function updateDashboardStats() {
         validRecords.push(r);
 
         const _amt = String(r.amount ?? "").trim();
-        const isItem = !_amt || _amt.includes('[空]') || _amt.includes('［空］') || _amt.includes('空');
-        const num = isItem ? 0 : parseKanjiNumber(_amt);
-
-        if (num > 0) {
-            totalMoney += num;
-            moneyCount++;
-        } else if (_amt !== "") {
+        const hasEmptyTag = _amt.includes('[空]') || _amt.includes('［空］') || _amt.includes('空');
+        
+        if (hasEmptyTag) {
+            // [空] タグが含まれている場合は、数字のみを取り出して[空]合計金に合算
+            const emptyNum = parseKanjiNumber(_amt);
+            if (emptyNum > 0) {
+                emptyTotalMoney += emptyNum;
+            }
             itemCount++;
+        } else {
+            const num = parseKanjiNumber(_amt);
+            if (num > 0) {
+                totalMoney += num;
+                moneyCount++;
+            } else if (_amt !== "") {
+                itemCount++;
+            }
         }
     }
 
     // カンマ区切りでフォーマット
     const elTotalMoney = document.getElementById("statTotalMoney");
     if (elTotalMoney) elTotalMoney.textContent = totalMoney.toLocaleString();
+
+    const elEmptyMoney = document.getElementById("statEmptyMoney");
+    if (elEmptyMoney) elEmptyMoney.textContent = emptyTotalMoney.toLocaleString();
 
     const elTotalCount = document.getElementById("statCountTotal");
     if (elTotalCount) elTotalCount.textContent = validRecords.length.toLocaleString();

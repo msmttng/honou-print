@@ -220,21 +220,26 @@ function doPost(e) {
       }
     }
 
-    // データ行: 解決済みの列位置へ書き込む（シートの列順に追従）
-    // [空]/物品 は専用列があればそちらへ振り分ける
-    const isItem = rawAmount.indexOf("[空]") !== -1 || rawAmount.indexOf("［空］") !== -1;
+    // [空] タグや物品名はすべて専用列 (D列: 金額［空］/物品) へ振り分ける
+    const isItemTag = rawAmount.indexOf("[空]") !== -1 || rawAmount.indexOf("［空］") !== -1 || rawAmount.indexOf("空") !== -1;
+    const cleanedAmt = rawAmount.replace(/[¥\\,円金也\s]/g, "");
+    const isPureNumber = /^\d+$/.test(cleanedAmt);
+    const isKanjiMoney = /[壱弐参四五六七八九十拾百千阡万萬円]/.test(rawAmount);
+    const isItem = isItemTag || (!isPureNumber && !isKanjiMoney && rawAmount !== "");
+
     const amountCell = (isItem && C.item) ? "" : rawAmount;
-    const itemCell   = (isItem && C.item) ? rawAmount : null;
+    const itemCell   = (isItem && C.item) ? rawAmount : (C.item ? "" : null);
 
     const writeMap = [
       [C.ts, timestamp], [C.name, name], [C.amount, amountCell],
-      [itemCell === null ? 0 : C.item, itemCell],
+      [C.item, itemCell],
       [C.id, reqId], [C.token, token], [C.bag, bagNo],
       [C.addr, address], [C.disp, formattedAmount]
     ];
     for (let w = 0; w < writeMap.length; w++) {
       const colIdx = writeMap[w][0];
-      if (colIdx) sheet.getRange(targetRow, colIdx).setValue(writeMap[w][1]);
+      const val = writeMap[w][1];
+      if (colIdx && val !== null) sheet.getRange(targetRow, colIdx).setValue(val);
     }
 
     // 高速化: 全再描画ではなく対象行のみフォーマット適用
