@@ -1795,9 +1795,37 @@
             <pre id="debugLog"></pre>
         </div>
 
-        <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px;">
-            奉納ビラシステム v68 (2026/07/29 更新)
+        <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
+            <span>奉納ビラシステム v69 (2026/07/29 更新)</span>
+            <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                <i class="fa-solid fa-list-check"></i> ログ
+                <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
+            </button>
         </footer>
+    </div>
+
+    <!-- エラーログ閲覧用モーダル -->
+    <div id="logModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 10000; align-items: center; justify-content: center; padding: 16px;">
+        <div style="background: white; border-radius: 12px; width: 100%; max-width: 650px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); overflow: hidden;">
+            <div style="padding: 14px 18px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1e293b;"><i class="fa-solid fa-bug"></i> アプリ内エラー・システムログ</h3>
+                <button type="button" onclick="closeLogModal()" style="border: none; background: none; font-size: 18px; color: #64748b; cursor: pointer;">&times;</button>
+            </div>
+            <div id="logListContainer" style="padding: 14px; overflow-y: auto; flex: 1; max-height: 60vh; background: #fafafa;">
+                <!-- ログ一覧が挿入される -->
+            </div>
+            <div style="padding: 12px 18px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 8px; background: white;">
+                <button type="button" class="btn btn-secondary" onclick="clearAppLogs()" style="font-size: 12px; padding: 6px 12px;">
+                    <i class="fa-solid fa-trash-can"></i> クリア
+                </button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-primary" onclick="copyAppLogs()" style="font-size: 12px; padding: 6px 12px;">
+                        <i class="fa-solid fa-copy"></i> ログをコピー
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeLogModal()" style="font-size: 12px; padding: 6px 12px;">閉じる</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 通知トースト -->
@@ -1904,7 +1932,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=68"></script>
+    <script src="app.js?v=69"></script>
 
 </body>
 </html>

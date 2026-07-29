@@ -1,3 +1,145 @@
+// ==========================================
+// アプリ内エラーログ収集モジュール（最優先読み込み）
+// ==========================================
+window.__appLogList = [];
+
+function addAppLog(type, message, stack = "") {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(" ")[0] + "." + String(now.getMilliseconds()).padStart(3, "0");
+    const entry = {
+        time: timeStr,
+        type: type, // 'error', 'warn', 'uncaught'
+        message: String(message || ""),
+        stack: String(stack || "")
+    };
+    window.__appLogList.unshift(entry); // 新しい順
+    if (window.__appLogList.length > 200) {
+        window.__appLogList.pop();
+    }
+    updateLogBadgeUI();
+}
+
+function updateLogBadgeUI() {
+    const badge = document.getElementById("logBadge");
+    if (badge) {
+        const errCount = window.__appLogList.filter(l => l.type === "error" || l.type === "uncaught").length;
+        badge.textContent = errCount;
+        if (errCount > 0) {
+            badge.style.background = "#ef4444";
+            badge.style.color = "#ffffff";
+        } else {
+            badge.style.background = "#94a3b8";
+            badge.style.color = "#ffffff";
+        }
+    }
+}
+
+// グローバルエラーキャッチ
+window.addEventListener("error", function (e) {
+    const stack = e.error && e.error.stack ? e.error.stack : "";
+    addAppLog("uncaught", e.message || "Uncaught Error", stack);
+});
+
+window.addEventListener("unhandledrejection", function (e) {
+    const reason = e.reason;
+    const msg = reason && reason.message ? reason.message : String(reason);
+    const stack = reason && reason.stack ? reason.stack : "";
+    addAppLog("uncaught", "Unhandled Promise Rejection: " + msg, stack);
+});
+
+// console.error / console.warn のラップ
+(function () {
+    const origError = console.error;
+    const origWarn = console.warn;
+
+    console.error = function (...args) {
+        origError.apply(console, args);
+        const msg = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+        const errObj = args.find(a => a instanceof Error);
+        const stack = errObj && errObj.stack ? errObj.stack : new Error().stack || "";
+        addAppLog("error", msg, stack);
+    };
+
+    console.warn = function (...args) {
+        origWarn.apply(console, args);
+        const msg = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+        addAppLog("warn", msg, "");
+    };
+})();
+
+// モーダル操作関数
+function openLogModal() {
+    renderLogList();
+    const modal = document.getElementById("logModal");
+    if (modal) modal.style.display = "flex";
+}
+
+function closeLogModal() {
+    const modal = document.getElementById("logModal");
+    if (modal) modal.style.display = "none";
+}
+
+function renderLogList() {
+    const container = document.getElementById("logListContainer");
+    if (!container) return;
+    
+    if (!window.__appLogList || window.__appLogList.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 20px;">ログはありません</div>`;
+        return;
+    }
+
+    let html = "";
+    window.__appLogList.forEach((log) => {
+        const isErr = log.type === "error" || log.type === "uncaught";
+        const color = isErr ? "#ef4444" : "#f59e0b";
+        const bg = isErr ? "#fef2f2" : "#fffbe6";
+        html += `
+            <div style="background: ${bg}; border-left: 4px solid ${color}; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 11px; margin-bottom: 8px; word-break: break-all;">
+                <div style="font-weight: bold; color: ${color}; display: flex; justify-content: space-between;">
+                    <span>[${log.type.toUpperCase()}] ${log.time}</span>
+                </div>
+                <div style="margin-top: 4px; color: #1e293b; white-space: pre-wrap;">${escapeHtml(log.message)}</div>
+                ${log.stack ? `<div style="margin-top: 4px; color: #64748b; font-size: 10px; white-space: pre-wrap; background: rgba(0,0,0,0.03); padding: 4px; border-radius: 2px;">${escapeHtml(log.stack)}</div>` : ''}
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function copyAppLogs() {
+    if (!window.__appLogList || window.__appLogList.length === 0) {
+        showToast("コピーするログがありません");
+        return;
+    }
+    const text = window.__appLogList.map(l => `[${l.time}] [${l.type.toUpperCase()}]\n${l.message}\n${l.stack ? l.stack + '\n' : ''}`).join("\n-------------------\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("ログをクリップボードにコピーしました");
+        }).catch(() => {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast("ログをコピーしました");
+}
+
+function clearAppLogs() {
+    window.__appLogList = [];
+    renderLogList();
+    updateLogBadgeUI();
+    showToast("ログをクリアしました");
+}
+
 // --- Service Worker 登録（PWA対応） ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -2218,8 +2360,7 @@ async function generatePDF(isPrinting = false, override = null) {
 
     } catch (e) {
         console.error("PDF合成エラー:", e);
-        logError("PDF合成エラーのキャッチ: " + (e.stack || e.message));
-        showToast("PDF合成中にエラーが発生しました: " + e.message, "error");
+        showToast("エラーが発生しました（詳細は「ログ」ボタンを参照）", "error");
         showStatus("PDF生成エラー", false);
         return null;
     }
