@@ -1500,8 +1500,8 @@
                                 </div>
 
                                 <div style="display: flex; flex-direction: column; gap: 4px;">
-                                    <label style="font-size: 11px; color: var(--text-secondary);">対象の書体</label>
-                                    <select id="fontSelect" onchange="onFontChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white; font-size: 13px;">
+                                    <label style="font-size: 11px; color: var(--text-secondary);">現在の書体（自動追従）</label>
+                                    <select id="fontSelect" onchange="onFontChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: #f8fafc; font-size: 13px; color: #334155;">
                                         <option value="HGSGyoshotai" selected>行書体（毛筆・標準）</option>
                                         <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
                                         <option value="'Noto Serif JP', serif">明朝体（標準・正式）</option>
@@ -1776,7 +1776,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
-            <span>奉納ビラシステム v80 (2026/07/29 更新)</span>
+            <span>奉納ビラシステム v81 (2026/07/29 更新)</span>
             <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-list-check"></i> ログ
                 <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
@@ -1912,7 +1912,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=80"></script>
+    <script src="app.js?v=81"></script>
 
 </body>
 </html>
