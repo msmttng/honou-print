@@ -1793,15 +1793,26 @@ async function generatePDF(isPrinting = false, override = null) {
                     honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
                 }
                 
+                // 括弧記号 "︵" "︶" は実質高さが小さいため高さを0.45文字分として換算
+                let effectiveCharCount = 0;
+                chars.forEach(c => {
+                    if (c === "︵" || c === "︶") {
+                        effectiveCharCount += 0.45;
+                    } else {
+                        effectiveCharCount += 1.0;
+                    }
+                });
+                effectiveCharCount += honorificChars.length;
+
                 const totalCharsCount = chars.length + honorificChars.length;
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
                 
-                // 枠の高さに収まるようにフォントサイズを縮小
-                // 総高さ = (文字数 * フォントサイズ * 1.02) + ((文字数-1) * 字間) + 敬称スペース
-                let currentHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                // 枠の高さに収まるようにフォントサイズを縮小（換算文字数 effectiveCharCount を使用して潰れを防止）
+                let currentHeight_pt = effectiveCharCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
                 if (currentHeight_pt > height_pt) {
-                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (totalCharsCount * 1.02);
-                    if (currentFontSize < 10) currentFontSize = 10;
+                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (effectiveCharCount * 1.02);
+                    const minAllowedSize = Math.max(14, baseFontSize * 0.6); // 潰れ防止の下限ガード
+                    if (currentFontSize < minAllowedSize) currentFontSize = minAllowedSize;
                 }
                 // 枠の幅（1文字の横幅）にも収まるように縮小
                 if (currentFontSize > width_pt) {
@@ -1824,7 +1835,7 @@ async function generatePDF(isPrinting = false, override = null) {
                 }
 
                 // テキストの上端が boxTop に合うように最初の文字の baseline を設定
-                const finalHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                const finalHeight_pt = effectiveCharCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
                 const spacing = currentFontSize * 1.02 + charSpacingPt;
                 
                 let currentY = boxTop - currentFontSize;
@@ -1849,9 +1860,11 @@ async function generatePDF(isPrinting = false, override = null) {
                         currentY -= honorificSpacingPt; // 敬称スペースの適用
                     }
                     
-                    let drawX = x_pt;
-                    const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
+                    const isBracket = (item.char === "︵" || item.char === "︶");
+                    const drawFontSize = isBracket ? currentFontSize * 0.75 : currentFontSize;
+                    const charWidth = fontToUse.widthOfTextAtSize(item.char, drawFontSize);
                     
+                    let drawX = x_pt;
                     if (alignment === "center") {
                         drawX = x_pt - (charWidth / 2);
                     } else if (alignment === "right") {
@@ -1869,8 +1882,8 @@ async function generatePDF(isPrinting = false, override = null) {
                     
                     const drawOptions = {
                         x: drawX,
-                        y: currentY,
-                        size: currentFontSize,
+                        y: isBracket ? currentY + (currentFontSize * 0.1) : currentY,
+                        size: drawFontSize,
                         font: fontToUse,
                         color: PDFLib.rgb(0.1, 0.1, 0.1)
                     };
@@ -1879,11 +1892,12 @@ async function generatePDF(isPrinting = false, override = null) {
                     // 疑似太字（重ね描き）
                     if (fieldVal.bold) {
                         firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3 });
-                        firstPage.drawText(charToDraw, { ...drawOptions, y: currentY + 0.3 });
-                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3, y: currentY + 0.3 });
+                        firstPage.drawText(charToDraw, { ...drawOptions, y: drawOptions.y + 0.3 });
+                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3, y: drawOptions.y + 0.3 });
                     }
                     
-                    currentY -= spacing;
+                    const stepY = isBracket ? (currentFontSize * 0.45 + charSpacingPt) : spacing;
+                    currentY -= stepY;
                 }
             } else {
                 // 通常の横書き描画処理（字間と重ね描きを反映）
