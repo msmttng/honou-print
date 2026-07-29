@@ -2496,11 +2496,13 @@ async function updatePreview() {
             
             const container = pdfCanvas.parentElement;
             
-            const containerWidth = container.clientWidth - 40; 
-            const containerHeight = container.clientHeight - 40;
-            
+            // パネル展開・アコーディオン操作で縦幅(clientHeight)が変動しても画面全体がズームしないよう、
+            // コンテナ横幅をベースに安定したプレビュー倍率(scale)を決定する
+            const containerWidth = Math.max(200, (container.clientWidth || 400) - 32); 
             const unscaledViewport = page.getViewport({ scale: 1.0 });
-            const scale = Math.min(containerWidth / unscaledViewport.width, containerHeight / unscaledViewport.height);
+            
+            let scale = containerWidth / unscaledViewport.width;
+            if (!Number.isFinite(scale) || scale <= 0) scale = 1.0;
             
             const viewport = page.getViewport({ scale: scale });
             
