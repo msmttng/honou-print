@@ -1551,6 +1551,28 @@
                                 <input type="number" id="paperHeightInput" class="form-control" value="390" oninput="saveCustomPaperSize()">
                             </div>
                         </div>
+                        <div class="form-group" style="margin-top: 14px; border-top: 1px dashed #cbd5e1; padding-top: 12px;">
+                            <label for="receiptPaperPresetSelect" style="font-weight: bold; color: #0284c7;">
+                                <i class="fa-solid fa-receipt"></i> 領収書 用紙サイズを選択
+                            </label>
+                            <select id="receiptPaperPresetSelect" class="form-control" onchange="onReceiptPaperPresetChange(this.value)">
+                                <option value="a5_landscape" selected>📄 A5 横 (210mm × 148mm) [標準]</option>
+                                <option value="a6_landscape">📄 A6 横 (148mm × 105mm)</option>
+                                <option value="a4_portrait">📄 A4 縦 (210mm × 297mm)</option>
+                                <option value="custom">✏️ カスタム指定 (ミリ単位)</option>
+                            </select>
+                        </div>
+                        <div style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;" id="receiptCustomPaperDimensions">
+                            <div>
+                                <label for="receiptPaperWidthInput">領収書 幅 (mm)</label>
+                                <input type="number" id="receiptPaperWidthInput" class="form-control" value="210" oninput="saveReceiptCustomPaperSize()">
+                            </div>
+                            <div>
+                                <label for="receiptPaperHeightInput">領収書 高さ (mm)</label>
+                                <input type="number" id="receiptPaperHeightInput" class="form-control" value="148" oninput="saveReceiptCustomPaperSize()">
+                            </div>
+                        </div>
+
                         <div class="form-group" style="margin-top: 12px; border-top: 1px dashed #cbd5e1; padding-top: 12px;">
                             <label for="receiptIssuerInput">領収書（受領証）の発行者名</label>
                             <input type="text" id="receiptIssuerInput" class="form-control" placeholder="例: 〇〇神社 奉納事業実行委員会" oninput="saveReceiptIssuer(this.value)">
@@ -1712,7 +1734,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px;">
-            奉納ビラ印刷システム v56 (2026/07/29 更新)
+            奉納ビラ印刷システム v57 (2026/07/29 更新)
         </footer>
     </div>
 
@@ -1820,7 +1842,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=56"></script>
+    <script src="app.js?v=57"></script>
 
 </body>
 </html>

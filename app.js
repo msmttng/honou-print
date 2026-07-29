@@ -758,6 +758,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     const issuerInput = document.getElementById("receiptIssuerInput");
     if (issuerInput) issuerInput.value = savedIssuer;
 
+    loadReceiptPaperSettings();
+
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
     config = getFallbackConfig();
 
@@ -4171,16 +4173,72 @@ function saveReceiptOption() {
     if (chk) localStorage.setItem("pdf_mail_merge_receipt_opt", chk.checked);
 }
 
-// 6. 発行者名の保存
+// 6. 発行者名および領収書用紙サイズの保存・管理
 function saveReceiptIssuer(val) {
     localStorage.setItem("pdf_mail_merge_receipt_issuer", val || "");
 }
 
-// 7. 単独での奉納受領証（領収書）印刷
+let receiptPaperSizeSettings = { width: 210, height: 148 }; // デフォルト A5横
+
+function loadReceiptPaperSettings() {
+    try {
+        const preset = localStorage.getItem("pdf_mail_merge_receipt_paper_preset") || "a5_landscape";
+        const w = parseFloat(localStorage.getItem("pdf_mail_merge_receipt_paper_w")) || (preset === "a6_landscape" ? 148 : (preset === "a4_portrait" ? 210 : 210));
+        const h = parseFloat(localStorage.getItem("pdf_mail_merge_receipt_paper_h")) || (preset === "a6_landscape" ? 105 : (preset === "a4_portrait" ? 297 : 148));
+        receiptPaperSizeSettings = { width: w, height: h };
+
+        const sel = document.getElementById("receiptPaperPresetSelect");
+        if (sel) sel.value = preset;
+
+        const customDiv = document.getElementById("receiptCustomPaperDimensions");
+        if (customDiv) customDiv.style.display = (preset === "custom") ? "grid" : "none";
+
+        const wInput = document.getElementById("receiptPaperWidthInput");
+        const hInput = document.getElementById("receiptPaperHeightInput");
+        if (wInput) wInput.value = w;
+        if (hInput) hInput.value = h;
+    } catch (e) {
+        console.warn("領収書用紙設定復元失敗:", e);
+    }
+}
+
+function onReceiptPaperPresetChange(val) {
+    localStorage.setItem("pdf_mail_merge_receipt_paper_preset", val);
+    const customDiv = document.getElementById("receiptCustomPaperDimensions");
+
+    if (val === "a5_landscape") {
+        receiptPaperSizeSettings = { width: 210, height: 148 };
+        if (customDiv) customDiv.style.display = "none";
+    } else if (val === "a6_landscape") {
+        receiptPaperSizeSettings = { width: 148, height: 105 };
+        if (customDiv) customDiv.style.display = "none";
+    } else if (val === "a4_portrait") {
+        receiptPaperSizeSettings = { width: 210, height: 297 };
+        if (customDiv) customDiv.style.display = "none";
+    } else if (val === "custom") {
+        if (customDiv) customDiv.style.display = "grid";
+        saveReceiptCustomPaperSize();
+        return;
+    }
+    localStorage.setItem("pdf_mail_merge_receipt_paper_w", receiptPaperSizeSettings.width);
+    localStorage.setItem("pdf_mail_merge_receipt_paper_h", receiptPaperSizeSettings.height);
+}
+
+function saveReceiptCustomPaperSize() {
+    const wInput = document.getElementById("receiptPaperWidthInput");
+    const hInput = document.getElementById("receiptPaperHeightInput");
+    const w = parseFloat(wInput ? wInput.value : 210) || 210;
+    const h = parseFloat(hInput ? hInput.value : 148) || 148;
+    receiptPaperSizeSettings = { width: w, height: h };
+    localStorage.setItem("pdf_mail_merge_receipt_paper_w", w);
+    localStorage.setItem("pdf_mail_merge_receipt_paper_h", h);
+}
+
+// 7. 単独での奉納受領証（領収書）印刷 (用紙サイズ・@page設定付き)
 async function printReceiptSingle() {
-    const nameInput = document.getElementById("nameInput").value.trim();
+    const nameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
     const amountSelect = document.getElementById("amountSelect");
-    let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
+    let amountInput = currentTemplate === "free" ? (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : "") : (amountSelect ? amountSelect.value : (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : ""));
     const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
     const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
     const issuerName = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "奉納事業実行委員会";
@@ -4197,56 +4255,112 @@ async function printReceiptSingle() {
     showToast("📄 奉納受領証（領収書）を発行中...");
 
     const todayStr = new Date().toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+
+    const W = receiptPaperSizeSettings.width || 210;
+    const H = receiptPaperSizeSettings.height || 148;
+
+    // スケール係数 (A5横 210mm x 148mm 基準)
+    const scale = Math.min(W / 210, H / 148);
+
+    const fontTitle = Math.max(16, Math.round(28 * scale));
+    const fontDateNo = Math.max(10, Math.round(14 * scale));
+    const fontName = Math.max(14, Math.round(22 * scale));
+    const fontAmount = Math.max(14, Math.round(22 * scale));
+    const fontProviso = Math.max(11, Math.round(15 * scale));
+    const fontIssuer = Math.max(12, Math.round(18 * scale));
+    const fontSubAddr = Math.max(10, Math.round(12 * scale));
+    const fontNote = Math.max(9, Math.round(11 * scale));
+    const stampSize = Math.max(45, Math.round(70 * scale));
+    const stampFont = Math.max(8, Math.round(10 * scale));
+    const paddingContainer = Math.max(8, Math.round(24 * scale));
+
     const receiptHtml = `
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
-            <title>奉納受領証 - ${nameInput} 様</title>
+            <title>奉納受領証 - ${escapeHtml(nameInput)} 様</title>
             <style>
-                body { font-family: 'Yu Mincho', '游明朝', 'Hiragino Mincho ProN', serif; padding: 40px; margin: 0; background: #fff; }
-                .container { border: 3px double #4a1c1d; padding: 30px; position: relative; min-height: 440px; border-radius: 8px; }
-                .header { text-align: center; border-bottom: 2px solid #4a1c1d; padding-bottom: 12px; margin-bottom: 24px; }
-                .title { font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #4a1c1d; }
-                .date-no { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 24px; color: #334155; }
-                .name-box { font-size: 22px; font-weight: bold; border-bottom: 1.5px solid #333; padding-bottom: 6px; margin-bottom: 24px; width: 75%; }
-                .amount-box { font-size: 24px; font-weight: bold; text-align: center; background: #fdf2f4; border: 2px solid #8c2d38; padding: 14px; margin-bottom: 24px; border-radius: 6px; }
-                .proviso { font-size: 15px; margin-bottom: 30px; line-height: 1.6; }
-                .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
-                .issuer { font-size: 18px; font-weight: bold; line-height: 1.6; text-align: right; }
-                .stamp-box { border: 1px dashed #94a3b8; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #64748b; text-align: center; border-radius: 4px; }
-                .note { font-size: 11px; color: #64748b; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+                @page {
+                    size: ${W}mm ${H}mm;
+                    margin: 0;
+                }
+                * { box-sizing: border-box; }
+                html, body {
+                    width: ${W}mm;
+                    height: ${H}mm;
+                    margin: 0;
+                    padding: 0;
+                    background: #fff;
+                    font-family: 'Yu Mincho', '游明朝', 'Hiragino Mincho ProN', serif;
+                    overflow: hidden;
+                }
+                .page-wrap {
+                    width: ${W}mm;
+                    height: ${H}mm;
+                    padding: ${Math.max(3, Math.round(8 * scale))}mm;
+                    box-sizing: border-box;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .container {
+                    width: 100%;
+                    height: 100%;
+                    border: ${Math.max(2, Math.round(3 * scale))}px double #4a1c1d;
+                    padding: ${paddingContainer}px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    border-radius: 6px;
+                }
+                .header { text-align: center; border-bottom: 2px solid #4a1c1d; padding-bottom: ${Math.max(4, Math.round(8 * scale))}px; margin-bottom: ${Math.max(6, Math.round(14 * scale))}px; }
+                .title { font-size: ${fontTitle}px; font-weight: bold; letter-spacing: 6px; color: #4a1c1d; }
+                .date-no { display: flex; justify-content: space-between; font-size: ${fontDateNo}px; margin-bottom: ${Math.max(6, Math.round(14 * scale))}px; color: #334155; }
+                .name-box { font-size: ${fontName}px; font-weight: bold; border-bottom: 1.5px solid #333; padding-bottom: 4px; margin-bottom: ${Math.max(6, Math.round(14 * scale))}px; width: 80%; }
+                .amount-box { font-size: ${fontAmount}px; font-weight: bold; text-align: center; background: #fdf2f4; border: 2px solid #8c2d38; padding: ${Math.max(6, Math.round(10 * scale))}px; margin-bottom: ${Math.max(6, Math.round(14 * scale))}px; border-radius: 6px; }
+                .proviso { font-size: ${fontProviso}px; margin-bottom: ${Math.max(6, Math.round(16 * scale))}px; line-height: 1.5; }
+                .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
+                .issuer { font-size: ${fontIssuer}px; font-weight: bold; line-height: 1.5; text-align: right; }
+                .stamp-box { border: 1px dashed #94a3b8; width: ${stampSize}px; height: ${stampSize}px; display: flex; align-items: center; justify-content: center; font-size: ${stampFont}px; color: #64748b; text-align: center; border-radius: 4px; flex-shrink: 0; }
+                .note { font-size: ${fontNote}px; color: #64748b; margin-top: ${Math.max(4, Math.round(8 * scale))}px; border-top: 1px solid #e2e8f0; padding-top: 4px; }
             </style>
         </head>
         <body onload="window.print()">
-            <div class="container">
-                <div class="header">
-                    <div class="title">奉 納 受 領 証</div>
-                </div>
-                <div class="date-no">
-                    <div>No. ${bagNoInput || '----'}</div>
-                    <div>日付: ${todayStr}</div>
-                </div>
-                <div class="name-box">
-                    ${nameInput} 様
-                </div>
-                <div class="amount-box">
-                    金額 / 奉納: ${displayAmount}
-                </div>
-                <div class="proviso">
-                    但し 奉納金（初穂料）として、正に受領いたしました。
-                </div>
-                <div class="footer">
-                    <div class="stamp-box">
-                        非課税<br>(印紙不要)
+            <div class="page-wrap">
+                <div class="container">
+                    <div>
+                        <div class="header">
+                            <div class="title">奉 納 受 領 証</div>
+                        </div>
+                        <div class="date-no">
+                            <div>No. ${escapeHtml(bagNoInput) || '----'}</div>
+                            <div>日付: ${todayStr}</div>
+                        </div>
+                        <div class="name-box">
+                            ${escapeHtml(nameInput)} 様
+                        </div>
+                        <div class="amount-box">
+                            金額 / 奉納: ${escapeHtml(displayAmount)}
+                        </div>
+                        <div class="proviso">
+                            但し 奉納金（初穂料）として、正に受領いたしました。
+                        </div>
                     </div>
-                    <div class="issuer">
-                        ${issuerName}<br>
-                        <span style="font-size: 12px; font-weight: normal; color: #475569;">${addressInput ? '（住所: ' + addressInput + '）' : ''}</span>
+                    <div>
+                        <div class="footer">
+                            <div class="stamp-box">
+                                非課税<br>(印紙不要)
+                            </div>
+                            <div class="issuer">
+                                ${escapeHtml(issuerName)}<br>
+                                <span style="font-size: ${fontSubAddr}px; font-weight: normal; color: #475569;">${addressInput ? '（住所: ' + escapeHtml(addressInput) + '）' : ''}</span>
+                            </div>
+                        </div>
+                        <div class="note">
+                            ※宗教法人法・印紙税法に基づき、奉納金・初穂料につき収入印紙は非課税となります。
+                        </div>
                     </div>
-                </div>
-                <div class="note">
-                    ※宗教法人法・印紙税法に基づき、奉納金・初穂料につき収入印紙は非課税となります。
                 </div>
             </div>
         </body>
