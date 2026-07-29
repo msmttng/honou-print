@@ -2248,15 +2248,17 @@ async function syncFromGAS(isBackground = false) {
 async function buildSuggestData() {
     // DB名簿から抽出
     const all = await idbGetAllRecords();
-    const names = all.map(r => r.name).filter(Boolean);
-    const items = all.map(r => r.amount).filter(Boolean);
+    const names = all.map(r => String(r.name ?? "")).filter(Boolean);
+    const items = all.map(r => String(r.amount ?? "")).filter(Boolean);
     
     // クラウドキャッシュから抽出
     const cloud = await idbKvGet("cloud_suggests") || { names: [], items: [] };
+    const cloudNames = (cloud.names || []).map(v => String(v ?? "")).filter(Boolean);
+    const cloudItems = (cloud.items || []).map(v => String(v ?? "")).filter(Boolean);
     
     suggestData = {
-        names: [...new Set([...names, ...cloud.names])],
-        items: [...new Set([...items, ...cloud.items])]
+        names: [...new Set([...names, ...cloudNames])],
+        items: [...new Set([...items, ...cloudItems])]
     };
     renderSheetList();
 }
@@ -2445,10 +2447,10 @@ async function restoreFromGAS() {
                 id: recordId,
                 date: (parsedDate || new Date()).toISOString(),
                 template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
-                name: r.name,
-                amount: r.amount,
-                bagNo: r.bagNo || "",
-                address: r.address || "",
+                name: String(r.name ?? ""),
+                amount: String(r.amount ?? ""),
+                bagNo: String(r.bagNo ?? ""),
+                address: String(r.address ?? ""),
                 sync: "synced"
             };
             // putはID重複時に上書きとなるため、再実行しても増殖しない
@@ -2781,8 +2783,9 @@ function updateDirectValue(param, value) {
 // 「五萬」「十萬」「壱阡五百」「二萬五阡」等の複合表記も正しく合算する
 function parseKanjiNumber(str) {
     if (!str) return 0;
+    const strVal = String(str);
     // 1. 全角数字を半角に
-    let halfStr = str.replace(/[０-９]/g, function(s) { return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); });
+    let halfStr = strVal.replace(/[０-９]/g, function(s) { return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); });
     // 2. アラビア数字があればそれを優先して抽出
     let arabicMatch = halfStr.replace(/[^0-9]/g, '');
     if (arabicMatch && parseInt(arabicMatch, 10) > 0) {
@@ -2839,8 +2842,9 @@ function updateDashboardStats() {
         else if (r.template === "free") countFree++;
         
         // 金額抽出ロジック (「空」の場合は金額合算を除外)
-        if (r.amount && !r.amount.includes('[空]')) {
-            totalMoney += parseKanjiNumber(r.amount);
+        const _amt = (r.amount === null || r.amount === undefined) ? '' : String(r.amount);
+        if (_amt && !_amt.includes('[空]')) {
+            totalMoney += parseKanjiNumber(_amt);
         }
     }
 
@@ -3442,7 +3446,7 @@ function parseAndPreviewCsv(text) {
         const address = addressIdx !== -1 && cols[addressIdx] ? cols[addressIdx] : "";
 
         if (name) {
-            parsedCsvRecords.push({ name, amount, bagNo, address, templateType: amount.includes("萬") ? "10000en" : "free" });
+            parsedCsvRecords.push({ name, amount, bagNo, address, templateType: String(amount).includes("萬") ? "10000en" : "free" });
         }
     }
 
