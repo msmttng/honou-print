@@ -1699,12 +1699,12 @@ async function generatePDF(isPrinting = false, override = null) {
             firstPage = pdfDoc.addPage([newWidthPt, newHeightPt]);
         }
         
-        // 3. 日本語フォントの読み込みと埋め込み
+        // 3. 日本語フォントの読み込みと埋め込み (subset: false で fontkit サブセット化の重い計算をスキップし高速化)
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
                 pdfDoc.registerFontkit(window.fontkit);
-                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: true });
+                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
@@ -1859,19 +1859,23 @@ async function generatePDF(isPrinting = false, override = null) {
                     };
                     
                     if (isRotateChar) {
-                        // 方式b: 該当文字を中心軸で90度回転(rotate: -90deg)描画
-                        let rotX = drawX + (currentFontSize * 0.82);
-                        let rotY = currentY + (currentFontSize * 0.15);
+                        // 修正1: 回転の基準点を「文字枠の中心 (cx, cy)」にする幾何計算
+                        // カッコ回転位置微調整用オフセット (mm単位)
+                        const PAREN_OFFSET = { x: 0.0, y: 0.0 };
+                        
+                        const cx = x_pt; // 文字マスのX軸中心
+                        const cy = currentY + (currentFontSize * 0.45); // 文字マスのY軸中心
+                        
+                        let rotX = cx + (charWidth / 2) + mmToPt(PAREN_OFFSET.x);
+                        let rotY = cy - (currentFontSize / 2) + mmToPt(PAREN_OFFSET.y);
 
-                        // 括弧・記号ごとの微細位置補正
+                        // 全角括弧のem枠内の偏り補正
                         if (charToDraw === "（" || charToDraw === "「" || charToDraw === "『" || charToDraw === "【" || charToDraw === "〔") {
-                            rotY += currentFontSize * 0.06;
-                            rotX -= currentFontSize * 0.04;
+                            rotY += currentFontSize * 0.10;
                         } else if (charToDraw === "）" || charToDraw === "」" || charToDraw === "』" || charToDraw === "】" || charToDraw === "〕") {
-                            rotY -= currentFontSize * 0.06;
-                            rotX += currentFontSize * 0.04;
+                            rotY -= currentFontSize * 0.10;
                         } else if ("ー〜～-―─".includes(charToDraw)) {
-                            rotX = drawX + (currentFontSize * 0.78);
+                            rotX = cx + (currentFontSize * 0.38) + mmToPt(PAREN_OFFSET.x);
                         }
 
                         const rotDrawOptions = {
