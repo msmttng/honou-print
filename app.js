@@ -1089,6 +1089,152 @@ function updateSetupUI(status) {
     }
 }
 
+// --- 抜本改修: ブラウザCSS縦書き ＋ 縦中横 (.tcu) 画像化モジュール ---
+
+function buildVerticalHtml(text) {
+    if (!text) return "";
+
+    // 1. ㍿ を「株式会社」に展開
+    let s = String(text).replace(/㍿/g, "株式会社");
+
+    // 2. 組文字 ㈱ ㈲ 等または (株) （株） （有） 等を <span class="tcu">（株）</span> に変換
+    const regex = /([（\(][\u4E00-\u9FFF\u3400-\u4DBF][）\)])|([㈱㈲㈳㈶㈴㈾㈿㊑㊒])/g;
+    const map = {
+        "㈱": "株", "㈲": "有", "㈳": "社", "㈶": "財",
+        "㈴": "名", "㈾": "資", "㈿": "協", "㊑": "有", "㊒": "株"
+    };
+
+    let resultHtml = "";
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(s)) !== null) {
+        if (match.index > lastIndex) {
+            resultHtml += escapeHtml(s.substring(lastIndex, match.index));
+        }
+
+        let innerChar = "";
+        if (match[1]) {
+            innerChar = match[1].charAt(1);
+        } else if (match[2]) {
+            innerChar = map[match[2]] || "株";
+        }
+
+        resultHtml += `<span class="tcu">（${escapeHtml(innerChar)}）</span>`;
+        lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < s.length) {
+        resultHtml += escapeHtml(s.substring(lastIndex));
+    }
+
+    return resultHtml;
+}
+
+function getFontFamilyCss(fontKey) {
+    if (fontKey === "ZenMaruGothic") return "'Zen Maru Gothic', sans-serif";
+    if (fontKey === "NotoSansJP") return "'Noto Sans JP', sans-serif";
+    return "'HGSGyoshotai', serif";
+}
+
+async function renderVerticalTextToPng(htmlContent, fontKey, fontSizePt, charSpacingPt) {
+    const box = document.getElementById("nameRenderBox");
+    if (!box) return null;
+
+    const fontFamilyCss = getFontFamilyCss(fontKey);
+    const letterSpacingCss = `${charSpacingPt}pt`;
+    const fontSizeCss = `${fontSizePt}pt`;
+
+    box.style.fontFamily = fontFamilyCss;
+    box.style.fontSize = fontSizeCss;
+    box.style.letterSpacing = letterSpacingCss;
+    box.style.visibility = "visible";
+    box.innerHTML = htmlContent;
+
+    // フォント準備を待機
+    if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready;
+    }
+
+    const rect = box.getBoundingClientRect();
+    const widthPx = Math.max(1, Math.ceil(rect.width) + 6);
+    const heightPx = Math.max(1, Math.ceil(rect.height) + 6);
+
+    const svgStr = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}">
+            <style>
+                .render-body {
+                    margin: 0;
+                    padding: 2px;
+                    background: transparent;
+                    font-family: ${fontFamilyCss};
+                    font-size: ${fontSizeCss};
+                    letter-spacing: ${letterSpacingCss};
+                    writing-mode: vertical-rl;
+                    -webkit-writing-mode: vertical-rl;
+                    white-space: nowrap;
+                    line-height: 1;
+                    color: #1a1a1a;
+                }
+                .tcu {
+                    text-combine-upright: all;
+                    -webkit-text-combine: all;
+                    font-size: 0.88em;
+                }
+            </style>
+            <foreignObject width="100%" height="100%">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="render-body">
+                    ${htmlContent}
+                </div>
+            </foreignObject>
+        </svg>
+    `;
+
+    const img = new Image();
+    const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+
+    await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = (err) => {
+            console.warn("SVG load warning:", err);
+            resolve();
+        };
+        img.src = url;
+    });
+
+    const scale = 3.0;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(widthPx * scale);
+    canvas.height = Math.floor(heightPx * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+
+    box.style.visibility = "hidden";
+
+    const dataUrl = canvas.toDataURL("image/png");
+    const base64Str = dataUrl.split(",")[1];
+    const binaryStr = atob(base64Str);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    return {
+        pngBytes: bytes,
+        widthPt: pxToPt(widthPx),
+        heightPt: pxToPt(heightPx),
+        aspect: widthPx / heightPx
+    };
+}
+
+function onFontChange(fontValue) {
+    triggerAutoUpdate();
+}
+
 async function handleSetupFiles(files, status) {
     for (const file of files) {
         const name = file.name.toLowerCase();
@@ -1174,336 +1320,9 @@ function initDesignSettings() {
     updatePaperSizeUI();
 }
 
-// 縦書き用組文字スタンプ対象マッピング（㍿ のみ除く）
-const KUMI_STAMP_MAP = {
-    "㈱": "（株）",
-    "㈲": "（有）",
-    "㈳": "（社）",
-    "㈶": "（財）",
-    "㈴": "（名）",
-    "㈾": "（資）",
-    "㈿": "（協）",
-    "㊑": "（有）",
-    "㊒": "（株）"
-};
-
-// 縦書き描画用トークン分割（（株）(株) ㈱ （有） (有) ㈲ （代） などの括弧囲み漢字1文字を1マススタンプ化）
-function tokenizeVertical(s) {
-    if (!s) return [];
-
-    // 1. ㍿ は従来どおり「株式会社」4文字の char トークンに展開
-    let text = s.replace(/㍿/g, "株式会社");
-
-    // 2. 縦書き用の長音・ダッシュ類 (ー ― - − 等) を縦棒 '丨' (U+4E28) に変換
-    text = text.replace(/[ー―\-\u2010-\u2015\u2212\uFF0D]/g, "丨");
-
-    const tokens = [];
-    // 括弧（全角/半角） + CJK漢字1文字 + 閉じ括弧（全角/半角） または 1文字組文字 (㈱ ㈲ 等)
-    const regex = /([（\(][\u4E00-\u9FFF\u3400-\u4DBF][）\)])|([㈱㈲㈳㈶㈴㈾㈿㊑㊒])/g;
-
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            const preStr = text.substring(lastIndex, match.index);
-            for (const c of preStr) {
-                tokens.push({ type: "char", ch: c });
-            }
-        }
-
-        const matchedStr = match[0];
-        let innerChar = "";
-
-        if (match[1]) {
-            // (株) や （有） や （代） の形式
-            innerChar = matchedStr.charAt(1);
-        } else if (match[2]) {
-            // ㈱ や ㈲ の形式
-            const map = {
-                "㈱": "株", "㈲": "有", "㈳": "社", "㈶": "財",
-                "㈴": "名", "㈾": "資", "㈿": "協", "㊑": "有", "㊒": "株"
-            };
-            innerChar = map[matchedStr] || "株";
-        }
-
-        tokens.push({
-            type: "stamp",
-            innerChar: innerChar,
-            displayLabel: `（${innerChar}）`
-        });
-
-        lastIndex = regex.lastIndex;
-    }
-
-    if (lastIndex < text.length) {
-        const postStr = text.substring(lastIndex);
-        for (const c of postStr) {
-            tokens.push({ type: "char", ch: c });
-        }
-    }
-
-    return tokens;
-}
-
-const kumiStampCache = {};
-
-async function getKumiStampPngBytes(pdfDoc, innerChar, fontKey, fontSize) {
-    const text = `（${innerChar}）`;
-    const cacheKey = `${innerChar}_${fontKey}_${Math.round(fontSize)}`;
-    if (kumiStampCache[cacheKey]) {
-        return kumiStampCache[cacheKey];
-    }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 300;
-    canvas.height = 300;
-    const ctx = canvas.getContext("2d");
-
-    let fontFamily = "Noto Serif JP, serif";
-    if (fontKey.includes("HGSGyoshotai")) fontFamily = "HGSGyoshotai, Noto Serif JP, serif";
-    else if (fontKey.includes("Yuji")) fontFamily = "'Yuji Syuku', serif";
-    else if (fontKey.includes("Shippori")) fontFamily = "'Shippori Mincho B1', serif";
-    else if (fontKey.includes("Kaisei")) fontFamily = "'Kaisei Tokumin', serif";
-    else if (fontKey.includes("Zen Maru")) fontFamily = "'Zen Maru Gothic', sans-serif";
-    else if (fontKey.includes("Noto Sans")) fontFamily = "'Noto Sans JP', sans-serif";
-
-    ctx.font = `bold ${Math.round(fontSize * 1.6)}px ${fontFamily}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#111111";
-    ctx.fillText(text, 150, 150);
-
-    const imgData = ctx.getImageData(0, 0, 300, 300);
-    const data = imgData.data;
-    let minX = 300, minY = 300, maxX = 0, maxY = 0;
-    let hasInk = false;
-    for (let y = 0; y < 300; y++) {
-        for (let x = 0; x < 300; x++) {
-            const alpha = data[(y * 300 + x) * 4 + 3];
-            if (alpha > 20) {
-                hasInk = true;
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-            }
-        }
-    }
-
-    if (!hasInk) {
-        minX = 100; maxX = 200; minY = 100; maxY = 200;
-    }
-
-    const pad = 4;
-    minX = Math.max(0, minX - pad);
-    minY = Math.max(0, minY - pad);
-    maxX = Math.min(299, maxX + pad);
-    maxY = Math.min(299, maxY + pad);
-
-    const cropW = maxX - minX + 1;
-    const cropH = maxY - minY + 1;
-
-    const cropCanvas = document.createElement("canvas");
-    cropCanvas.width = cropW;
-    cropCanvas.height = cropH;
-    const cropCtx = cropCanvas.getContext("2d");
-    cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
-
-    const dataUrl = cropCanvas.toDataURL("image/png");
-    const base64Str = dataUrl.split(",")[1];
-    const binaryStr = atob(base64Str);
-    const len = binaryStr.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-    }
-
-    const embeddedImage = await pdfDoc.embedPng(bytes);
-    const result = { embeddedImage, aspect: cropW / cropH, origW: cropW, origH: cropH };
-    kumiStampCache[cacheKey] = result;
-    return result;
-}
-
-// --- 括弧・記号・組文字位置調整 (書体別 ＆ グループ別保存) ---
-let parenSettingsPerFont = {};
-
-function loadParenSettings() {
-    try {
-        const saved = localStorage.getItem("pdf_mail_merge_paren_settings");
-        if (saved) {
-            parenSettingsPerFont = JSON.parse(saved);
-        }
-    } catch (e) {
-        console.error("括弧設定復元エラー:", e);
-    }
-}
-
-function saveParenSettings() {
-    try {
-        localStorage.setItem("pdf_mail_merge_paren_settings", JSON.stringify(parenSettingsPerFont));
-    } catch (e) {
-        console.error("括弧設定保存エラー:", e);
-    }
-}
-
 function getCurrentFontKey() {
     const fontSelect = document.getElementById("fontSelect");
     return fontSelect && fontSelect.value ? fontSelect.value : "HGSGyoshotai";
-}
-
-function getCurrentFontParenSetting(fontKeyInput = null) {
-    const fontKey = fontKeyInput || getCurrentFontKey();
-    if (!parenSettingsPerFont[fontKey]) {
-        parenSettingsPerFont[fontKey] = {
-            kumi: { offsetX: 0.0, offsetY: 0.0, scale: 100 }
-        };
-    }
-    if (!parenSettingsPerFont[fontKey].kumi) {
-        const oldObj = parenSettingsPerFont[fontKey].rotate || parenSettingsPerFont[fontKey];
-        parenSettingsPerFont[fontKey].kumi = {
-            offsetX: Number.isFinite(Number(oldObj.offsetX)) ? Number(oldObj.offsetX) : 0.0,
-            offsetY: Number.isFinite(Number(oldObj.offsetY)) ? Number(oldObj.offsetY) : 0.0,
-            scale: Number.isFinite(Number(oldObj.scale)) && Number(oldObj.scale) > 0 ? Number(oldObj.scale) : 100
-        };
-    }
-    return parenSettingsPerFont[fontKey].kumi;
-}
-
-function getParenSettingSafe(fontKeyInput = null) {
-    const setting = getCurrentFontParenSetting(fontKeyInput);
-    
-    let ox = Number(setting.offsetX);
-    let oy = Number(setting.offsetY);
-    let sc = Number(setting.scale);
-
-    if (!Number.isFinite(ox)) ox = 0.0;
-    if (!Number.isFinite(oy)) oy = 0.0;
-    if (!Number.isFinite(sc) || sc <= 0) sc = 100;
-
-    return {
-        offsetX: ox,
-        offsetY: oy,
-        scale: sc
-    };
-}
-
-function updateParenUI() {
-    const setting = getParenSettingSafe();
-    const xEl = document.getElementById("paren-val-offsetX");
-    const yEl = document.getElementById("paren-val-offsetY");
-    const sEl = document.getElementById("paren-val-scale");
-
-    if (xEl && xEl.tagName !== 'INPUT') xEl.textContent = (setting.offsetX >= 0 ? "+" : "") + setting.offsetX.toFixed(1);
-    if (yEl && yEl.tagName !== 'INPUT') yEl.textContent = (setting.offsetY >= 0 ? "+" : "") + setting.offsetY.toFixed(1);
-    if (sEl && sEl.tagName !== 'INPUT') sEl.textContent = Math.round(setting.scale) + "%";
-}
-
-function setParenSettingDirect(param, rawVal) {
-    const setting = getCurrentFontParenSetting();
-    let val = Number(rawVal);
-    if (!Number.isFinite(val)) {
-        val = param === 'scale' ? 100 : 0.0;
-    }
-
-    if (param === "offsetX" || param === "offsetY") {
-        val = parseFloat(val.toFixed(1));
-        if (val < -20.0) val = -20.0;
-        if (val > 20.0) val = 20.0;
-        setting[param] = val;
-    } else if (param === "scale") {
-        val = Math.round(val);
-        if (val < 30) val = 30;
-        if (val > 200) val = 200;
-        setting.scale = val;
-    }
-
-    saveParenSettings();
-    updateParenUI();
-    triggerAutoUpdate();
-}
-
-function makeParenValueEditable(param) {
-    const span = document.getElementById(`paren-val-${param}`);
-    if (!span || span.tagName === 'INPUT') return;
-    const setting = getParenSettingSafe();
-    let currentVal = setting[param];
-
-    const input = document.createElement('input');
-    input.id = `paren-val-${param}`;
-    input.type = 'number';
-    input.step = param === 'scale' ? '1' : '0.1';
-    input.style.width = '42px';
-    input.style.fontSize = '12px';
-    input.style.textAlign = 'center';
-    input.style.fontFamily = 'monospace';
-    input.style.border = '1px solid #4f46e5';
-    input.style.borderRadius = '4px';
-    input.style.padding = '1px 2px';
-    input.value = currentVal;
-
-    const commitValue = () => {
-        let parsed = parseFloat(input.value);
-        if (!Number.isFinite(parsed)) {
-            parsed = param === 'scale' ? 100 : 0.0;
-        }
-        setParenSettingDirect(param, parsed);
-    };
-
-    input.onblur = commitValue;
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            input.blur();
-        }
-    };
-
-    if (span.parentNode) {
-        span.parentNode.replaceChild(input, span);
-        input.focus();
-        input.select();
-    }
-}
-
-function adjustParenSetting(param, delta) {
-    const setting = getCurrentFontParenSetting();
-    let ox = Number(setting.offsetX);
-    let oy = Number(setting.offsetY);
-    let sc = Number(setting.scale);
-
-    if (!Number.isFinite(ox)) ox = 0.0;
-    if (!Number.isFinite(oy)) oy = 0.0;
-    if (!Number.isFinite(sc) || sc <= 0) sc = 100;
-
-    if (param === "offsetX") {
-        let val = parseFloat((ox + delta).toFixed(1));
-        if (val < -20.0) val = -20.0;
-        if (val > 20.0) val = 20.0;
-        setting.offsetX = val;
-    } else if (param === "offsetY") {
-        let val = parseFloat((oy + delta).toFixed(1));
-        if (val < -20.0) val = -20.0;
-        if (val > 20.0) val = 20.0;
-        setting.offsetY = val;
-    } else if (param === "scale") {
-        let val = Math.round(sc + delta);
-        if (val < 30) val = 30;
-        if (val > 200) val = 200;
-        setting.scale = val;
-    }
-    saveParenSettings();
-    updateParenUI();
-    triggerAutoUpdate();
-}
-
-function resetParenSettings() {
-    const fontKey = getCurrentFontKey();
-    parenSettingsPerFont[fontKey] = {
-        kumi: { offsetX: 0.0, offsetY: 0.0, scale: 100 }
-    };
-    saveParenSettings();
-    updateParenUI();
-    triggerAutoUpdate();
 }
 
 function onFontChange(fontValue) {
@@ -1537,7 +1356,6 @@ function saveDesignSettings() {
     try {
         localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
         localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
-        saveParenSettings();
     } catch (e) {
         console.warn("LocalStorage保存エラー:", e);
     }
@@ -2247,141 +2065,68 @@ async function generatePDF(isPrinting = false, override = null) {
             const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
-                // 縦書きの描画処理
-                // 前処理: textValue および 敬称文字列をトークン分割
-                const nameTokens = tokenizeVertical(textValue);
-                let honorificTokens = [];
-                let honorificSpacingPt = 0;
-                
-                // 氏名フィールドかつ敬称ありの時
+                // ★ 抜本改修: CSS縦書き ＋ 縦中横 (.tcu) による PNG 画像化一括描画
+                let fullTextStr = textValue;
                 if (fieldKey === "name" && nameInput && honorific !== "なし") {
                     const honorificText = honorific === "custom" ? (nameSettings.honorific || "") : honorific;
-                    honorificTokens = tokenizeVertical(honorificText);
-                    honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
+                    fullTextStr += (honorificText ? " " + honorificText : "");
                 }
-                
-                const totalTokensCount = nameTokens.length + honorificTokens.length;
+
+                const fontKey = getCurrentFontKey();
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
-                
-                // 枠の高さに収まるようにフォントサイズを縮小（すべての文字で文字送りを維持）
-                let currentHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
-                if (currentHeight_pt > height_pt) {
-                    currentFontSize = (height_pt - (totalTokensCount - 1) * charSpacingPt - honorificSpacingPt) / (totalTokensCount * 1.02);
-                    const minAllowedSize = Math.max(14, baseFontSize * 0.6); // 下限ガード
-                    if (currentFontSize < minAllowedSize) currentFontSize = minAllowedSize;
-                }
-                // 枠の幅（1文字の横幅）にも収まるように縮小
-                if (currentFontSize > width_pt) {
-                    currentFontSize = width_pt;
-                }
+                const htmlContent = buildVerticalHtml(fullTextStr);
 
-                // ボックスの上端を計算
-                const boxTop = y_pt + baseFontSize;
+                const renderResult = await renderVerticalTextToPng(htmlContent, fontKey, baseFontSize, charSpacingPt);
 
-                // 枠線の描画
-                if (showBoundingBox && !isPrinting) {
-                    firstPage.drawRectangle({
-                        x: x_pt - (width_pt / 2),
-                        y: boxTop - height_pt,
-                        width: width_pt,
-                        height: height_pt,
-                        borderColor: PDFLib.rgb(1, 0, 0),
-                        borderWidth: 1,
-                    });
-                }
+                if (renderResult && renderResult.pngBytes) {
+                    const embeddedImage = await pdfDoc.embedPng(renderResult.pngBytes);
+                    
+                    let targetW = renderResult.widthPt;
+                    let targetH = renderResult.heightPt;
 
-                // テキストの上端が boxTop に合うように最初の文字の baseline を設定
-                const finalHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
-                const spacing = currentFontSize * 1.02 + charSpacingPt;
-                
-                let currentY = boxTop - currentFontSize;
-                const valign = fieldVal.valign || "top";
-                if (valign !== "top") {
+                    // 赤枠の高さ・幅に収まるよう自動縮小（等比縮小）
+                    if (targetH > height_pt) {
+                        const ratio = height_pt / targetH;
+                        targetH = height_pt;
+                        targetW = targetW * ratio;
+                    }
+                    if (targetW > width_pt) {
+                        const ratio = width_pt / targetW;
+                        targetW = width_pt;
+                        targetH = targetH * ratio;
+                    }
+
+                    // ボックス上端
+                    const boxTop = y_pt + baseFontSize;
+                    let drawX = x_pt - (targetW / 2);
+                    let drawY = boxTop - targetH;
+
+                    const valign = fieldVal.valign || "top";
                     if (valign === "center") {
-                        currentY = boxTop - (height_pt / 2) + (finalHeight_pt / 2) - currentFontSize;
+                        drawY = boxTop - (height_pt / 2) - (targetH / 2);
                     } else if (valign === "bottom") {
-                        currentY = boxTop - height_pt + finalHeight_pt - currentFontSize;
+                        drawY = boxTop - height_pt;
                     }
-                }
-                
-                // 描画トークンリストの作成
-                const allDrawTokens = [];
-                nameTokens.forEach(t => allDrawTokens.push({ token: t, isHonorific: false }));
-                honorificTokens.forEach((t, idx) => {
-                    allDrawTokens.push({ token: t, isHonorific: true, isFirstHonorific: idx === 0 });
-                });
-                
-                for (const item of allDrawTokens) {
-                    if (item.isHonorific && item.isFirstHonorific) {
-                        currentY -= honorificSpacingPt; // 敬称スペースの適用
+
+                    // 枠線の描画
+                    if (showBoundingBox && !isPrinting) {
+                        firstPage.drawRectangle({
+                            x: x_pt - (width_pt / 2),
+                            y: boxTop - height_pt,
+                            width: width_pt,
+                            height: height_pt,
+                            borderColor: PDFLib.rgb(1, 0, 0),
+                            borderWidth: 1,
+                        });
                     }
-                    
-                    const token = item.token;
-                    const cellCenterX = x_pt;
-                    const cellCenterY = currentY + (currentFontSize * 0.35);
 
-                    if (token.type === "stamp") {
-                        // ★ （株）（有）（代）等の合成スタンプ描画 (1マス非回転)
-                        const fontKey = getCurrentFontKey();
-                        const stampObj = await getKumiStampPngBytes(pdfDoc, token.innerChar, fontKey, currentFontSize);
-                        const parenSetting = getParenSettingSafe(fontKey);
-
-                        let rotX = cellCenterX + mmToPt(parenSetting.offsetX);
-                        let rotY = cellCenterY + mmToPt(parenSetting.offsetY);
-
-                        const rotScale = parenSetting.scale / 100.0;
-                        
-                        let targetW = currentFontSize * 1.1 * rotScale;
-                        let targetH = targetW / stampObj.aspect;
-                        if (targetH > currentFontSize * 1.1 * rotScale) {
-                            targetH = currentFontSize * 1.1 * rotScale;
-                            targetW = targetH * stampObj.aspect;
-                        }
-
-                        const drawX = rotX - (targetW / 2);
-                        const drawY = rotY - (targetH / 2);
-
-                        if (Number.isFinite(drawX) && Number.isFinite(drawY) && Number.isFinite(targetW) && Number.isFinite(targetH) && targetW > 0 && targetH > 0) {
-                            firstPage.drawImage(stampObj.embeddedImage, {
-                                x: drawX,
-                                y: drawY,
-                                width: targetW,
-                                height: targetH
-                            });
-                        } else {
-                            const errDetail = `Invalid stamp draw parameters! drawX=${drawX}, drawY=${drawY}, targetW=${targetW}, targetH=${targetH}, setting=${JSON.stringify(parenSetting)}`;
-                            console.error(errDetail);
-                            addAppLog("error", errDetail, new Error().stack || "");
-                        }
-                    } else {
-                        // 通常文字の描画（括弧・記号含むすべての文字を回転せずそのまま縦に置く）
-                        const charToDraw = token.ch;
-                        const charWidth = fontToUse.widthOfTextAtSize(charToDraw, currentFontSize);
-                        let drawX = x_pt;
-                        if (alignment === "center") {
-                            drawX = x_pt - (charWidth / 2);
-                        } else if (alignment === "right") {
-                            drawX = x_pt - charWidth;
-                        }
-
-                        const baseDrawOptions = {
-                            x: drawX,
-                            y: currentY,
-                            size: currentFontSize,
-                            font: fontToUse,
-                            color: PDFLib.rgb(0.1, 0.1, 0.1)
-                        };
-
-                        firstPage.drawText(charToDraw, baseDrawOptions);
-                        if (fieldVal.bold) {
-                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3 });
-                            firstPage.drawText(charToDraw, { ...baseDrawOptions, y: baseDrawOptions.y + 0.3 });
-                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3, y: baseDrawOptions.y + 0.3 });
-                        }
-                    }
-                    
-                    // ★ 必ず1セル分の縦送り (spacing) を実行
-                    currentY -= spacing;
+                    // 画像配置
+                    firstPage.drawImage(embeddedImage, {
+                        x: drawX,
+                        y: drawY,
+                        width: targetW,
+                        height: targetH
+                    });
                 }
             } else {
                 // 通常の横書き描画処理（字間と重ね描きを反映）
