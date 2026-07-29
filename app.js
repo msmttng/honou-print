@@ -2787,43 +2787,51 @@ function updateDirectValue(param, value) {
 // ==========================================
 // 集計（ダッシュボード）更新処理
 // ==========================================
-// 漢数字パース用関数
-// 「五萬」「十萬」「壱阡五百」「二萬五阡」等の複合表記も正しく合算する
+// 漢数字・金額パース用関数 (物品名の容量・個数の数値誤認を防止する高度パース)
 function parseKanjiNumber(str) {
     if (!str) return 0;
-    const strVal = String(str);
-    // 1. 全角数字を半角に
-    let halfStr = strVal.replace(/[０-９]/g, function(s) { return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); });
-    // 2. アラビア数字があればそれを優先して抽出
+    const strVal = String(str).trim();
+
+    // 1. 物品単位や掛け算 (ml, L, ケース, 本, 箱, 枚, 缶, 袋, 束, kg, g, %, 度, 個, セット, 人前, パック, × 等) の付いた数値を消去
+    const patternUnits = /[\d０-９\.\,]+\s*(?:ml|L|ℓ|l|ケース|本|箱|枚|缶|袋|束|kg|g|%|度|個|セット|人前|パック)/gi;
+    const patternMult = /[×xX\*]\s*[\d０-９]+|[\d０-９]+\s*[×xX\*]/g;
+    
+    let sCleaned = strVal.replace(patternUnits, '').replace(patternMult, '');
+    
+    // 2. 物品キーワードが含まれ、かつ明らかな金銭指定 (¥, 円, 万, 千) がない場合は物品（0円）とみなす
+    const itemKeywords = ['ビール', '麦茶', '緑茶', '酒', '餃子', '茶', 'ジュース', 'ケース', '本', '箱', '枚', '缶', '券', '接待', 'ケース'];
+    const hasItemKw = itemKeywords.some(kw => strVal.includes(kw));
+    const hasMoneyExpress = /[¥\\円金萬万阡千]/.test(strVal);
+    if (hasItemKw && !hasMoneyExpress) {
+        return 0;
+    }
+
+    // 3. 全角数字を半角に
+    let halfStr = sCleaned.replace(/[０-９]/g, function(s) { return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); });
+    // 4. アラビア数字があればそれを優先して抽出
     let arabicMatch = halfStr.replace(/[^0-9]/g, '');
     if (arabicMatch && parseInt(arabicMatch, 10) > 0) {
         return parseInt(arabicMatch, 10);
     }
 
-    // 3. 漢数字をパース
+    // 5. 漢数字をパース
     const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '伍':5, '六':6, '七':7, '八':8, '九':9};
     const smallUnitMap = {'阡':1000, '千':1000, '百':100, '十':10};
     const bigUnitMap = {'萬':10000, '万':10000, '億':100000000};
 
-    // 漢数字に関係する文字だけを抽出
     const chars = Array.from(halfStr).filter(c =>
         numMap[c] !== undefined || smallUnitMap[c] !== undefined || bigUnitMap[c] !== undefined
     );
     if (chars.length === 0) return 0;
 
-    // 標準的な2段階アルゴリズム:
-    //   section = 大単位(萬/億)ごとの区切り内の合計
-    //   例: 「二萬五阡」→ (2)×10000 + (5×1000) = 25000
-    //   例: 「十萬」  → (10)×10000 = 100000
-    let total = 0;      // 確定した合計
-    let section = 0;    // 現在の大単位区間の合計
-    let digit = 0;      // 直前の数字 (単位が続かなければそのまま加算)
+    let total = 0;
+    let section = 0;
+    let digit = 0;
 
     for (const c of chars) {
         if (numMap[c] !== undefined) {
             digit = numMap[c];
         } else if (smallUnitMap[c] !== undefined) {
-            // 「十」のように数字を伴わない場合は1として扱う
             section += (digit === 0 ? 1 : digit) * smallUnitMap[c];
             digit = 0;
         } else if (bigUnitMap[c] !== undefined) {
