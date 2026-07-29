@@ -1349,8 +1349,8 @@ function getCurrentFontKey() {
     return fontSelect && fontSelect.value ? fontSelect.value : "HGSGyoshotai";
 }
 
-function getCurrentFontParenSetting() {
-    const fontKey = getCurrentFontKey();
+function getCurrentFontParenSetting(fontKeyInput = null) {
+    const fontKey = fontKeyInput || getCurrentFontKey();
     if (!parenSettingsPerFont[fontKey]) {
         parenSettingsPerFont[fontKey] = {
             kumi: { offsetX: 0.0, offsetY: 0.0, scale: 100 }
@@ -1359,16 +1359,34 @@ function getCurrentFontParenSetting() {
     if (!parenSettingsPerFont[fontKey].kumi) {
         const oldObj = parenSettingsPerFont[fontKey].rotate || parenSettingsPerFont[fontKey];
         parenSettingsPerFont[fontKey].kumi = {
-            offsetX: oldObj.offsetX || 0.0,
-            offsetY: oldObj.offsetY || 0.0,
-            scale: oldObj.scale || 100
+            offsetX: Number.isFinite(Number(oldObj.offsetX)) ? Number(oldObj.offsetX) : 0.0,
+            offsetY: Number.isFinite(Number(oldObj.offsetY)) ? Number(oldObj.offsetY) : 0.0,
+            scale: Number.isFinite(Number(oldObj.scale)) && Number(oldObj.scale) > 0 ? Number(oldObj.scale) : 100
         };
     }
     return parenSettingsPerFont[fontKey].kumi;
 }
 
+function getParenSettingSafe(fontKeyInput = null) {
+    const setting = getCurrentFontParenSetting(fontKeyInput);
+    
+    let ox = Number(setting.offsetX);
+    let oy = Number(setting.offsetY);
+    let sc = Number(setting.scale);
+
+    if (!Number.isFinite(ox)) ox = 0.0;
+    if (!Number.isFinite(oy)) oy = 0.0;
+    if (!Number.isFinite(sc) || sc <= 0) sc = 100;
+
+    return {
+        offsetX: ox,
+        offsetY: oy,
+        scale: sc
+    };
+}
+
 function updateParenUI() {
-    const setting = getCurrentFontParenSetting();
+    const setting = getParenSettingSafe();
     const xEl = document.getElementById("paren-val-offsetX");
     const yEl = document.getElementById("paren-val-offsetY");
     const sEl = document.getElementById("paren-val-scale");
@@ -1380,13 +1398,26 @@ function updateParenUI() {
 
 function adjustParenSetting(param, delta) {
     const setting = getCurrentFontParenSetting();
-    if (param === "offsetX" || param === "offsetY") {
-        let val = parseFloat((setting[param] + delta).toFixed(1));
+    let ox = Number(setting.offsetX);
+    let oy = Number(setting.offsetY);
+    let sc = Number(setting.scale);
+
+    if (!Number.isFinite(ox)) ox = 0.0;
+    if (!Number.isFinite(oy)) oy = 0.0;
+    if (!Number.isFinite(sc) || sc <= 0) sc = 100;
+
+    if (param === "offsetX") {
+        let val = parseFloat((ox + delta).toFixed(1));
         if (val < -20.0) val = -20.0;
         if (val > 20.0) val = 20.0;
-        setting[param] = val;
+        setting.offsetX = val;
+    } else if (param === "offsetY") {
+        let val = parseFloat((oy + delta).toFixed(1));
+        if (val < -20.0) val = -20.0;
+        if (val > 20.0) val = 20.0;
+        setting.offsetY = val;
     } else if (param === "scale") {
-        let val = Math.round(setting.scale + delta);
+        let val = Math.round(sc + delta);
         if (val < 30) val = 30;
         if (val > 200) val = 200;
         setting.scale = val;
@@ -2224,12 +2255,12 @@ async function generatePDF(isPrinting = false, override = null) {
                         // ★ （株）（有）（代）等の合成スタンプ描画 (1マス非回転)
                         const fontKey = getCurrentFontKey();
                         const stampObj = await getKumiStampPngBytes(pdfDoc, token.innerChar, fontKey, currentFontSize);
-                        const parenSetting = getCurrentFontParenSetting();
+                        const parenSetting = getParenSettingSafe(fontKey);
 
-                        let rotX = cellCenterX + mmToPt(parenSetting.offsetX || 0.0);
-                        let rotY = cellCenterY + mmToPt(parenSetting.offsetY || 0.0);
+                        let rotX = cellCenterX + mmToPt(parenSetting.offsetX);
+                        let rotY = cellCenterY + mmToPt(parenSetting.offsetY);
 
-                        const rotScale = (parenSetting.scale || 100) / 100.0;
+                        const rotScale = parenSetting.scale / 100.0;
                         
                         let targetW = currentFontSize * 1.1 * rotScale;
                         let targetH = targetW / stampObj.aspect;
@@ -2238,12 +2269,19 @@ async function generatePDF(isPrinting = false, override = null) {
                             targetW = targetH * stampObj.aspect;
                         }
 
-                        firstPage.drawImage(stampObj.embeddedImage, {
-                            x: rotX - (targetW / 2),
-                            y: rotY - (targetH / 2),
-                            width: targetW,
-                            height: targetH
-                        });
+                        const drawX = rotX - (targetW / 2);
+                        const drawY = rotY - (targetH / 2);
+
+                        if (Number.isFinite(drawX) && Number.isFinite(drawY) && Number.isFinite(targetW) && Number.isFinite(targetH) && targetW > 0 && targetH > 0) {
+                            firstPage.drawImage(stampObj.embeddedImage, {
+                                x: drawX,
+                                y: drawY,
+                                width: targetW,
+                                height: targetH
+                            });
+                        } else {
+                            console.warn("Invalid stamp draw dimensions:", { drawX, drawY, targetW, targetH });
+                        }
                     } else {
                         // 通常文字の描画（括弧・記号含むすべての文字を回転せずそのまま縦に置く）
                         const charToDraw = token.ch;

@@ -1,10 +1,10 @@
 // Service Worker - 奉納ビラ印刷＆名簿管理システム
 // 注意: リリース時は index.html の app.js?v= と、この CACHE_NAME のバージョンを必ず揃えること
-const CACHE_NAME = 'honou-print-v70';
+const CACHE_NAME = 'honou-print-v71';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './app.js?v=70',
+  './app.js?v=71',
   './hgs_gyoshotai.ttf',
   './奉納ビラ0602.pdf',
   './manifest.json',
