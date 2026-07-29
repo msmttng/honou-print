@@ -909,7 +909,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     // 1. デザイン設定および名簿DBの復元
     // （loadDbRecordsは非同期。awaitしないと空の名簿でrenderTableされてしまう）
     loadDesignSettings();
-    updateParenUI();
     await loadDbRecords();
     renderTable();
     setDefaultBagNo(true);
@@ -1326,7 +1325,6 @@ function getCurrentFontKey() {
 }
 
 function onFontChange(fontValue) {
-    updateParenUI();
     triggerAutoUpdate();
 }
 
@@ -1349,7 +1347,6 @@ function loadDesignSettings() {
     } catch (e) {
         console.error("用紙サイズ設定アクセスエラー:", e);
     }
-    loadParenSettings();
 }
 
 function saveDesignSettings() {
