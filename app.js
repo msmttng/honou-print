@@ -660,11 +660,11 @@ async function loadDbRecords() {
             }
             return true;
         });
-        // IndexedDBはキー順（≒古い順）で返すため、常に日時降順（新しい順）に揃える
+        // デフォルトで日時昇順（古い順）に揃える
         dbRecords.sort((a, b) => {
             const da = parseFlexibleDate(a.date);
             const db_ = parseFlexibleDate(b.date);
-            return (db_ ? db_.getTime() : 0) - (da ? da.getTime() : 0);
+            return (da ? da.getTime() : 0) - (db_ ? db_.getTime() : 0);
         });
     } catch (e) {
         console.error("IndexedDB名簿DBアクセスエラー:", e);
@@ -1867,26 +1867,19 @@ function renderTable() {
                addrStr.includes(searchInput);
     });
 
-    // 並び替え（sortSelectはこれまでUIだけ存在し機能していなかった）
+    // 並び替え (デフォルト: 日付の古い順)
     const sortSelect = document.getElementById("sortSelect");
-    const sortMode = sortSelect ? sortSelect.value : "date_desc";
-    const templateOrder = { "10000en": 0, "1000en": 1, "free": 2 };
+    const sortMode = sortSelect ? sortSelect.value : "date_asc";
     const dateVal = r => { const d = parseFlexibleDate(r.date); return d ? d.getTime() : 0; };
     switch (sortMode) {
-        case "date_asc":
-            filteredRecords.sort((a, b) => dateVal(a) - dateVal(b));
-            break;
-        case "template_desc": // 萬→阡→フ
-            filteredRecords.sort((a, b) => (templateOrder[a.template] ?? 9) - (templateOrder[b.template] ?? 9) || dateVal(b) - dateVal(a));
-            break;
-        case "template_asc": // フ→阡→萬
-            filteredRecords.sort((a, b) => (templateOrder[b.template] ?? 9) - (templateOrder[a.template] ?? 9) || dateVal(b) - dateVal(a));
+        case "date_desc":
+            filteredRecords.sort((a, b) => dateVal(b) - dateVal(a));
             break;
         case "name_asc":
             filteredRecords.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "ja"));
             break;
-        default: // date_desc
-            filteredRecords.sort((a, b) => dateVal(b) - dateVal(a));
+        default: // date_asc (日付の古い順)
+            filteredRecords.sort((a, b) => dateVal(a) - dateVal(b));
     }
 
     if (filteredRecords.length === 0) {
@@ -1904,18 +1897,18 @@ function renderTable() {
         // DOM APIとクロージャで安全にバインドする
         tr.innerHTML = `
             <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
-            <td data-label="日時">${escapeHTML(dateStr)}</td>
+            <td data-label="日時" style="white-space: nowrap;">${escapeHTML(dateStr)}</td>
             <td data-label="番号">${escapeHTML(String(r.bagNo ?? ""))}</td>
             <td data-label="氏名" style="font-weight: 500;">${escapeHTML(String(r.name ?? ""))}</td>
             <td data-label="住所">${escapeHTML(String(r.address ?? ""))}</td>
             <td data-label="金額/物品">${escapeHTML(String(r.amount ?? ""))}</td>
-            <td data-label="">
-                <div class="action-btns">
-                    <button class="btn-table btn-table-edit">
-                        <i class="fa-solid fa-arrows-spin"></i>呼び出す
+            <td data-label="" style="white-space: nowrap;">
+                <div class="action-btns" style="white-space: nowrap; display: flex; gap: 6px;">
+                    <button class="btn-table btn-table-edit" style="white-space: nowrap;">
+                        <i class="fa-solid fa-arrows-spin"></i> 呼び出す
                     </button>
-                    <button class="btn-table btn-table-del">
-                        <i class="fa-solid fa-trash-can"></i>削除
+                    <button class="btn-table btn-table-del" style="white-space: nowrap;">
+                        <i class="fa-solid fa-trash-can"></i> 削除
                     </button>
                 </div>
             </td>
