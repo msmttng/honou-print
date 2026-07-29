@@ -2191,7 +2191,7 @@ async function generatePDF(isPrinting = false, override = null) {
                 }
 
                 // テキストの上端が boxTop に合うように最初の文字の baseline を設定
-                const finalHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                const finalHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
                 const spacing = currentFontSize * 1.02 + charSpacingPt;
                 
                 let currentY = boxTop - currentFontSize;
@@ -2204,29 +2204,26 @@ async function generatePDF(isPrinting = false, override = null) {
                     }
                 }
                 
-                // 描画文字リストの作成
-                const allDrawChars = [];
-                chars.forEach(char => allDrawChars.push({ char, isHonorific: false }));
-                honorificChars.forEach((char, idx) => {
-                    allDrawChars.push({ char, isHonorific: true, isFirstHonorific: idx === 0 });
+                // 描画トークンリストの作成
+                const allDrawTokens = [];
+                nameTokens.forEach(t => allDrawTokens.push({ token: t, isHonorific: false }));
+                honorificTokens.forEach((t, idx) => {
+                    allDrawTokens.push({ token: t, isHonorific: true, isFirstHonorific: idx === 0 });
                 });
                 
-                for (const item of allDrawChars) {
+                for (const item of allDrawTokens) {
                     if (item.isHonorific && item.isFirstHonorific) {
                         currentY -= honorificSpacingPt; // 敬称スペースの適用
                     }
                     
-                    let charToDraw = item.char;
-                    const isKumiChar = Boolean(KUMI_STAMP_MAP[charToDraw]);
-
-                    // 列の縦中心線
+                    const token = item.token;
                     const cellCenterX = x_pt;
                     const cellCenterY = currentY + (currentFontSize * 0.35);
 
-                    if (isKumiChar) {
-                        // ★ 組文字 (㈱ ㈲ 等) 専用合成スタンプ描画 (非回転)
+                    if (token.type === "stamp") {
+                        // ★ （株）（有）（代）等の合成スタンプ描画 (1マス非回転)
                         const fontKey = getCurrentFontKey();
-                        const stampObj = await getKumiStampPngBytes(pdfDoc, charToDraw, fontKey, currentFontSize);
+                        const stampObj = await getKumiStampPngBytes(pdfDoc, token.innerChar, fontKey, currentFontSize);
                         const parenSetting = getCurrentFontParenSetting();
 
                         let rotX = cellCenterX + mmToPt(parenSetting.offsetX || 0.0);
@@ -2249,7 +2246,8 @@ async function generatePDF(isPrinting = false, override = null) {
                         });
                     } else {
                         // 通常文字の描画（括弧・記号含むすべての文字を回転せずそのまま縦に置く）
-                        const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
+                        const charToDraw = token.ch;
+                        const charWidth = fontToUse.widthOfTextAtSize(charToDraw, currentFontSize);
                         let drawX = x_pt;
                         if (alignment === "center") {
                             drawX = x_pt - (charWidth / 2);
@@ -2273,7 +2271,7 @@ async function generatePDF(isPrinting = false, override = null) {
                         }
                     }
                     
-                    // ★ 回転文字でも通常文字でも、必ず1セル分の縦送り (spacing) を実行
+                    // ★ 必ず1セル分の縦送り (spacing) を実行
                     currentY -= spacing;
                 }
             } else {
