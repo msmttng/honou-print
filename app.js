@@ -2588,14 +2588,18 @@ function clearForm() {
     showToast("フォームをクリアしました");
 }
 
-// --- HTMLエスケープ ---
+// --- HTMLエスケープ (型安全＆表記揺れ吸収版) ---
 function escapeHTML(str) {
-    return str
+    if (str === null || str === undefined) return "";
+    return String(str)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+function escapeHtml(str) {
+    return escapeHTML(str);
 }
 
 // --- トースト通知の表示 ---
