@@ -1490,6 +1490,64 @@
                             <button type="button" class="btn btn-secondary" onclick="resetCalibration()" style="width: 100%; margin-top: 8px;">
                                 <i class="fa-solid fa-rotate-left"></i> デザイン調整を初期値に戻す
                             </button>
+
+                            <div style="width: 100%; border-top: 1px solid #cbd5e1; margin: 12px 0;"></div>
+
+                            <!-- 括弧・記号の位置調整セクション -->
+                            <div style="width: 100%; display: flex; flex-direction: column; gap: 10px;">
+                                <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">
+                                    <i class="fa-solid fa-arrows-rotate"></i> 括弧・記号の位置調整 (書体別)
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label style="font-size: 11px; color: var(--text-secondary);">対象の書体</label>
+                                    <select id="fontSelect" onchange="onFontChange(this.value)" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white; font-size: 13px;">
+                                        <option value="HGSGyoshotai" selected>行書体（毛筆・標準）</option>
+                                        <option value="'Yuji Syuku', serif">佑字 肅（毛筆・かすれ）</option>
+                                        <option value="'Noto Serif JP', serif">明朝体（標準・正式）</option>
+                                        <option value="'Shippori Mincho B1', serif">しっぽり明朝（上品）</option>
+                                        <option value="'Kaisei Tokumin', serif">解星 特ミン（楷書風）</option>
+                                        <option value="'Zen Maru Gothic', sans-serif">丸ゴシック（親しみ）</option>
+                                        <option value="'Noto Sans JP', sans-serif">ゴシック体（現代的）</option>
+                                    </select>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                                    <!-- 左右 (mm) -->
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <label style="font-size: 11px; color: var(--text-secondary); text-align: center;">左右 (mm)</label>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px;">
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('offsetX', -0.1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span id="paren-val-offsetX" style="font-weight: 600; font-size: 12px; font-family: monospace;">+0.0</span>
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('offsetX', 0.1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 上下 (mm) -->
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <label style="font-size: 11px; color: var(--text-secondary); text-align: center;">上下 (mm)</label>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px;">
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('offsetY', -0.1)"><i class="fa-solid fa-minus"></i></button>
+                                            <span id="paren-val-offsetY" style="font-weight: 600; font-size: 12px; font-family: monospace;">+0.0</span>
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('offsetY', 0.1)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 大きさ (%) -->
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <label style="font-size: 11px; color: var(--text-secondary); text-align: center;">大きさ (%)</label>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px;">
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('scale', -5)"><i class="fa-solid fa-minus"></i></button>
+                                            <span id="paren-val-scale" style="font-weight: 600; font-size: 12px; font-family: monospace;">100%</span>
+                                            <button type="button" class="btn" style="padding: 2px 6px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustParenSetting('scale', 5)"><i class="fa-solid fa-plus"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="btn btn-secondary" onclick="resetParenSettings()" style="width: 100%; font-size: 12px; padding: 6px;">
+                                    <i class="fa-solid fa-rotate-left"></i> 括弧位置を初期値に戻す
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1738,7 +1796,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px;">
-            奉納ビラシステム v63 (2026/07/29 更新)
+            奉納ビラシステム v64 (2026/07/29 更新)
         </footer>
     </div>
 
@@ -1846,7 +1904,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=63"></script>
+    <script src="app.js?v=64"></script>
 
 </body>
 </html>

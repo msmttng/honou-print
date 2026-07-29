@@ -767,6 +767,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     // 1. デザイン設定および名簿DBの復元
     // （loadDbRecordsは非同期。awaitしないと空の名簿でrenderTableされてしまう）
     loadDesignSettings();
+    updateParenUI();
     await loadDbRecords();
     renderTable();
     setDefaultBagNo(true);
@@ -1031,6 +1032,83 @@ function initDesignSettings() {
     updatePaperSizeUI();
 }
 
+// --- 括弧・記号位置調整 (書体別保存) ---
+let parenSettingsPerFont = {};
+
+function loadParenSettings() {
+    try {
+        const saved = localStorage.getItem("pdf_mail_merge_paren_settings");
+        if (saved) {
+            parenSettingsPerFont = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.error("括弧設定復元エラー:", e);
+    }
+}
+
+function saveParenSettings() {
+    try {
+        localStorage.setItem("pdf_mail_merge_paren_settings", JSON.stringify(parenSettingsPerFont));
+    } catch (e) {
+        console.error("括弧設定保存エラー:", e);
+    }
+}
+
+function getCurrentFontKey() {
+    const fontSelect = document.getElementById("fontSelect");
+    return fontSelect && fontSelect.value ? fontSelect.value : "HGSGyoshotai";
+}
+
+function getCurrentFontParenSetting() {
+    const fontKey = getCurrentFontKey();
+    if (!parenSettingsPerFont[fontKey]) {
+        parenSettingsPerFont[fontKey] = { offsetX: 0.0, offsetY: 0.0, scale: 100 };
+    }
+    return parenSettingsPerFont[fontKey];
+}
+
+function updateParenUI() {
+    const setting = getCurrentFontParenSetting();
+    const xEl = document.getElementById("paren-val-offsetX");
+    const yEl = document.getElementById("paren-val-offsetY");
+    const sEl = document.getElementById("paren-val-scale");
+
+    if (xEl) xEl.textContent = (setting.offsetX >= 0 ? "+" : "") + setting.offsetX.toFixed(1);
+    if (yEl) yEl.textContent = (setting.offsetY >= 0 ? "+" : "") + setting.offsetY.toFixed(1);
+    if (sEl) sEl.textContent = Math.round(setting.scale) + "%";
+}
+
+function adjustParenSetting(param, delta) {
+    const setting = getCurrentFontParenSetting();
+    if (param === "offsetX" || param === "offsetY") {
+        let val = parseFloat((setting[param] + delta).toFixed(1));
+        if (val < -5.0) val = -5.0;
+        if (val > 5.0) val = 5.0;
+        setting[param] = val;
+    } else if (param === "scale") {
+        let val = Math.round(setting.scale + delta);
+        if (val < 50) val = 50;
+        if (val > 150) val = 150;
+        setting.scale = val;
+    }
+    saveParenSettings();
+    updateParenUI();
+    triggerAutoUpdate();
+}
+
+function resetParenSettings() {
+    const fontKey = getCurrentFontKey();
+    parenSettingsPerFont[fontKey] = { offsetX: 0.0, offsetY: 0.0, scale: 100 };
+    saveParenSettings();
+    updateParenUI();
+    triggerAutoUpdate();
+}
+
+function onFontChange(fontValue) {
+    updateParenUI();
+    triggerAutoUpdate();
+}
+
 function loadDesignSettings() {
     try {
         const saved = localStorage.getItem("pdf_mail_merge_design_settings");
@@ -1050,12 +1128,14 @@ function loadDesignSettings() {
     } catch (e) {
         console.error("用紙サイズ設定アクセスエラー:", e);
     }
+    loadParenSettings();
 }
 
 function saveDesignSettings() {
     try {
         localStorage.setItem("pdf_mail_merge_design_settings", JSON.stringify(designSettings));
         localStorage.setItem("pdf_mail_merge_paper_size", JSON.stringify(paperSizeSettings));
+        saveParenSettings();
     } catch (e) {
         console.warn("LocalStorage保存エラー:", e);
     }
@@ -1848,16 +1928,20 @@ async function generatePDF(isPrinting = false, override = null) {
                     const cellCenterY = currentY + (currentFontSize * 0.35);
 
                     if (isRotateChar) {
-                        // 全角括弧のem枠偏り微調整用 (文字サイズ比 0.0〜0.1)
-                        const PAREN_NUDGE = { x: 0.0, y: 0.0 };
+                        const parenSetting = getCurrentFontParenSetting();
 
-                        let rotX = cellCenterX + (currentFontSize * PAREN_NUDGE.x);
-                        let rotY = cellCenterY + (currentFontSize * PAREN_NUDGE.y);
+                        // 左右(offsetX)/上下(offsetY) の位置補正値 (mm -> pt 換算) をセル中心座標に加算
+                        let rotX = cellCenterX + mmToPt(parenSetting.offsetX || 0.0);
+                        let rotY = cellCenterY + mmToPt(parenSetting.offsetY || 0.0);
+
+                        // 大きさ(%) の補正 (回転文字のフォントサイズにのみ乗算)
+                        const rotScale = (parenSetting.scale || 100) / 100.0;
+                        const rotFontSize = currentFontSize * rotScale;
 
                         const rotDrawOptions = {
                             x: rotX,
                             y: rotY,
-                            size: currentFontSize,
+                            size: rotFontSize,
                             font: fontToUse,
                             color: PDFLib.rgb(0.1, 0.1, 0.1),
                             rotate: PDFLib.degrees(-90)
