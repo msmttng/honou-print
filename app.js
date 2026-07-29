@@ -1258,7 +1258,7 @@ function saveTcuScaleSettings() {
 function getTcuScaleForCurrentFont() {
     const fontKey = getCurrentFontKey();
     const val = Number(tcuScalePerFont[fontKey]);
-    return Number.isFinite(val) && val >= 30 && val <= 300 ? val : 100;
+    return Number.isFinite(val) && val >= 30 && val <= 300 ? val : 165;
 }
 
 function updateTcuScaleUI() {
@@ -1272,7 +1272,7 @@ function updateTcuScaleUI() {
 function setTcuScaleForCurrentFont(val) {
     const fontKey = getCurrentFontKey();
     let num = Math.round(Number(val));
-    if (!Number.isFinite(num)) num = 100;
+    if (!Number.isFinite(num)) num = 165;
     if (num < 30) num = 30;
     if (num > 300) num = 300;
     
@@ -1310,7 +1310,7 @@ function makeTcuValueEditable() {
 
     const commitValue = () => {
         let parsed = parseInt(input.value, 10);
-        if (!Number.isFinite(parsed)) parsed = 100;
+        if (!Number.isFinite(parsed)) parsed = 165;
         setTcuScaleForCurrentFont(parsed);
     };
 
