@@ -758,6 +758,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     const issuerInput = document.getElementById("receiptIssuerInput");
     if (issuerInput) issuerInput.value = savedIssuer;
 
+    const savedIssuerAddress = localStorage.getItem("pdf_mail_merge_receipt_issuer_address") || "";
+    const issuerAddressInput = document.getElementById("receiptIssuerAddressInput");
+    if (issuerAddressInput) issuerAddressInput.value = savedIssuerAddress;
+
     loadReceiptPaperSettings();
 
     // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
@@ -4173,9 +4177,32 @@ function saveReceiptOption() {
     if (chk) localStorage.setItem("pdf_mail_merge_receipt_opt", chk.checked);
 }
 
-// 6. 発行者名および領収書用紙サイズの保存・管理
+// 6. 発行者名および発行者住所、領収書用紙サイズの保存・管理
 function saveReceiptIssuer(val) {
     localStorage.setItem("pdf_mail_merge_receipt_issuer", val || "");
+}
+
+let issuerAddressDebounceTimer = null;
+
+function handleReceiptIssuerAddressInput(val) {
+    saveReceiptIssuerAddress(val);
+    if (issuerAddressDebounceTimer) clearTimeout(issuerAddressDebounceTimer);
+    issuerAddressDebounceTimer = setTimeout(() => {
+        if (typeof normalizeAddress === "function" && val && val.trim()) {
+            const normalized = normalizeAddress(val);
+            if (normalized && normalized !== val) {
+                const el = document.getElementById("receiptIssuerAddressInput");
+                if (el) {
+                    el.value = normalized;
+                    saveReceiptIssuerAddress(normalized);
+                }
+            }
+        }
+    }, 500);
+}
+
+function saveReceiptIssuerAddress(val) {
+    localStorage.setItem("pdf_mail_merge_receipt_issuer_address", val || "");
 }
 
 let receiptPaperSizeSettings = { width: 210, height: 148 }; // デフォルト A5横
@@ -4242,6 +4269,7 @@ async function printReceiptSingle() {
     const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
     const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
     const issuerName = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "奉納事業実行委員会";
+    const issuerAddress = localStorage.getItem("pdf_mail_merge_receipt_issuer_address") || "";
 
     if (!nameInput) {
         showToast("奉納者氏名を入力してください", "error");
@@ -4321,7 +4349,7 @@ async function printReceiptSingle() {
                 .amount-box { font-size: ${fontAmount}px; font-weight: bold; text-align: center; background: #fdf2f4; border: 2px solid #8c2d38; padding: ${Math.max(6, Math.round(10 * scale))}px; margin-bottom: ${Math.max(6, Math.round(14 * scale))}px; border-radius: 6px; }
                 .proviso { font-size: ${fontProviso}px; margin-bottom: ${Math.max(6, Math.round(16 * scale))}px; line-height: 1.5; }
                 .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; }
-                .issuer { font-size: ${fontIssuer}px; font-weight: bold; line-height: 1.5; text-align: right; }
+                .issuer { font-size: ${fontIssuer}px; font-weight: bold; line-height: 1.4; text-align: right; word-break: break-all; }
                 .stamp-box { border: 1px dashed #94a3b8; width: ${stampSize}px; height: ${stampSize}px; display: flex; align-items: center; justify-content: center; font-size: ${stampFont}px; color: #64748b; text-align: center; border-radius: 4px; flex-shrink: 0; }
                 .note { font-size: ${fontNote}px; color: #64748b; margin-top: ${Math.max(4, Math.round(8 * scale))}px; border-top: 1px solid #e2e8f0; padding-top: 4px; }
             </style>
@@ -4353,8 +4381,9 @@ async function printReceiptSingle() {
                                 非課税<br>(印紙不要)
                             </div>
                             <div class="issuer">
-                                ${escapeHtml(issuerName)}<br>
-                                <span style="font-size: ${fontSubAddr}px; font-weight: normal; color: #475569;">${addressInput ? '（住所: ' + escapeHtml(addressInput) + '）' : ''}</span>
+                                ${escapeHtml(issuerName)}
+                                ${issuerAddress ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #334155; margin-top: 2px;">${escapeHtml(issuerAddress)}</div>` : ''}
+                                ${addressInput ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #475569; margin-top: 2px;">（奉納者住所: ${escapeHtml(addressInput)}）</div>` : ''}
                             </div>
                         </div>
                         <div class="note">
