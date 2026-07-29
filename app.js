@@ -61,6 +61,276 @@ let dbRecords = [];            // 名簿レコード一覧 (LocalStorage保存�
 let autoUpdateTimer = null;    // リアルタイムプレビュー用デバウンスタイマー
 let isAppReady = false;        // アプリケーション（DB等）の初期化完了フラグ
 
+// --- v52 UI/UX 全面改善 用 グローバル状態 ---
+let currentSortField = "date";     // ソート列 ('date', 'bag', 'name', 'amount')
+let currentSortOrder = "desc";     // ソート順 ('desc' | 'asc', デフォルトは日時の新しい順)
+let dbSearchQuery = "";            // リアルタイム検索クエリ
+let currentFilterChip = "all";     // 絞り込みチップ ('all', '3000', '5000', '10000', 'other_money', 'item', 'empty')
+let recordsDisplayLimit = 50;      // 初期表示件数 (50件ずつさらに表示)
+let lastClearedFormData = null;    // クリア前のフォームデータ退避
+let isPdfGenerating = false;       // PDF生成中ガード
+let pendingPdfUpdate = false;      // PDF生成後追い要求
+let duplicatePendingAction = null; // 重複確認モーダルのコールバック
+
+// かな正規化 (ひらがな⇄カタカナ部分一致)
+function kanaNormalize(str) {
+    if (!str) return "";
+    let s = String(str).normalize("NFKC").toLowerCase();
+    s = s.replace(/[\u3041-\u3096]/g, function(m) {
+        return String.fromCharCode(m.charCodeAt(0) + 0x60);
+    });
+    return s;
+}
+
+// アクションボタン付きカスタムトースト
+function showToastWithAction(message, actionLabel, actionCallback, duration = 5000) {
+    const existing = document.getElementById("customToast");
+    if (existing) existing.remove();
+
+    const toast = document.createElement("div");
+    toast.id = "customToast";
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(15, 23, 42, 0.92);
+        backdrop-filter: blur(8px);
+        color: #ffffff;
+        padding: 12px 22px;
+        border-radius: 30px;
+        font-size: 14px;
+        font-weight: 600;
+        z-index: 20000;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: opacity 0.3s, transform 0.3s;
+    `;
+
+    const msgSpan = document.createElement("span");
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
+
+    if (actionLabel && actionCallback) {
+        const btn = document.createElement("button");
+        btn.className = "toast-action-btn";
+        btn.textContent = actionLabel;
+        btn.onclick = () => {
+            toast.remove();
+            actionCallback();
+        };
+        toast.appendChild(btn);
+    }
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.style.opacity = "0";
+            toast.style.transform = "translateX(-50%) translateY(10px)";
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, duration);
+}
+
+// 「金額集計に含めない」スタイル更新
+function updateEmptyCheckStyle() {
+    const chk = document.getElementById("emptyCheck");
+    const wrap = document.getElementById("emptyCheckWrap");
+    if (chk && wrap) {
+        if (chk.checked) {
+            wrap.classList.add("highlight");
+        } else {
+            wrap.classList.remove("highlight");
+        }
+    }
+}
+
+// 非破壊的フォームクリア
+function clearFormNonDestructive() {
+    lastClearedFormData = {
+        name: document.getElementById("nameInput") ? document.getElementById("nameInput").value : "",
+        bagNo: document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "",
+        address: document.getElementById("addressInput") ? document.getElementById("addressInput").value : "",
+        amount: document.getElementById("amountInput") ? document.getElementById("amountInput").value : "",
+        honorific: document.getElementById("honorificSelect") ? document.getElementById("honorificSelect").value : "殿",
+        emptyCheck: document.getElementById("emptyCheck") ? document.getElementById("emptyCheck").checked : false,
+        template: currentTemplate
+    };
+
+    clearForm();
+
+    showToastWithAction("入力をクリアしました", "元に戻す", function() {
+        if (lastClearedFormData) {
+            if (document.getElementById("nameInput")) document.getElementById("nameInput").value = lastClearedFormData.name;
+            if (document.getElementById("bagNoInput")) document.getElementById("bagNoInput").value = lastClearedFormData.bagNo;
+            if (document.getElementById("addressInput")) document.getElementById("addressInput").value = lastClearedFormData.address;
+            if (document.getElementById("amountInput")) document.getElementById("amountInput").value = lastClearedFormData.amount;
+            if (document.getElementById("honorificSelect")) document.getElementById("honorificSelect").value = lastClearedFormData.honorific;
+            if (document.getElementById("emptyCheck")) {
+                document.getElementById("emptyCheck").checked = lastClearedFormData.emptyCheck;
+                updateEmptyCheckStyle();
+            }
+            if (lastClearedFormData.template) selectTemplate(lastClearedFormData.template);
+            triggerAutoUpdate();
+        }
+    });
+}
+
+// 奉納袋番号インクリメント & 最大値自動割り振り (E項目)
+function getNextBagNo() {
+    let maxNo = 0;
+    for (const r of dbRecords) {
+        const b = parseInt(r.bagNo || r.bag_no || 0, 10);
+        if (!isNaN(b) && b > maxNo) {
+            maxNo = b;
+        }
+    }
+    return maxNo + 1;
+}
+
+function autoSetNextBagNo() {
+    const bagInput = document.getElementById("bagNoInput");
+    if (bagInput && (!bagInput.value || bagInput.value === "自動")) {
+        const nextVal = getNextBagNo();
+        if (nextVal > 1) {
+            bagInput.value = nextVal;
+        }
+    }
+}
+
+function incrementBagNo() {
+    const bagInput = document.getElementById("bagNoInput");
+    if (bagInput && bagInput.value) {
+        const currentVal = parseInt(bagInput.value, 10);
+        if (!isNaN(currentVal)) {
+            bagInput.value = currentVal + 1;
+        }
+    }
+}
+
+// レコードID指定削除 (トースト［取り消す］用)
+async function deleteRecordById(id) {
+    if (!id) return;
+    try {
+        await idbDeleteRecord(id);
+        dbRecords = dbRecords.filter(r => r.id !== id);
+        
+        if (gasUrl) {
+            sendToGAS({ action: "delete", id: id }).catch(e => console.warn("GAS削除同期失敗:", e));
+        }
+
+        renderTable();
+        updateDashboardStats();
+        showToast("名簿登録を取り消しました");
+    } catch (e) {
+        console.error("レコード削除失敗:", e);
+    }
+}
+
+// 同日重複登録チェック ＆ モーダル (F項目)
+function checkDuplicateToday(name) {
+    if (!name) return false;
+    const cleanName = name.trim();
+    if (!cleanName) return false;
+
+    const todayStr = new Date().toLocaleDateString('ja-JP');
+    return dbRecords.some(r => {
+        if (!r.name) return false;
+        const rName = r.name.trim();
+        if (rName !== cleanName) return false;
+        const rDate = r.timestamp || r.date || "";
+        return rDate.includes(todayStr) || (new Date(rDate).toLocaleDateString('ja-JP') === todayStr);
+    });
+}
+
+function showDuplicateModal(name, onConfirm) {
+    duplicatePendingAction = onConfirm;
+    const modal = document.getElementById("duplicateModal");
+    const overlay = document.getElementById("duplicateModalOverlay");
+    const nameEl = document.getElementById("duplicateModalName");
+    if (nameEl) nameEl.textContent = name;
+    if (modal && overlay) {
+        modal.classList.add("active");
+        overlay.classList.add("active");
+    }
+}
+
+function closeDuplicateModal(isConfirmed) {
+    const modal = document.getElementById("duplicateModal");
+    const overlay = document.getElementById("duplicateModalOverlay");
+    if (modal && overlay) {
+        modal.classList.remove("active");
+        overlay.classList.remove("active");
+    }
+    if (duplicatePendingAction) {
+        const cb = duplicatePendingAction;
+        duplicatePendingAction = null;
+        cb(isConfirmed);
+    }
+}
+
+function confirmDuplicatePrint(isConfirmed) {
+    closeDuplicateModal(isConfirmed);
+}
+
+// 検索・フィルタ・ソート イベントハンドラ (B項目)
+function handleDbSearchInput() {
+    const input = document.getElementById("dbSearchInput");
+    if (input) {
+        dbSearchQuery = input.value.trim();
+        recordsDisplayLimit = 50;
+        renderTable();
+    }
+}
+
+function setFilterChip(type) {
+    currentFilterChip = type;
+    const chips = document.querySelectorAll("#filterChipsContainer .chip");
+    chips.forEach(c => {
+        if (c.getAttribute("data-chip") === type) {
+            c.classList.add("active");
+        } else {
+            c.classList.remove("active");
+        }
+    });
+    recordsDisplayLimit = 50;
+    renderTable();
+}
+
+function toggleSort(field) {
+    if (currentSortField === field) {
+        currentSortOrder = currentSortOrder === "asc" ? "desc" : "asc";
+    } else {
+        currentSortField = field;
+        currentSortOrder = (field === "date" || field === "bag" || field === "amount") ? "desc" : "asc";
+    }
+    updateSortIcons();
+    renderTable();
+}
+
+function updateSortIcons() {
+    const fields = ["date", "bag", "name", "amount"];
+    fields.forEach(f => {
+        const iconEl = document.getElementById("sort-icon-" + f);
+        if (iconEl) {
+            if (currentSortField === f) {
+                iconEl.textContent = currentSortOrder === "asc" ? " ▲" : " ▼";
+                iconEl.style.color = "#b91c1c";
+            } else {
+                iconEl.textContent = "";
+            }
+        }
+    });
+}
+
+function loadMoreRecords() {
+    recordsDisplayLimit += 50;
+    renderTable();
+}
+
 // --- スプレッドシート連携（GAS） ---
 let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS ウェブアプリの URL (LocalStorage保存用・デフォルト値あり)
 let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
@@ -1031,13 +1301,38 @@ function resetCalibration() {
     showToast("デザイン調整を初期値にリセットしました");
 }
 
-// --- リアルタイムプレビュー用デバウンス制御 ---
+// --- リアルタイムプレビュー用デバウンス制御 (400ms ＋ スピナーガード C項目) ---
 function triggerAutoUpdate() {
     updateAmountEcho();
     if (autoUpdateTimer) clearTimeout(autoUpdateTimer);
     autoUpdateTimer = setTimeout(() => {
-        updatePreview();
-    }, 300); // 300ms 入力が止まったらリレンダリング
+        runPdfPreviewWithOverlay();
+    }, 400); // 400ms 入力が止まったら非同期プレビュー合成
+}
+
+async function runPdfPreviewWithOverlay() {
+    if (isPdfGenerating) {
+        pendingPdfUpdate = true;
+        return;
+    }
+
+    const overlay = document.getElementById("previewOverlay");
+    if (overlay) overlay.style.display = "flex";
+
+    isPdfGenerating = true;
+    try {
+        await updatePreview();
+    } catch (e) {
+        console.error("PDFプレビュー生成エラー:", e);
+    } finally {
+        isPdfGenerating = false;
+        if (overlay) overlay.style.display = "none";
+        
+        if (pendingPdfUpdate) {
+            pendingPdfUpdate = false;
+            triggerAutoUpdate();
+        }
+    }
 }
 
 // --- D-Pad (十字キー) 制御 ---
@@ -1622,49 +1917,73 @@ function confirmAmountBeforePrint() {
 }
 
 // --- 印刷 / PDF保存アクション ---
+// --- 印刷 / PDF保存アクション (v52 自動登録・重複警告・袋番号インクリメント連携) ---
 async function printPDF() {
-    const nameInput = document.getElementById("nameInput").value.trim();
+    const nameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
     if (!nameInput) {
         showToast("氏名を入力してから印刷してください", "error");
         return;
     }
-    if (!confirmAmountBeforePrint()) return;
 
+    // 本日の重複登録チェック (F項目)
+    if (checkDuplicateToday(nameInput)) {
+        showDuplicateModal(nameInput, function(proceed) {
+            if (proceed) {
+                executePrintAndAutoSave();
+            }
+        });
+        return;
+    }
+
+    await executePrintAndAutoSave();
+}
+
+async function executePrintAndAutoSave() {
+    const nameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
+    
     showStatus("印刷用データを準備中...", true);
-    const pdfBlob = await generatePDF(true);
+    let pdfBlob = null;
+    try {
+        pdfBlob = await generatePDF(true);
+    } catch (e) {
+        console.error("PDF生成エラー:", e);
+    }
     
     if (pdfBlob) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
-
-        // 別タブで開いて印刷を実行させる
         const newWindow = window.open(pdfUrl, "_blank");
         if (newWindow) {
-            // Blob URLタブでは onload が発火しないブラウザがあるため、
-            // フラグ付きでタイムアウトフォールバックも併用する
             let printCalled = false;
             const triggerPrint = () => {
                 if (printCalled) return;
                 printCalled = true;
-                try { newWindow.print(); } catch (e) { /* タブが閉じられた場合など */ }
+                try { newWindow.print(); } catch (e) {}
             };
             newWindow.onload = triggerPrint;
             setTimeout(triggerPrint, 2000);
             showToast("印刷プレビューを別タブで開きました");
         } else {
-            // ポップアップがブロックされた場合は直接ダウンロード
             const link = document.createElement("a");
             link.href = pdfUrl;
-            link.download = `奉納ビラ_${nameInput}.pdf`;
+            link.download = `奉納ビラ_${nameInput || "無題"}.pdf`;
             link.click();
-            showToast("ポップアップがブロックされたため、PDFをダウンロードしました");
+            showToast("PDFファイルをダウンロードしました");
         }
-        // メモリリーク防止: 印刷/ダウンロード完了を見込んでからURLを解放
-        setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
-        showStatus("印刷データ出力完了", false);
 
-        // 印刷履歴への登録
-        saveRecord(false); // 重複を避けるため静かに自動登録
+        // 名簿へ自動登録 ＆ トースト ＆ 袋番号インクリメント (A/E項目)
+        if (nameInput) {
+            const savedRecord = await saveRecordSilent();
+            if (savedRecord) {
+                showToastWithAction("「" + nameInput + "」さんを名簿に登録しました", "取り消す", function() {
+                    deleteRecordById(savedRecord.id);
+                });
+                incrementBagNo();
+            }
+        }
+    } else {
+        showToast("PDFの生成に失敗しました", "error");
     }
+    showStatus("準備完了", false);
 }
 
 // --- 奉納袋番号（自動採番＋手修正） ---
@@ -1773,6 +2092,54 @@ function saveRecord(showNotice = true) {
     }
 }
 
+// 印刷成功時に自動で呼ぶサイレント名簿登録関数 (A項目)
+async function saveRecordSilent() {
+    const nameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
+    if (!nameInput) return null;
+
+    const bagNoInput = document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value.trim() : "";
+    const addressInput = document.getElementById("addressInput") ? document.getElementById("addressInput").value.trim() : "";
+    const rawAmount = document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : "";
+    const emptyCheck = document.getElementById("emptyCheck") ? document.getElementById("emptyCheck").checked : false;
+
+    let dbAmount = typeof getFormattedAmountString === "function" ? getFormattedAmountString() : rawAmount;
+    if (emptyCheck) {
+        if (dbAmount) {
+            dbAmount = dbAmount + " [空]";
+        } else if (rawAmount) {
+            dbAmount = rawAmount + " [空]";
+        } else {
+            dbAmount = "[空]";
+        }
+    } else if (!dbAmount && rawAmount) {
+        dbAmount = rawAmount;
+    }
+
+    const newRecord = {
+        id: "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        date: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        template: currentTemplate,
+        name: nameInput,
+        amount: dbAmount,
+        bagNo: bagNoInput || getNextBagNo().toString(),
+        address: addressInput,
+        sync: "pending"
+    };
+
+    dbRecords.unshift(newRecord);
+
+    try {
+        await idbPutRecord(newRecord);
+        renderTable();
+        pushPendingRecords();
+    } catch (e) {
+        console.warn("サイレント名簿登録エラー:", e);
+    }
+
+    return newRecord;
+}
+
 async function deleteRecord(id) {
     if (confirm("このレコードを名簿から削除しますか？")) {
         const record = dbRecords.find(r => r.id === id);
@@ -1846,80 +2213,133 @@ function loadRecordToForm(id) {
     showToast("名簿データを読み込みました。修正後「更新」を押してください。");
 }
 
-// --- 名簿テーブルのレンダリング ---
+// --- 名簿テーブルのレンダリング (v52 強化版) ---
 function renderTable() {
     updateDashboardStats();
-    const tbody = document.getElementById("historyTableBody");
-    const searchInput = document.getElementById("searchInput").value.trim().toLowerCase();
+    const tbody = document.getElementById("recordsTbody");
+    if (!tbody) return;
     
     tbody.innerHTML = "";
 
-    // 検索フィルタリング（型安全処理）
-    const filteredRecords = dbRecords.filter(r => {
-        const nameStr = (r.name === null || r.name === undefined) ? '' : String(r.name).toLowerCase();
-        const amountStr = (r.amount === null || r.amount === undefined) ? '' : String(r.amount).toLowerCase();
-        const bagNoStr = (r.bagNo === null || r.bagNo === undefined) ? '' : String(r.bagNo).toLowerCase();
-        const addrStr = (r.address === null || r.address === undefined) ? '' : String(r.address).toLowerCase();
-
-        return nameStr.includes(searchInput) ||
-               amountStr.includes(searchInput) ||
-               bagNoStr.includes(searchInput) ||
-               addrStr.includes(searchInput);
+    // 明らかな壊れた旧データをスキップ
+    let validRecords = dbRecords.filter(r => {
+        const nameStr = String(r.name ?? "").trim();
+        return !(nameStr.startsWith("¥") || nameStr.startsWith("\\") || nameStr.startsWith("合計") || nameStr.startsWith("物品まとめ"));
     });
 
-    // 並び替え (デフォルト: 日付の古い順)
-    const sortSelect = document.getElementById("sortSelect");
-    const sortMode = sortSelect ? sortSelect.value : "date_asc";
-    const dateVal = r => { const d = parseFlexibleDate(r.date); return d ? d.getTime() : 0; };
-    switch (sortMode) {
-        case "date_desc":
-            filteredRecords.sort((a, b) => dateVal(b) - dateVal(a));
-            break;
-        case "name_asc":
-            filteredRecords.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "ja"));
-            break;
-        default: // date_asc (日付の古い順)
-            filteredRecords.sort((a, b) => dateVal(a) - dateVal(b));
+    // 1. 検索フィルタリング (かな正規化・全半角無視部分一致)
+    const normSearch = kanaNormalize(dbSearchQuery);
+    if (normSearch) {
+        validRecords = validRecords.filter(r => {
+            const nameNorm = kanaNormalize(r.name);
+            const addrNorm = kanaNormalize(r.address);
+            const amtNorm  = kanaNormalize(r.amount);
+            const bagNorm  = kanaNormalize(r.bagNo || r.bag_no);
+
+            return nameNorm.includes(normSearch) ||
+                   addrNorm.includes(normSearch) ||
+                   amtNorm.includes(normSearch)  ||
+                   bagNorm.includes(normSearch);
+        });
     }
 
-    if (filteredRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="no-data">登録されている名簿データはありません。</td></tr>`;
+    // 2. 絞り込みチップフィルタリング
+    if (currentFilterChip !== "all") {
+        validRecords = validRecords.filter(r => {
+            const amtStr = String(r.amount ?? "").trim();
+            const hasEmpty = amtStr.includes('[空]') || amtStr.includes('［空］') || amtStr.includes('空');
+            const parsedVal = parseKanjiNumber(amtStr);
+
+            if (currentFilterChip === "empty") {
+                return hasEmpty;
+            }
+            if (currentFilterChip === "item") {
+                return (parsedVal === 0 && amtStr !== "") || hasEmpty;
+            }
+            if (currentFilterChip === "3000") {
+                return parsedVal === 3000;
+            }
+            if (currentFilterChip === "5000") {
+                return parsedVal === 5000;
+            }
+            if (currentFilterChip === "10000") {
+                return parsedVal === 10000;
+            }
+            if (currentFilterChip === "other_money") {
+                return parsedVal > 0 && parsedVal !== 3000 && parsedVal !== 5000 && parsedVal !== 10000 && !hasEmpty;
+            }
+            return true;
+        });
+    }
+
+    // 3. 並び替え (デフォルト: 日時の新しい順 date_desc)
+    const dateVal = r => { const d = parseFlexibleDate(r.timestamp || r.date); return d ? d.getTime() : 0; };
+    const bagVal  = r => { const b = parseInt(r.bagNo || r.bag_no || 0, 10); return isNaN(b) ? 0 : b; };
+    const amtVal  = r => parseKanjiNumber(r.amount);
+
+    validRecords.sort((a, b) => {
+        let cmp = 0;
+        if (currentSortField === "date") {
+            cmp = dateVal(a) - dateVal(b);
+        } else if (currentSortField === "bag") {
+            cmp = bagVal(a) - bagVal(b);
+        } else if (currentSortField === "name") {
+            cmp = String(a.name ?? "").localeCompare(String(b.name ?? ""), "ja");
+        } else if (currentSortField === "amount") {
+            cmp = amtVal(a) - amtVal(b);
+        }
+        return currentSortOrder === "asc" ? cmp : -cmp;
+    });
+
+    if (validRecords.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="no-data" style="text-align: center; padding: 24px; color: #94a3b8;">条件に一致する名簿データがありません。</td></tr>`;
+        const btnMore = document.getElementById("btnLoadMore");
+        if (btnMore) btnMore.style.display = "none";
         return;
     }
 
-    filteredRecords.forEach(r => {
+    // 4. 50件パジネーション
+    const displayRecords = validRecords.slice(0, recordsDisplayLimit);
+
+    displayRecords.forEach(r => {
         const tr = document.createElement("tr");
 
-        // 日付フォーマット（ISO/JPロケール混在に対応、パース不能でもNaNにしない）
-        const dateStr = formatDateForDisplay(r.date);
+        const dateStr = formatDateForDisplay(r.timestamp || r.date);
+        const bagNoStr = String(r.bagNo || r.bag_no || "");
+        const amountStr = String(r.amount ?? "");
 
-        // XSS対策: レコード値はinnerHTMLのイベント属性に埋め込まず、
-        // DOM APIとクロージャで安全にバインドする
         tr.innerHTML = `
-            <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
-            <td data-label="日時" style="white-space: nowrap;">${escapeHTML(dateStr)}</td>
-            <td data-label="番号">${escapeHTML(String(r.bagNo ?? ""))}</td>
-            <td data-label="氏名" style="font-weight: 500;">${escapeHTML(String(r.name ?? ""))}</td>
-            <td data-label="住所">${escapeHTML(String(r.address ?? ""))}</td>
-            <td data-label="金額/物品">${escapeHTML(String(r.amount ?? ""))}</td>
-            <td data-label="" style="white-space: nowrap;">
-                <div class="action-btns" style="white-space: nowrap; display: flex; gap: 6px;">
-                    <button class="btn-table btn-table-edit" style="white-space: nowrap;">
-                        <i class="fa-solid fa-arrows-spin"></i> 呼び出す
+            <td data-label="日時" style="white-space: nowrap; font-size: 13px;">${escapeHtml(dateStr)}</td>
+            <td data-label="袋番号" style="font-weight: 600;">${escapeHtml(bagNoStr)}</td>
+            <td data-label="氏名" style="font-weight: bold; color: #1e293b;">${escapeHtml(String(r.name ?? ""))}</td>
+            <td data-label="金額/物品">${escapeHtml(amountStr)}</td>
+            <td data-label="操作" style="text-align: center;">
+                <div class="action-btns" style="white-space: nowrap; display: flex; gap: 4px; justify-content: center;">
+                    <button class="btn-table btn-table-edit" style="padding: 4px 8px; font-size: 12px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 4px; cursor: pointer;">
+                        <i class="fa-solid fa-arrows-spin"></i> 呼出
                     </button>
-                    <button class="btn-table btn-table-del" style="white-space: nowrap;">
+                    <button class="btn-table btn-table-del" style="padding: 4px 8px; font-size: 12px; background: #fff5f5; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">
                         <i class="fa-solid fa-trash-can"></i> 削除
                     </button>
                 </div>
             </td>
         `;
-        const checkbox = tr.querySelector(".record-checkbox");
-        checkbox.value = r.id;
-        checkbox.addEventListener("change", updateBatchCount);
         tr.querySelector(".btn-table-edit").addEventListener("click", () => loadRecordToForm(r.id));
-        tr.querySelector(".btn-table-del").addEventListener("click", () => deleteRecord(r.id));
+        tr.querySelector(".btn-table-del").addEventListener("click", () => deleteRecordById(r.id));
         tbody.appendChild(tr);
     });
+
+    // 「さらに表示」ボタン制御
+    const btnMore = document.getElementById("btnLoadMore");
+    const remainingEl = document.getElementById("remainingCount");
+    if (btnMore) {
+        if (validRecords.length > recordsDisplayLimit) {
+            btnMore.style.display = "block";
+            if (remainingEl) remainingEl.textContent = (validRecords.length - recordsDisplayLimit).toLocaleString();
+        } else {
+            btnMore.style.display = "none";
+        }
+    }
 }
 
 // --- CSVエクスポート機能 ---
@@ -2487,129 +2907,187 @@ function openBottomSheet(target) {
     const sheet = document.getElementById('bottomSheet');
     const searchInput = document.getElementById('sheetSearchInput');
     
-    // プレースホルダーの切り替え
     if (target === 'name') {
-        searchInput.placeholder = "氏名を直接入力 または 検索...";
+        searchInput.placeholder = "氏名を直接入力 または 検索 (かな対応)...";
     } else {
-        searchInput.placeholder = "金額・物品名を直接入力 または 検索...";
+        searchInput.placeholder = "金額・物品名を直接入力 または 検索 (かな対応)...";
     }
     
     searchInput.value = '';
+    const btnConfirm = document.getElementById('btnConfirmNew');
+    if (btnConfirm) btnConfirm.classList.remove('show');
+
     overlay.classList.add('active');
     sheet.classList.add('active');
     
-    // タブを初期化
-    switchSheetTab('recent');
+    renderSheetList();
 }
 
 function closeBottomSheet() {
     const overlay = document.getElementById('sheetOverlay');
     const sheet = document.getElementById('bottomSheet');
-    overlay.classList.remove('active');
-    sheet.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+    if (sheet) sheet.classList.remove('active');
 }
 
 function switchSheetTab(tabId) {
     currentSheetTab = tabId;
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`tab-${tabId}`).classList.add('active');
     renderSheetList();
 }
 
 function handleSheetSearch() {
     const query = document.getElementById('sheetSearchInput').value.trim();
-    const tabsContainer = document.getElementById('sheetTabsContainer');
     const btnConfirm = document.getElementById('btnConfirmNew');
     const newTextSpan = document.getElementById('newSheetInputText');
     
     if (query.length > 0) {
-        tabsContainer.style.display = 'none';
-        newTextSpan.textContent = query;
-        btnConfirm.classList.add('show');
+        if (newTextSpan) newTextSpan.textContent = query;
+        if (btnConfirm) btnConfirm.classList.add('show');
     } else {
-        tabsContainer.style.display = 'flex';
-        btnConfirm.classList.remove('show');
+        if (btnConfirm) btnConfirm.classList.remove('show');
     }
     
     renderSheetList();
 }
 
 function renderSheetList() {
-    const query = document.getElementById('sheetSearchInput').value.trim().toLowerCase();
+    const rawQuery = document.getElementById('sheetSearchInput') ? document.getElementById('sheetSearchInput').value.trim() : "";
+    const normQuery = kanaNormalize(rawQuery);
     const content = document.getElementById('sheetListContent');
+    if (!content) return;
     content.innerHTML = '';
-    
-    let sourceData = [];
-    let isCloud = false;
-    
+
+    const combinedList = [];
+    const seenMap = new Set();
+
     if (currentSheetTarget === 'name') {
-        if (currentSheetTab === 'recent' && !query) {
-            // 最近の履歴から重複排除して氏名を抽出
-            sourceData = [...new Set(dbRecords.map(r => r.name))];
-        } else {
-            // クラウドまたは検索時は全クラウドデータ
-            sourceData = suggestData.names || [];
-            isCloud = true;
-            // 検索時はローカル履歴もマージして検索対象にする
-            if (query) {
-                const localNames = dbRecords.map(r => r.name);
-                sourceData = [...new Set([...sourceData, ...localNames])];
+        // 1. ローカル名簿レコード (新しい順)
+        const sortedLocal = [...dbRecords].sort((a, b) => {
+            const da = parseFlexibleDate(a.timestamp || a.date);
+            const db = parseFlexibleDate(b.timestamp || b.date);
+            return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+        });
+
+        for (const r of sortedLocal) {
+            const val = String(r.name ?? "").trim();
+            if (!val || val.startsWith("¥") || val.startsWith("\\") || val.startsWith("合計") || val.startsWith("物品まとめ")) continue;
+
+            if (!seenMap.has(val)) {
+                seenMap.add(val);
+                if (!normQuery || kanaNormalize(val).includes(normQuery) || kanaNormalize(r.address).includes(normQuery)) {
+                    combinedList.push({
+                        value: val,
+                        subText: r.address || "",
+                        source: "device"
+                    });
+                }
+            }
+        }
+
+        // 2. クラウドサジェスト
+        const cloudNames = suggestData.names || [];
+        for (const cn of cloudNames) {
+            const val = String(cn ?? "").trim();
+            if (!val || val.startsWith("¥") || val.startsWith("\\") || val.startsWith("合計")) continue;
+
+            if (!seenMap.has(val)) {
+                seenMap.add(val);
+                if (!normQuery || kanaNormalize(val).includes(normQuery)) {
+                    combinedList.push({
+                        value: val,
+                        subText: "",
+                        source: "cloud"
+                    });
+                }
             }
         }
     } else {
-        if (currentSheetTab === 'recent' && !query) {
-            // 最近の履歴から金額/物品を抽出
-            sourceData = [...new Set(dbRecords.map(r => r.amount))];
-        } else {
-            sourceData = suggestData.items || [];
-            isCloud = true;
-            if (query) {
-                const localItems = dbRecords.map(r => r.amount);
-                sourceData = [...new Set([...sourceData, ...localItems])];
+        // 金額・物品
+        const sortedLocal = [...dbRecords].sort((a, b) => {
+            const da = parseFlexibleDate(a.timestamp || a.date);
+            const db = parseFlexibleDate(b.timestamp || b.date);
+            return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+        });
+
+        for (const r of sortedLocal) {
+            const val = String(r.amount ?? "").trim();
+            if (!val) continue;
+
+            if (!seenMap.has(val)) {
+                seenMap.add(val);
+                if (!normQuery || kanaNormalize(val).includes(normQuery)) {
+                    combinedList.push({
+                        value: val,
+                        subText: "",
+                        source: "device"
+                    });
+                }
+            }
+        }
+
+        const cloudItems = suggestData.items || [];
+        for (const ci of cloudItems) {
+            const val = String(ci ?? "").trim();
+            if (!val) continue;
+
+            if (!seenMap.has(val)) {
+                seenMap.add(val);
+                if (!normQuery || kanaNormalize(val).includes(normQuery)) {
+                    combinedList.push({
+                        value: val,
+                        subText: "",
+                        source: "cloud"
+                    });
+                }
             }
         }
     }
-    
-    let filtered = sourceData;
-    
-    if (query.length > 0) {
-        filtered = sourceData.filter(item => item.toLowerCase().includes(query));
-        
-        // 検索結果に完全一致がある場合は新規ボタンを隠す
-        const exactMatch = filtered.some(item => item.toLowerCase() === query);
+
+    if (normQuery) {
+        const exactMatch = combinedList.some(item => kanaNormalize(item.value) === normQuery);
         const btnConfirm = document.getElementById('btnConfirmNew');
-        if (exactMatch) {
+        if (exactMatch && btnConfirm) {
             btnConfirm.classList.remove('show');
         }
     }
-    
-    if (filtered.length === 0) {
-        content.innerHTML = '<div class="empty-message">該当する候補がありません。<br>上の入力欄にそのまま入力して決定ボタンを押してください。</div>';
+
+    if (combinedList.length === 0) {
+        content.innerHTML = '<div class="empty-message" style="padding: 24px; text-align: center; color: #94a3b8; font-size: 14px;">該当する候補がありません。<br>上の入力欄にそのまま入力して決定ボタンを押してください。</div>';
         return;
     }
-    
-    // 上限30件程度にする
-    // XSS対策: 候補値はイベント属性の文字列に埋め込まず、クロージャでバインドする
-    filtered.slice(0, 30).forEach(item => {
+
+    combinedList.slice(0, 50).forEach(item => {
         const div = document.createElement('div');
         div.className = 'list-item';
-        div.style.position = 'relative';
-        div.style.paddingRight = '55px'; // 削除ボタンのスペースを確保
+        div.style.cssText = 'padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; cursor: pointer;';
+
+        const badgeClass = item.source === "device" ? "badge-device" : "badge-cloud";
+        const badgeLabel = item.source === "device" ? "端末" : "クラウド";
 
         div.innerHTML = `
-            <div class="list-item-main" style="display: flex; flex-direction: column; flex: 1; cursor: pointer;">
-                <span>${escapeHTML(item)}</span>
-                <span class="list-item-sub">${isCloud ? 'クラウド' : '履歴'}</span>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center;">
+                    <span style="font-size: 15px; font-weight: 600; color: #1e293b;">${escapeHtml(item.value)}</span>
+                    <span class="badge-source ${badgeClass}">${badgeLabel}</span>
+                </div>
+                ${item.subText ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${escapeHtml(item.subText)}</div>` : ''}
             </div>
-            <button type="button" class="list-item-del" aria-label="この候補を削除" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: none; background: #fee2e2; color: #ef4444; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5;">
-                <i class="fa-solid fa-xmark" style="font-size: 14px;"></i>
-            </button>
+            <i class="fa-solid fa-chevron-right" style="color: #cbd5e1; font-size: 13px;"></i>
         `;
-        div.querySelector('.list-item-main').addEventListener('click', () => selectSheetItem(item));
-        div.querySelector('.list-item-del').addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteSuggestItem(item, isCloud ? 'cloud' : 'recent');
-        });
+
+        div.onclick = () => {
+            if (currentSheetTarget === 'name') {
+                document.getElementById('nameInput').value = item.value;
+                if (item.subText && document.getElementById('addressInput')) {
+                    document.getElementById('addressInput').value = item.subText;
+                }
+            } else {
+                document.getElementById('amountInput').value = item.value;
+            }
+            closeBottomSheet();
+            triggerAutoUpdate();
+        };
+
         content.appendChild(div);
     });
 }
