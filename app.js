@@ -1835,11 +1835,18 @@ function renderTable() {
     
     tbody.innerHTML = "";
 
-    // 検索フィルタリング
-    const filteredRecords = dbRecords.filter(r =>
-        r.name.toLowerCase().includes(searchInput) ||
-        r.amount.toLowerCase().includes(searchInput)
-    );
+    // 検索フィルタリング（型安全処理）
+    const filteredRecords = dbRecords.filter(r => {
+        const nameStr = (r.name === null || r.name === undefined) ? '' : String(r.name).toLowerCase();
+        const amountStr = (r.amount === null || r.amount === undefined) ? '' : String(r.amount).toLowerCase();
+        const bagNoStr = (r.bagNo === null || r.bagNo === undefined) ? '' : String(r.bagNo).toLowerCase();
+        const addrStr = (r.address === null || r.address === undefined) ? '' : String(r.address).toLowerCase();
+
+        return nameStr.includes(searchInput) ||
+               amountStr.includes(searchInput) ||
+               bagNoStr.includes(searchInput) ||
+               addrStr.includes(searchInput);
+    });
 
     // 並び替え（sortSelectはこれまでUIだけ存在し機能していなかった）
     const sortSelect = document.getElementById("sortSelect");
@@ -1857,7 +1864,7 @@ function renderTable() {
             filteredRecords.sort((a, b) => (templateOrder[b.template] ?? 9) - (templateOrder[a.template] ?? 9) || dateVal(b) - dateVal(a));
             break;
         case "name_asc":
-            filteredRecords.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ja"));
+            filteredRecords.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "ja"));
             break;
         default: // date_desc
             filteredRecords.sort((a, b) => dateVal(b) - dateVal(a));
@@ -1879,10 +1886,10 @@ function renderTable() {
         tr.innerHTML = `
             <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
             <td data-label="日時">${escapeHTML(dateStr)}</td>
-            <td data-label="番号">${escapeHTML((r.bagNo || "").toString())}</td>
-            <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
-            <td data-label="住所">${escapeHTML(r.address || "")}</td>
-            <td data-label="金額/物品">${escapeHTML(r.amount)}</td>
+            <td data-label="番号">${escapeHTML(String(r.bagNo ?? ""))}</td>
+            <td data-label="氏名" style="font-weight: 500;">${escapeHTML(String(r.name ?? ""))}</td>
+            <td data-label="住所">${escapeHTML(String(r.address ?? ""))}</td>
+            <td data-label="金額/物品">${escapeHTML(String(r.amount ?? ""))}</td>
             <td data-label="">
                 <div class="action-btns">
                     <button class="btn-table btn-table-edit">
