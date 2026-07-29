@@ -2213,11 +2213,14 @@ function loadRecordToForm(id) {
     showToast("名簿データを読み込みました。修正後「更新」を押してください。");
 }
 
-// --- 名簿テーブルのレンダリング (v52 強化版) ---
+// --- 名簿テーブルのレンダリング (v55 6列＆エラーガード版) ---
 function renderTable() {
     updateDashboardStats();
     const tbody = document.getElementById("recordsTbody");
-    if (!tbody) return;
+    if (!tbody) {
+        console.error("renderTable: tbody not found (recordsTbody)");
+        return;
+    }
     
     tbody.innerHTML = "";
 
@@ -2292,13 +2295,13 @@ function renderTable() {
     });
 
     if (validRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="no-data" style="text-align: center; padding: 24px; color: #94a3b8;">条件に一致する名簿データがありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="no-data" style="text-align: center; padding: 24px; color: #94a3b8;">条件に一致する名簿データがありません。</td></tr>`;
         const btnMore = document.getElementById("btnLoadMore");
         if (btnMore) btnMore.style.display = "none";
         return;
     }
 
-    // 4. 50件パジネーション
+    // 4. 50件パジネーション (6列構成)
     const displayRecords = validRecords.slice(0, recordsDisplayLimit);
 
     displayRecords.forEach(r => {
@@ -2307,13 +2310,15 @@ function renderTable() {
         const dateStr = formatDateForDisplay(r.timestamp || r.date);
         const bagNoStr = String(r.bagNo || r.bag_no || "");
         const amountStr = String(r.amount ?? "");
+        const addressStr = String(r.address ?? "");
 
         tr.innerHTML = `
-            <td data-label="日時" style="white-space: nowrap; font-size: 13px;">${escapeHtml(dateStr)}</td>
-            <td data-label="袋番号" style="font-weight: 600;">${escapeHtml(bagNoStr)}</td>
-            <td data-label="氏名" style="font-weight: bold; color: #1e293b;">${escapeHtml(String(r.name ?? ""))}</td>
-            <td data-label="金額/物品">${escapeHtml(amountStr)}</td>
-            <td data-label="操作" style="text-align: center;">
+            <td data-label="日時" style="white-space: nowrap; font-size: 13px; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(dateStr)}</td>
+            <td data-label="袋番号" style="font-weight: 600; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(bagNoStr)}</td>
+            <td data-label="氏名" style="font-weight: bold; color: #1e293b; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(String(r.name ?? ""))}</td>
+            <td data-label="住所" style="font-size: 13px; color: #475569; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(addressStr)}</td>
+            <td data-label="金額/物品" style="padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(amountStr)}</td>
+            <td data-label="操作" style="text-align: center; padding: 10px; border-bottom: 1px solid #f1f5f9; position: sticky; right: 0; background: #ffffff;">
                 <div class="action-btns" style="white-space: nowrap; display: flex; gap: 4px; justify-content: center;">
                     <button class="btn-table btn-table-edit" style="padding: 4px 8px; font-size: 12px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 4px; cursor: pointer;">
                         <i class="fa-solid fa-arrows-spin"></i> 呼出
