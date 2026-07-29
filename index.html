@@ -1645,8 +1645,15 @@
         <div class="right-panel" id="section-preview">
             <div class="card" style="height: 100%; display: flex; flex-direction: column;">
                 <!-- 見出し短縮 ＆ 重複印刷ボタン削除 (G/A項目) -->
-                <div class="card-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-                    <span><i class="fa-solid fa-eye"></i> PDFプレビュー</span>
+                <div class="card-title" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span><i class="fa-solid fa-eye"></i> PDFプレビュー</span>
+                        <!-- ズームモード切替トグル -->
+                        <div style="display: inline-flex; align-items: center; gap: 2px; background: #f1f5f9; padding: 2px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                            <button type="button" id="btnPreviewFit" onclick="setPreviewZoom('fit')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer;">全体</button>
+                            <button type="button" id="btnPreviewZoom100" onclick="setPreviewZoom('100')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: transparent; color: #475569; border: none; border-radius: 6px; cursor: pointer;">100% (拡大)</button>
+                        </div>
+                    </div>
                     <div>
                         <label style="font-size: 13px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap;">
                             <input type="checkbox" id="includeBackground" checked onchange="triggerAutoUpdate()"> 背景を含める
@@ -1654,13 +1661,13 @@
                     </div>
                 </div>
 
-                <!-- プレビューコンテナ ＆ スピナー (C項目) -->
-                <div class="preview-container" style="position: relative;">
+                <!-- プレビュービューポート (max-height: 75vh で全体すっぽり収まる) -->
+                <div id="previewViewport" class="preview-container" style="position: relative; max-height: 75vh; min-height: 350px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; box-sizing: border-box;">
                     <div class="preview-overlay" id="previewOverlay" style="display: none;">
                         <div class="spinner"></div>
                         <div style="margin-top: 10px; font-size: 13px; color: #475569; font-weight: bold;">PDF生成中...</div>
                     </div>
-                    <canvas id="pdfCanvas" style="display: none; max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"></canvas>
+                    <canvas id="pdfCanvas" style="display: none; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); margin: auto; transition: width 0.2s ease, height 0.2s ease;"></canvas>
                     <div id="previewPlaceholder" class="preview-placeholder">
                         <i class="fa-regular fa-file-pdf"></i>
                         <p>氏名を入力すると、ここにリアルタイムで<br>合成されたPDFプレビューが表示されます。</p>
@@ -1769,7 +1776,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
-            <span>奉納ビラシステム v79 (2026/07/29 更新)</span>
+            <span>奉納ビラシステム v80 (2026/07/29 更新)</span>
             <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-list-check"></i> ログ
                 <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
@@ -1905,7 +1912,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=79"></script>
+    <script src="app.js?v=80"></script>
 
 </body>
 </html>

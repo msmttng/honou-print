@@ -2279,19 +2279,76 @@ async function generatePDF(isPrinting = false, override = null) {
     }
 }
 
-// --- リアルタイムプレビュー更新（チラつき防止版） ---
+// --- プレビュー表示サイズ制御 (全体フィット 75vh ↔ 100% 拡大) ---
+let previewZoomMode = "fit";
+
+function setPreviewZoom(mode) {
+    previewZoomMode = mode;
+    const btnFit = document.getElementById("btnPreviewFit");
+    const btn100 = document.getElementById("btnPreviewZoom100");
+    if (btnFit && btn100) {
+        if (mode === "fit") {
+            btnFit.style.background = "#4f46e5";
+            btnFit.style.color = "white";
+            btn100.style.background = "transparent";
+            btn100.style.color = "#475569";
+        } else {
+            btn100.style.background = "#4f46e5";
+            btn100.style.color = "white";
+            btnFit.style.background = "transparent";
+            btnFit.style.color = "#475569";
+        }
+    }
+    applyPreviewDisplaySize();
+}
+
+function applyPreviewDisplaySize() {
+    const pdfCanvas = document.getElementById("pdfCanvas");
+    const viewport = document.getElementById("previewViewport");
+    if (!pdfCanvas || !viewport || !pdfCanvas._unscaledViewport) return;
+
+    const unscaledW = pdfCanvas._unscaledViewport.width;
+    const unscaledH = pdfCanvas._unscaledViewport.height;
+
+    if (previewZoomMode === "fit") {
+        // max-height: 75vh のプレビュー枠内に縦長（105x390mm）全体がすっぽり収まる表示スケールを計算
+        const containerW = Math.max(100, viewport.clientWidth - 24);
+        const containerH = Math.max(100, viewport.clientHeight - 24);
+
+        const scaleW = containerW / unscaledW;
+        const scaleH = containerH / unscaledH;
+
+        // 全体がスクロールなしで収まるよう等比縮小
+        let displayScale = Math.min(scaleW, scaleH);
+        if (!Number.isFinite(displayScale) || displayScale <= 0) displayScale = 0.5;
+
+        pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
+        pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
+        viewport.style.overflow = "hidden";
+    } else {
+        // 100% 拡大表示（細部確認用、スクロール枠表示）
+        const containerW = Math.max(100, viewport.clientWidth - 24);
+        const displayScale = Math.max(0.6, containerW / unscaledW);
+
+        pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
+        pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
+        viewport.style.overflow = "auto";
+    }
+}
+
+window.addEventListener("resize", applyPreviewDisplaySize);
+
+// --- リアルタイムプレビュー更新（チラつき防止 ＆ 高画質内部解像度維持） ---
 async function updatePreview() {
     updateAmountEcho();
     const pdfCanvas = document.getElementById("pdfCanvas");
     const previewPlaceholder = document.getElementById("previewPlaceholder");
 
-    // レースコンディション防止: この呼び出しの世代を記録し、
-    // 古い世代のレンダリングが後から完了しても描画させない
     const gen = ++previewRenderGen;
 
     showStatus("PDF生成中...", true);
     const pdfBlob = await generatePDF(false);
-    if (gen !== previewRenderGen) return; // より新しい更新が始まっている
+    if (gen !== previewRenderGen) return;
 
     if (pdfBlob && pdfjsLib) {
         try {
@@ -2299,48 +2356,39 @@ async function updatePreview() {
             const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
             const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
-            
-            const container = pdfCanvas.parentElement;
-            
-            // パネル展開・アコーディオン操作で縦幅(clientHeight)が変動しても画面全体がズームしないよう、
-            // コンテナ横幅をベースに安定したプレビュー倍率(scale)を決定する
-            const containerWidth = Math.max(200, (container.clientWidth || 400) - 32); 
+
             const unscaledViewport = page.getViewport({ scale: 1.0 });
-            
-            let scale = containerWidth / unscaledViewport.width;
-            if (!Number.isFinite(scale) || scale <= 0) scale = 1.0;
-            
-            const viewport = page.getViewport({ scale: scale });
-            
+            pdfCanvas._unscaledViewport = unscaledViewport;
+
+            // 内部レンダリング解像度は高画質固定 (スケール 2.0 × devicePixelRatio)
+            const renderScale = 2.0;
+            const viewport = page.getViewport({ scale: renderScale });
             const outputScale = window.devicePixelRatio || 1;
-            
-            // オフスクリーンcanvasで先にレンダリング（チラつき防止）
-            const offscreen = document.createElement('canvas');
+
+            const offscreen = document.createElement("canvas");
             offscreen.width = Math.floor(viewport.width * outputScale);
             offscreen.height = Math.floor(viewport.height * outputScale);
-            
-            const offCtx = offscreen.getContext('2d');
-            const transform = outputScale !== 1 
-              ? [outputScale, 0, 0, outputScale, 0, 0] 
-              : null;
+
+            const offCtx = offscreen.getContext("2d");
+            const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
 
             const renderContext = {
-              canvasContext: offCtx,
-              transform: transform,
-              viewport: viewport
+                canvasContext: offCtx,
+                transform: transform,
+                viewport: viewport
             };
-            
-            await page.render(renderContext).promise;
-            if (gen !== previewRenderGen) return; // 描画中に新しい更新が始まった場合は破棄
 
-            // レンダリング完了後にメインcanvasへ一括コピー
+            await page.render(renderContext).promise;
+            if (gen !== previewRenderGen) return;
+
             pdfCanvas.width = offscreen.width;
             pdfCanvas.height = offscreen.height;
-            pdfCanvas.style.width = Math.floor(viewport.width) + "px";
-            pdfCanvas.style.height = Math.floor(viewport.height) + "px";
-            const mainCtx = pdfCanvas.getContext('2d');
+            const mainCtx = pdfCanvas.getContext("2d");
             mainCtx.drawImage(offscreen, 0, 0);
-            
+
+            // 表示スタイルサイズを設定
+            applyPreviewDisplaySize();
+
             pdfCanvas.style.display = "block";
             previewPlaceholder.style.display = "none";
             showStatus("プレビュー更新完了", false);
@@ -2349,7 +2397,6 @@ async function updatePreview() {
             showStatus("プレビュー表示エラー", false);
         }
     } else {
-        // pdfBlobがnull（氏名未入力など）の場合のみcanvasをクリア
         if (!pdfBlob) {
             pdfCanvas.style.display = "none";
             previewPlaceholder.style.display = "flex";
