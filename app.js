@@ -639,8 +639,16 @@ function updatePaperSizeUI() {
 async function loadDbRecords() {
     try {
         const all = await idbGetAllRecords();
-        // 削除待ち（墓標）は一覧に表示しない
-        dbRecords = all.filter(r => r.sync !== "pending_delete");
+        // 削除待ち（墓標）は一覧に表示しない。また過去の破損データ（氏名欄に金額や合計金額が入っているデータ）は自動削除・排除
+        dbRecords = all.filter(r => {
+            if (r.sync === "pending_delete") return false;
+            const nm = String(r.name ?? "").trim();
+            if (nm.startsWith("¥") || nm.startsWith("\\") || nm.startsWith("合計") || nm.startsWith("物品まとめ")) {
+                if (r.id) idbDeleteRecord(r.id); // 自動クレンジング
+                return false;
+            }
+            return true;
+        });
         // IndexedDBはキー順（≒古い順）で返すため、常に日時降順（新しい順）に揃える
         dbRecords.sort((a, b) => {
             const da = parseFlexibleDate(a.date);
@@ -2414,7 +2422,7 @@ async function restoreFromGAS() {
         showToast("GASのURLを設定してください", "error");
         return;
     }
-    if (!confirm("クラウド（スプレッドシート）から全ての名簿データをダウンロードし、ローカルに復元します。\n現在のローカルデータに追加されます。よろしいですか？")) return;
+    if (!confirm("クラウド（スプレッドシート）から最新の名簿データをダウンロードし、ローカルを更新します。よろしいですか？")) return;
     
     const btn = document.getElementById("btnRestoreGAS");
     if (btn) btn.innerHTML = "復元中...";
@@ -2424,37 +2432,44 @@ async function restoreFromGAS() {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         
-        // 削除待ち（墓標）のIDは復元対象から除外する（削除の意思を尊重）
+        // 削除待ち（墓標）のIDは復元対象から除外する
         const tombstoneIds = new Set((await idbGetPendingDeletes()).map(r => r.id));
+
+        // 過去の破損レコード（氏名欄に金額や合計金額が入っている旧データ）をローカルから一括クレンジング削除
+        const existingAll = await idbGetAllRecords();
+        for (const ex of existingAll) {
+            const exName = String(ex.name ?? "").trim();
+            if (exName.startsWith("¥") || exName.startsWith("\\") || exName.startsWith("合計") || exName.startsWith("物品まとめ")) {
+                if (ex.id) await idbDeleteRecord(ex.id);
+            }
+        }
 
         let count = 0;
         for (const r of data.records) {
-            // 日付をISO形式に正規化（GAS由来の "2026/6/10 12:00:00" はSafariでパース不能のため）
+            const nm = String(r.name ?? "").trim();
+            if (!nm || nm.startsWith("¥") || nm.startsWith("\\") || nm.startsWith("合計") || nm.startsWith("物品まとめ")) continue;
+
             const parsedDate = parseFlexibleDate(r.timestamp);
+            const recordId = r.id || stableIdFromRow(String(r.timestamp || ""), nm, String(r.amount || ""));
 
-            // IDが無い行はハッシュで決定的なIDを合成する。
-            // （旧実装は毎回ランダムIDを振っていたため、復元を繰り返すとデータが増殖した）
-            const recordId = r.id || stableIdFromRow(String(r.timestamp || ""), String(r.name || ""), String(r.amount || ""));
-
-            if (tombstoneIds.has(recordId)) continue; // ローカルで削除済み（クラウド反映待ち）
+            if (tombstoneIds.has(recordId)) continue; // ローカルで削除済み
 
             const record = {
                 id: recordId,
                 date: (parsedDate || new Date()).toISOString(),
                 template: r.templateType === "萬圓用" ? "10000en" : (r.templateType === "阡圓用" ? "1000en" : "free"),
-                name: String(r.name ?? ""),
+                name: nm,
                 amount: String(r.amount ?? ""),
                 bagNo: String(r.bagNo ?? ""),
                 address: String(r.address ?? ""),
                 sync: "synced"
             };
-            // putはID重複時に上書きとなるため、再実行しても増殖しない
             await idbPutRecord(record);
             count++;
         }
         await loadDbRecords();
         renderTable();
-        showToast(`クラウドから ${count}件の履歴を復元しました`);
+        showToast(`クラウドから ${count}件の正解データを同期・更新しました`);
     } catch (e) {
         showToast("復元失敗: " + e.message, "error");
     } finally {
@@ -2825,21 +2840,27 @@ function parseKanjiNumber(str) {
 
 function updateDashboardStats() {
     let totalMoney = 0;
-    let count10000 = 0;
-    let count5000 = 0;
-    let countFree = 0;
+    let moneyCount = 0;
+    let itemCount = 0;
+    let validRecords = [];
 
     for (let r of dbRecords) {
-        // テンプレート別カウント (枚数は「空」でもカウントする)
-        // ※ レコードのキーは template ("10000en"等)。templateType はGAS送信payload専用
-        if (r.template === "10000en") count10000++;
-        else if (r.template === "1000en") count5000++;
-        else if (r.template === "free") countFree++;
-        
-        // 金額抽出ロジック (「空」の場合は金額合算を除外)
-        const _amt = (r.amount === null || r.amount === undefined) ? '' : String(r.amount);
-        if (_amt && !_amt.includes('[空]')) {
-            totalMoney += parseKanjiNumber(_amt);
+        const nameStr = String(r.name ?? "").trim();
+        // 明らかな誤データ（氏名欄に金額や「合計金額」が入っている壊れたレコード）はスキップ
+        if (nameStr.startsWith("¥") || nameStr.startsWith("\\") || nameStr.startsWith("合計") || nameStr.startsWith("物品まとめ")) {
+            continue;
+        }
+        validRecords.push(r);
+
+        const _amt = String(r.amount ?? "").trim();
+        const isItem = !_amt || _amt.includes('[空]') || _amt.includes('［空］') || _amt.includes('空');
+        const num = isItem ? 0 : parseKanjiNumber(_amt);
+
+        if (num > 0) {
+            totalMoney += num;
+            moneyCount++;
+        } else if (_amt !== "") {
+            itemCount++;
         }
     }
 
@@ -2847,17 +2868,14 @@ function updateDashboardStats() {
     const elTotalMoney = document.getElementById("statTotalMoney");
     if (elTotalMoney) elTotalMoney.textContent = totalMoney.toLocaleString();
 
-    const el10000 = document.getElementById("statCount10000");
-    if (el10000) el10000.textContent = count10000.toLocaleString();
+    const elTotalCount = document.getElementById("statCountTotal");
+    if (elTotalCount) elTotalCount.textContent = validRecords.length.toLocaleString();
 
-    const el5000 = document.getElementById("statCount5000");
-    if (el5000) el5000.textContent = count5000.toLocaleString();
+    const elMoneyCount = document.getElementById("statMoneyCount");
+    if (elMoneyCount) elMoneyCount.textContent = moneyCount.toLocaleString();
 
-    const elFree = document.getElementById("statCountFree");
-    if (elFree) elFree.textContent = countFree.toLocaleString();
-
-    const elTotal = document.getElementById("statCountTotal");
-    if (elTotal) elTotal.textContent = (count10000 + count5000 + countFree).toLocaleString();
+    const elItemCount = document.getElementById("statItemCount");
+    if (elItemCount) elItemCount.textContent = itemCount.toLocaleString();
 }
 
 

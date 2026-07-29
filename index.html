@@ -1098,7 +1098,7 @@
         <!-- ヘッダー -->
         <header>
             <h1><i class="fa-solid fa-file-pdf"></i> <span style="display: inline-block;">奉納ビラ 印刷＆</span><span style="display: inline-block;">名簿管理</span></h1>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 8px; text-align: center;">v46 (2026/07/29 更新)</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 8px; text-align: center;">v47 (2026/07/29 更新)</div>
             <div style="text-align: center; margin-bottom: 10px;">
                 <a href="letter.html" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px;">
                     <i class="fa-solid fa-envelope-open-text"></i> 案内状・御礼状 作成
@@ -1494,26 +1494,14 @@
                         <span id="statTotalMoney">0</span> <span style="font-size: 16px; font-weight: normal; color: #475569;">円</span>
                     </div>
                 </div>
-                <!-- 印刷枚数エリア -->
-                <div style="flex: 1; min-width: 250px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #cbd5e1;">
-                    <div style="font-size: 14px; color: #64748b; margin-bottom: 8px; font-weight: bold; text-align: center;">テンプレート別 印刷枚数</div>
-                    <div style="display: flex; justify-content: space-around;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 12px; color: #94a3b8;">萬圓用</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #334155;"><span id="statCount10000">0</span>枚</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 12px; color: #94a3b8;">阡圓用</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #334155;"><span id="statCount5000">0</span>枚</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 12px; color: #94a3b8;">フリー</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #334155;"><span id="statCountFree">0</span>枚</div>
-                        </div>
-                        <div style="text-align: center; border-left: 1px solid #e2e8f0; padding-left: 12px;">
-                            <div style="font-size: 12px; color: #94a3b8;">総計</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #0f172a;"><span id="statCountTotal">0</span>枚</div>
-                        </div>
+                <!-- 奉納件数エリア -->
+                <div style="flex: 1; min-width: 200px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div style="font-size: 14px; color: #64748b; margin-bottom: 4px; font-weight: bold;">全 奉納件数</div>
+                    <div style="font-size: 28px; font-weight: 900; color: #0f172a;">
+                        <span id="statCountTotal">0</span> <span style="font-size: 16px; font-weight: normal; color: #475569;">件</span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                        (金銭: <span id="statMoneyCount">0</span>件 / 物品: <span id="statItemCount">0</span>件)
                     </div>
                 </div>
             </div>
@@ -1689,7 +1677,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=46"></script>
+    <script src="app.js?v=47"></script>
 
 </body>
 </html>
