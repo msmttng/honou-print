@@ -1088,28 +1088,30 @@ function updateSetupUI(status) {
     }
 }
 
-// --- 抜本改修: ブラウザCSS縦書き ＋ 縦中横 (.tcu) 画像化モジュール ---
+// --- 縦書き用トークン分割 (1文字セル縦積み ＋ 縦中横トークン) ---
+function tokenizeVertical(s) {
+    if (!s) return [];
 
-function buildVerticalHtml(text) {
-    if (!text) return "";
+    // 1. ㍿ を「株式会社」4文字に展開
+    let text = String(s).replace(/㍿/g, "株式会社");
 
-    // 1. ㍿ を「株式会社」に展開
-    let s = String(text).replace(/㍿/g, "株式会社");
-
-    // 2. 組文字 ㈱ ㈲ 等または (株) （株） （有） 等を <span class="tcu">（株）</span> に変換
+    const tokens = [];
+    // 括弧囲み漢字1文字 (例: （株）, (株), （有）, (有), （代）) または 1文字組文字 (㈱, ㈲, ㈳ 等)
     const regex = /([（\(][\u4E00-\u9FFF\u3400-\u4DBF][）\)])|([㈱㈲㈳㈶㈴㈾㈿㊑㊒])/g;
     const map = {
         "㈱": "株", "㈲": "有", "㈳": "社", "㈶": "財",
         "㈴": "名", "㈾": "資", "㈿": "協", "㊑": "有", "㊒": "株"
     };
 
-    let resultHtml = "";
     let lastIndex = 0;
     let match;
 
-    while ((match = regex.exec(s)) !== null) {
+    while ((match = regex.exec(text)) !== null) {
         if (match.index > lastIndex) {
-            resultHtml += escapeHtml(s.substring(lastIndex, match.index));
+            const preStr = text.substring(lastIndex, match.index);
+            for (const c of preStr) {
+                tokens.push({ type: "char", ch: c });
+            }
         }
 
         let innerChar = "";
@@ -1119,199 +1121,22 @@ function buildVerticalHtml(text) {
             innerChar = map[match[2]] || "株";
         }
 
-        resultHtml += `<span class="tcu">（${escapeHtml(innerChar)}）</span>`;
+        tokens.push({
+            type: "tcu",
+            unitText: `（${innerChar}）`
+        });
+
         lastIndex = regex.lastIndex;
     }
 
-    if (lastIndex < s.length) {
-        resultHtml += escapeHtml(s.substring(lastIndex));
-    }
-
-    return resultHtml;
-}
-
-function getFontFamilyCss(fontKey) {
-    if (fontKey === "ZenMaruGothic") return "'Zen Maru Gothic', sans-serif";
-    if (fontKey === "NotoSansJP") return "'Noto Sans JP', sans-serif";
-    return "'HGSGyoshotai', serif";
-}
-
-const fontBase64Cache = {};
-
-async function getFontDataUrlForCss(fontKey) {
-    if (fontBase64Cache[fontKey]) {
-        return fontBase64Cache[fontKey];
-    }
-    try {
-        if (fontKey === "HGSGyoshotai") {
-            const fontUrl = "./hgs_gyoshotai.ttf";
-            const resp = await fetch(fontUrl);
-            const blob = await resp.blob();
-            const dataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
-            fontBase64Cache[fontKey] = dataUrl;
-            return dataUrl;
-        }
-    } catch (e) {
-        console.warn("フォントBase64変換警告:", e);
-    }
-    return "";
-}
-
-async function renderVerticalTextToPng(htmlContent, fontKey, fontSizePt, charSpacingPt) {
-    const box = document.getElementById("nameRenderBox");
-    if (!box) return null;
-
-    const fontFamilyCss = getFontFamilyCss(fontKey);
-    const letterSpacingCss = `${charSpacingPt}pt`;
-    const fontSizeCss = `${fontSizePt}pt`;
-
-    box.style.fontFamily = fontFamilyCss;
-    box.style.fontSize = fontSizeCss;
-    box.style.letterSpacing = letterSpacingCss;
-    box.style.visibility = "visible";
-    box.innerHTML = htmlContent;
-
-    // 1. フォント読み込み完了を待機
-    try {
-        if (document.fonts) {
-            await document.fonts.load(`${fontSizePt}pt ${fontFamilyCss}`);
-            await document.fonts.ready;
-        }
-    } catch (fErr) {
-        console.warn("font load wait warning:", fErr);
-    }
-
-    // 2. 方式 1: html2canvas 方式 (Tainted Canvas のリスクが一切なく完全・安全・高画質)
-    if (typeof html2canvas === "function") {
-        try {
-            const canvas = await html2canvas(box, {
-                backgroundColor: null,
-                scale: 3.0,
-                logging: false,
-                useCORS: true
-            });
-            box.style.visibility = "hidden";
-
-            const dataUrl = canvas.toDataURL("image/png");
-            const base64Str = dataUrl.split(",")[1];
-            const binaryStr = atob(base64Str);
-            const len = binaryStr.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryStr.charCodeAt(i);
-            }
-
-            const widthPx = canvas.width / 3.0;
-            const heightPx = canvas.height / 3.0;
-
-            addAppLog("info", `html2canvas方式で縦書きPNG生成完了 (${fontKey})`);
-            return {
-                pngBytes: bytes,
-                widthPt: pxToPt(widthPx),
-                heightPt: pxToPt(heightPx),
-                aspect: widthPx / heightPx
-            };
-        } catch (hErr) {
-            console.warn("html2canvas 失敗、SVG方式にフォールバック:", hErr);
+    if (lastIndex < text.length) {
+        const postStr = text.substring(lastIndex);
+        for (const c of postStr) {
+            tokens.push({ type: "char", ch: c });
         }
     }
 
-    // 3. 方式 2: SVG foreignObject (Base64 フォント埋め込み ＆ Try-Catch 安全ガード)
-    try {
-        const fontDataUrl = await getFontDataUrlForCss(fontKey);
-        const rect = box.getBoundingClientRect();
-        const widthPx = Math.max(1, Math.ceil(rect.width) + 6);
-        const heightPx = Math.max(1, Math.ceil(rect.height) + 6);
-
-        const fontStyleRule = fontDataUrl ? `
-            @font-face {
-                font-family: ${fontFamilyCss};
-                src: url(${fontDataUrl});
-            }
-        ` : '';
-
-        const svgStr = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="${widthPx}" height="${heightPx}">
-                <style>
-                    ${fontStyleRule}
-                    .render-body {
-                        margin: 0;
-                        padding: 2px;
-                        background: transparent;
-                        font-family: ${fontFamilyCss};
-                        font-size: ${fontSizeCss};
-                        letter-spacing: ${letterSpacingCss};
-                        writing-mode: vertical-rl;
-                        -webkit-writing-mode: vertical-rl;
-                        white-space: nowrap;
-                        line-height: 1;
-                        color: #1a1a1a;
-                    }
-                    .tcu {
-                        text-combine-upright: all;
-                        -webkit-text-combine: all;
-                        font-size: 0.88em;
-                    }
-                </style>
-                <foreignObject width="100%" height="100%">
-                    <div xmlns="http://www.w3.org/1999/xhtml" class="render-body">
-                        ${htmlContent}
-                    </div>
-                </foreignObject>
-            </svg>
-        `;
-
-        const img = new Image();
-        const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-        const url = URL.createObjectURL(svgBlob);
-
-        await new Promise((resolve) => {
-            img.onload = resolve;
-            img.onerror = resolve;
-            img.src = url;
-        });
-
-        if (img.decode) {
-            try { await img.decode(); } catch (dErr) {}
-        }
-
-        const scale = 3.0;
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.floor(widthPx * scale);
-        canvas.height = Math.floor(heightPx * scale);
-        const ctx = canvas.getContext("2d");
-        ctx.scale(scale, scale);
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-
-        box.style.visibility = "hidden";
-
-        const dataUrl = canvas.toDataURL("image/png");
-        const base64Str = dataUrl.split(",")[1];
-        const binaryStr = atob(base64Str);
-        const len = binaryStr.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-        }
-
-        addAppLog("info", `SVG foreignObject方式で縦書きPNG生成完了 (${fontKey})`);
-        return {
-            pngBytes: bytes,
-            widthPt: pxToPt(widthPx),
-            heightPt: pxToPt(heightPx),
-            aspect: widthPx / heightPx
-        };
-    } catch (svgErr) {
-        console.error("SVG描画エラー (Tainted Canvas 等):", svgErr);
-        addAppLog("error", "SVG 描画エラー: " + (svgErr.message || svgErr), svgErr.stack || "");
-        box.style.visibility = "hidden";
-        return null;
-    }
+    return tokens;
 }
 
 function onFontChange(fontValue) {
@@ -2146,68 +1971,124 @@ async function generatePDF(isPrinting = false, override = null) {
             const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
-                // ★ 抜本改修: CSS縦書き ＋ 縦中横 (.tcu) による PNG 画像化一括描画
-                let fullTextStr = textValue;
+                // 縦書きの描画処理（1文字ずつ縦積み ＋ （株）等の縦中横は1マス中央描画）
+                const nameTokens = tokenizeVertical(textValue);
+                let honorificTokens = [];
+                let honorificSpacingPt = 0;
+
                 if (fieldKey === "name" && nameInput && honorific !== "なし") {
                     const honorificText = honorific === "custom" ? (nameSettings.honorific || "") : honorific;
-                    fullTextStr += (honorificText ? " " + honorificText : "");
+                    honorificTokens = tokenizeVertical(honorificText);
+                    honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
                 }
 
-                const fontKey = getCurrentFontKey();
+                const totalTokensCount = nameTokens.length + honorificTokens.length;
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
-                const htmlContent = buildVerticalHtml(fullTextStr);
 
-                const renderResult = await renderVerticalTextToPng(htmlContent, fontKey, baseFontSize, charSpacingPt);
+                // 枠の高さに収まるようにフォントサイズを縮小
+                let currentHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
+                if (currentHeight_pt > height_pt) {
+                    currentFontSize = (height_pt - (totalTokensCount - 1) * charSpacingPt - honorificSpacingPt) / (totalTokensCount * 1.02);
+                    const minAllowedSize = Math.max(14, baseFontSize * 0.6);
+                    if (currentFontSize < minAllowedSize) currentFontSize = minAllowedSize;
+                }
+                if (currentFontSize > width_pt) {
+                    currentFontSize = width_pt;
+                }
 
-                if (renderResult && renderResult.pngBytes) {
-                    const embeddedImage = await pdfDoc.embedPng(renderResult.pngBytes);
-                    
-                    let targetW = renderResult.widthPt;
-                    let targetH = renderResult.heightPt;
+                const boxTop = y_pt + baseFontSize;
 
-                    // 赤枠の高さ・幅に収まるよう自動縮小（等比縮小）
-                    if (targetH > height_pt) {
-                        const ratio = height_pt / targetH;
-                        targetH = height_pt;
-                        targetW = targetW * ratio;
-                    }
-                    if (targetW > width_pt) {
-                        const ratio = width_pt / targetW;
-                        targetW = width_pt;
-                        targetH = targetH * ratio;
-                    }
-
-                    // ボックス上端
-                    const boxTop = y_pt + baseFontSize;
-                    let drawX = x_pt - (targetW / 2);
-                    let drawY = boxTop - targetH;
-
-                    const valign = fieldVal.valign || "top";
-                    if (valign === "center") {
-                        drawY = boxTop - (height_pt / 2) - (targetH / 2);
-                    } else if (valign === "bottom") {
-                        drawY = boxTop - height_pt;
-                    }
-
-                    // 枠線の描画
-                    if (showBoundingBox && !isPrinting) {
-                        firstPage.drawRectangle({
-                            x: x_pt - (width_pt / 2),
-                            y: boxTop - height_pt,
-                            width: width_pt,
-                            height: height_pt,
-                            borderColor: PDFLib.rgb(1, 0, 0),
-                            borderWidth: 1,
-                        });
-                    }
-
-                    // 画像配置
-                    firstPage.drawImage(embeddedImage, {
-                        x: drawX,
-                        y: drawY,
-                        width: targetW,
-                        height: targetH
+                if (showBoundingBox && !isPrinting) {
+                    firstPage.drawRectangle({
+                        x: x_pt - (width_pt / 2),
+                        y: boxTop - height_pt,
+                        width: width_pt,
+                        height: height_pt,
+                        borderColor: PDFLib.rgb(1, 0, 0),
+                        borderWidth: 1,
                     });
+                }
+
+                const finalHeight_pt = totalTokensCount * (currentFontSize * 1.02) + (totalTokensCount - 1) * charSpacingPt + honorificSpacingPt;
+                const spacing = currentFontSize * 1.02 + charSpacingPt;
+
+                let currentY = boxTop - currentFontSize;
+                const valign = fieldVal.valign || "top";
+                if (valign === "center") {
+                    currentY = boxTop - (height_pt / 2) + (finalHeight_pt / 2) - currentFontSize;
+                } else if (valign === "bottom") {
+                    currentY = boxTop - height_pt + finalHeight_pt - currentFontSize;
+                }
+
+                const allDrawTokens = [];
+                nameTokens.forEach(t => allDrawTokens.push({ token: t, isHonorific: false }));
+                honorificTokens.forEach((t, idx) => {
+                    allDrawTokens.push({ token: t, isHonorific: true, isFirstHonorific: idx === 0 });
+                });
+
+                // 縦中横の最適フォント倍率 (0.42: 横に3文字が1マスに綺麗に収まる倍率)
+                const TCU_SCALE_FACTOR = 0.42;
+
+                for (const item of allDrawTokens) {
+                    if (item.isHonorific && item.isFirstHonorific) {
+                        currentY -= honorificSpacingPt;
+                    }
+
+                    const token = item.token;
+
+                    if (token.type === "tcu") {
+                        // ★ 縦中横トークン (「（株）」等の3文字を1マスに横書きで収める)
+                        const tcuFontSize = currentFontSize * TCU_SCALE_FACTOR;
+                        const unitText = token.unitText;
+                        const tcuWidth = fontToUse.widthOfTextAtSize(unitText, tcuFontSize);
+                        
+                        // 1マスの中央位置
+                        const drawX = x_pt - (tcuWidth / 2);
+                        const drawY = currentY + (currentFontSize * 0.28);
+
+                        const drawOptions = {
+                            x: drawX,
+                            y: drawY,
+                            size: tcuFontSize,
+                            font: fontToUse,
+                            color: PDFLib.rgb(0.1, 0.1, 0.1)
+                        };
+
+                        firstPage.drawText(unitText, drawOptions);
+                        if (fieldVal.bold) {
+                            firstPage.drawText(unitText, { ...drawOptions, x: drawX + 0.3 });
+                            firstPage.drawText(unitText, { ...drawOptions, y: drawY + 0.3 });
+                            firstPage.drawText(unitText, { ...drawOptions, x: drawX + 0.3, y: drawY + 0.3 });
+                        }
+                    } else {
+                        // 通常文字の縦積み描画
+                        const charToDraw = token.ch;
+                        const charWidth = fontToUse.widthOfTextAtSize(charToDraw, currentFontSize);
+                        let drawX = x_pt;
+                        if (alignment === "center") {
+                            drawX = x_pt - (charWidth / 2);
+                        } else if (alignment === "right") {
+                            drawX = x_pt - charWidth;
+                        }
+
+                        const baseDrawOptions = {
+                            x: drawX,
+                            y: currentY,
+                            size: currentFontSize,
+                            font: fontToUse,
+                            color: PDFLib.rgb(0.1, 0.1, 0.1)
+                        };
+
+                        firstPage.drawText(charToDraw, baseDrawOptions);
+                        if (fieldVal.bold) {
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3 });
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, y: currentY + 0.3 });
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3, y: currentY + 0.3 });
+                        }
+                    }
+
+                    // 1マス分の縦送り
+                    currentY -= spacing;
                 }
             } else {
                 // 通常の横書き描画処理（字間と重ね描きを反映）

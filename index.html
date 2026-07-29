@@ -26,8 +26,6 @@
     <script src="lib/pdf-lib.min.js"></script>
     <script src="lib/fontkit.umd.js"></script>
     <script src="lib/pdf.min.js"></script>
-    <!-- html2canvas (DOM to Canvas) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <style>
         :root {
@@ -1762,7 +1760,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
-            <span>奉納ビラシステム v77 (2026/07/29 更新)</span>
+            <span>奉納ビラシステム v78 (2026/07/29 更新)</span>
             <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-list-check"></i> ログ
                 <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
@@ -1793,27 +1791,6 @@
             </div>
         </div>
     </div>
-
-    <!-- 縦書きレンダリング用非表示コンテナ ＆ スタイル -->
-    <style>
-        .tcu {
-            text-combine-upright: all;
-            -webkit-text-combine: all;
-            font-size: 0.88em;
-        }
-    </style>
-    <div id="nameRenderBox" style="
-        position: fixed;
-        left: -9999px;
-        top: 0;
-        writing-mode: vertical-rl;
-        -webkit-writing-mode: vertical-rl;
-        white-space: nowrap;
-        line-height: 1;
-        visibility: hidden;
-        pointer-events: none;
-        background: transparent;
-    "></div>
 
     <!-- 通知トースト -->
     <div id="toast" class="toast">
@@ -1919,7 +1896,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=77"></script>
+    <script src="app.js?v=78"></script>
 
 </body>
 </html>
