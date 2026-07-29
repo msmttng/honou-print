@@ -1233,7 +1233,103 @@ function getCurrentFontKey() {
     return fontSelect && fontSelect.value ? fontSelect.value : "HGSGyoshotai";
 }
 
+// --- （株）縦中横ユニットの書体別サイズ (%) 永続化モジュール ---
+let tcuScalePerFont = {};
+
+function loadTcuScaleSettings() {
+    try {
+        const saved = localStorage.getItem("pdf_mail_merge_tcu_scale");
+        if (saved) {
+            tcuScalePerFont = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.warn("TCUスケール復元エラー:", e);
+    }
+}
+
+function saveTcuScaleSettings() {
+    try {
+        localStorage.setItem("pdf_mail_merge_tcu_scale", JSON.stringify(tcuScalePerFont));
+    } catch (e) {
+        console.warn("TCUスケール保存エラー:", e);
+    }
+}
+
+function getTcuScaleForCurrentFont() {
+    const fontKey = getCurrentFontKey();
+    const val = Number(tcuScalePerFont[fontKey]);
+    return Number.isFinite(val) && val >= 50 && val <= 150 ? val : 100;
+}
+
+function updateTcuScaleUI() {
+    const val = getTcuScaleForCurrentFont();
+    const span = document.getElementById("tcu-val-scale");
+    if (span && span.tagName !== 'INPUT') {
+        span.textContent = val + "%";
+    }
+}
+
+function setTcuScaleForCurrentFont(val) {
+    const fontKey = getCurrentFontKey();
+    let num = Math.round(Number(val));
+    if (!Number.isFinite(num)) num = 100;
+    if (num < 50) num = 50;
+    if (num > 150) num = 150;
+    
+    tcuScalePerFont[fontKey] = num;
+    saveTcuScaleSettings();
+    updateTcuScaleUI();
+    triggerAutoUpdate();
+}
+
+function adjustTcuScale(delta) {
+    const current = getTcuScaleForCurrentFont();
+    setTcuScaleForCurrentFont(current + delta);
+}
+
+function makeTcuValueEditable() {
+    const span = document.getElementById("tcu-val-scale");
+    if (!span || span.tagName === 'INPUT') return;
+    const currentVal = getTcuScaleForCurrentFont();
+
+    const input = document.createElement('input');
+    input.id = 'tcu-val-scale';
+    input.type = 'number';
+    input.step = '1';
+    input.min = '50';
+    input.max = '150';
+    input.style.width = '42px';
+    input.style.fontSize = '12px';
+    input.style.textAlign = 'center';
+    input.style.fontFamily = 'monospace';
+    input.style.border = '1px solid #4f46e5';
+    input.style.borderRadius = '4px';
+    input.style.padding = '1px 2px';
+    input.value = currentVal;
+
+    const commitValue = () => {
+        let parsed = parseInt(input.value, 10);
+        if (!Number.isFinite(parsed)) parsed = 100;
+        setTcuScaleForCurrentFont(parsed);
+    };
+
+    input.onblur = commitValue;
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        }
+    };
+
+    if (span.parentNode) {
+        span.parentNode.replaceChild(input, span);
+        input.focus();
+        input.select();
+    }
+}
+
 function onFontChange(fontValue) {
+    updateTcuScaleUI();
     triggerAutoUpdate();
 }
 
@@ -1256,6 +1352,8 @@ function loadDesignSettings() {
     } catch (e) {
         console.error("用紙サイズ設定アクセスエラー:", e);
     }
+    loadTcuScaleSettings();
+    updateTcuScaleUI();
 }
 
 function saveDesignSettings() {
@@ -2026,8 +2124,9 @@ async function generatePDF(isPrinting = false, override = null) {
                     allDrawTokens.push({ token: t, isHonorific: true, isFirstHonorific: idx === 0 });
                 });
 
-                // 縦中横の最適フォント倍率 (0.42: 横に3文字が1マスに綺麗に収まる倍率)
-                const TCU_SCALE_FACTOR = 0.42;
+                // 縦中横の最適フォント倍率 (基準 0.42 × ユーザー指定設定%)
+                const userTcuPercent = getTcuScaleForCurrentFont();
+                const TCU_SCALE_FACTOR = 0.42 * (userTcuPercent / 100.0);
 
                 for (const item of allDrawTokens) {
                     if (item.isHonorific && item.isFirstHonorific) {

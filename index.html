@@ -1511,6 +1511,15 @@
                                         <option value="'Noto Sans JP', sans-serif">ゴシック体（現代的）</option>
                                     </select>
                                 </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">
+                                    <label style="font-size: 11px; color: var(--text-secondary);">（株）等のサイズ (%)</label>
+                                    <div style="display: flex; align-items: center; justify-content: space-between; background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px;">
+                                        <button type="button" class="btn" style="padding: 2px 8px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustTcuScale(-5)"><i class="fa-solid fa-minus"></i></button>
+                                        <span id="tcu-val-scale" style="font-weight: 600; font-size: 12px; font-family: monospace; cursor: pointer;" onclick="makeTcuValueEditable()">100%</span>
+                                        <button type="button" class="btn" style="padding: 2px 8px; min-height: 28px; font-size: 12px; background: #f1f5f9; color: #475569;" onclick="adjustTcuScale(5)"><i class="fa-solid fa-plus"></i></button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1760,7 +1769,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
-            <span>奉納ビラシステム v78 (2026/07/29 更新)</span>
+            <span>奉納ビラシステム v79 (2026/07/29 更新)</span>
             <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-list-check"></i> ログ
                 <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
@@ -1896,7 +1905,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=78"></script>
+    <script src="app.js?v=79"></script>
 
 </body>
 </html>
