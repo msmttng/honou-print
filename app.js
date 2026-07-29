@@ -1864,7 +1864,7 @@ function renderTable() {
     }
 
     if (filteredRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="no-data">登録されている名簿データはありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="no-data">登録されている名簿データはありません。</td></tr>`;
         return;
     }
 
@@ -1874,23 +1874,11 @@ function renderTable() {
         // 日付フォーマット（ISO/JPロケール混在に対応、パース不能でもNaNにしない）
         const dateStr = formatDateForDisplay(r.date);
 
-        // テンプレートバッジ
-        let badgeClass = "badge-10000";
-        let badgeText = "萬圓用";
-        if (r.template === "1000en") {
-            badgeClass = "badge-100";
-            badgeText = "阡圓用";
-        } else if (r.template === "free") {
-            badgeClass = "badge-free";
-            badgeText = "フリー";
-        }
-
         // XSS対策: レコード値はinnerHTMLのイベント属性に埋め込まず、
         // DOM APIとクロージャで安全にバインドする
         tr.innerHTML = `
             <td data-label=""><input type="checkbox" class="record-checkbox" style="transform: scale(1.3);"></td>
             <td data-label="日時">${escapeHTML(dateStr)}</td>
-            <td data-label="台紙種類"><span class="badge ${badgeClass}">${badgeText}</span></td>
             <td data-label="番号">${escapeHTML((r.bagNo || "").toString())}</td>
             <td data-label="氏名" style="font-weight: 500;">${escapeHTML(r.name)}</td>
             <td data-label="住所">${escapeHTML(r.address || "")}</td>
