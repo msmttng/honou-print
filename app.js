@@ -1194,6 +1194,9 @@ function tokenizeVertical(s) {
     // 1. ㍿ は従来どおり「株式会社」4文字の char トークンに展開
     let text = s.replace(/㍿/g, "株式会社");
 
+    // 2. 縦書き用の長音・ダッシュ類 (ー ― - − 等) を縦棒 '丨' (U+4E28) に変換
+    text = text.replace(/[ー―\-\u2010-\u2015\u2212\uFF0D]/g, "丨");
+
     const tokens = [];
     // 括弧（全角/半角） + CJK漢字1文字 + 閉じ括弧（全角/半角） または 1文字組文字 (㈱ ㈲ 等)
     const regex = /([（\(][\u4E00-\u9FFF\u3400-\u4DBF][）\)])|([㈱㈲㈳㈶㈴㈾㈿㊑㊒])/g;
