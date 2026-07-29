@@ -214,6 +214,34 @@ function showZipNotice() {
     }
 }
 
+// --- 組文字 (㈱ ㈲ ㍿ ℡ 等) 展開変換関数 ---
+function expandCompatChars(s) {
+    if (!s) return s;
+    const MAP = {
+        "㈱":"(株)", "㈲":"(有)", "㈳":"(社)", "㈶":"(財)", "㈴":"(名)",
+        "㈾":"(資)", "㈿":"(協)", "㍿":"株式会社",
+        "℡":"TEL", "㊑":"(有)", "㊒":"(株)"
+    };
+    return String(s).replace(/[㈱㈲㈳㈶㈴㈾㈿㍿℡㊑㊒]/g, ch => MAP[ch] || ch);
+}
+
+// フォント未収録文字の検出・警告ログ
+function checkGlyphAvailability(font, text) {
+    if (!font || !text) return;
+    for (const ch of Array.from(text)) {
+        try {
+            if (font.getGlyphWidth) {
+                const w = font.getGlyphWidth(ch);
+                if (w === 0 && ch !== " " && ch !== "　") {
+                    console.warn(`Font glyph missing for char: '${ch}' (U+${ch.charCodeAt(0).toString(16).toUpperCase()})`);
+                }
+            }
+        } catch (e) {
+            console.warn(`Font glyph check failed for char: '${ch}' (U+${ch.charCodeAt(0).toString(16).toUpperCase()})`, e);
+        }
+    }
+}
+
 // かな正規化 (ひらがな⇄カタカナ部分一致)
 function kanaNormalize(str) {
     if (!str) return "";
@@ -1616,11 +1644,11 @@ async function generatePDF(isPrinting = false, override = null) {
     }
 
     const tmpl = override ? override.template : currentTemplate;
-    const nameInput = override ? (override.name || "").trim() : document.getElementById("nameInput").value.trim();
+    const nameInput = expandCompatChars(override ? (override.name || "").trim() : document.getElementById("nameInput").value.trim());
     const amountSelect = document.getElementById("amountSelect");
-    const amountInput = override
+    const amountInput = expandCompatChars(override
         ? (override.amount || "").trim()
-        : (tmpl === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim()));
+        : (tmpl === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim())));
 
     // 氏名がない場合は合成処理をスキップ (プレビュークリア状態に)
     if (!nameInput) {
@@ -1699,14 +1727,16 @@ async function generatePDF(isPrinting = false, override = null) {
         const honorific = nameSettings.honorific || "殿";
         
         const data = {
-            name:   nameInput || '',
-            amount: fullAmount
+            name:   expandCompatChars(nameInput || ''),
+            amount: expandCompatChars(fullAmount)
         };
 
         // 各フィールドの描画
         for (const [fieldKey, fieldVal] of Object.entries(settings)) {
-            const textValue = data[fieldKey];
-            if (!textValue) continue;
+            const rawTextValue = data[fieldKey];
+            if (!rawTextValue) continue;
+            const textValue = expandCompatChars(rawTextValue);
+            checkGlyphAvailability(fontToUse, textValue);
 
             // 用紙サイズ変更に伴うテキスト座標 of オフセット適用
             let x_pt = mmToPt(fieldVal.x);
@@ -4263,13 +4293,19 @@ function saveReceiptCustomPaperSize() {
 
 // 7. 単独での奉納受領証（領収書）印刷 (用紙サイズ・@page設定付き)
 async function printReceiptSingle() {
-    const nameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
+    const rawNameInput = document.getElementById("nameInput") ? document.getElementById("nameInput").value.trim() : "";
     const amountSelect = document.getElementById("amountSelect");
-    let amountInput = currentTemplate === "free" ? (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : "") : (amountSelect ? amountSelect.value : (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : ""));
+    let rawAmountInput = currentTemplate === "free" ? (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : "") : (amountSelect ? amountSelect.value : (document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : ""));
     const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
-    const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
-    const issuerName = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "奉納事業実行委員会";
-    const issuerAddress = localStorage.getItem("pdf_mail_merge_receipt_issuer_address") || "";
+    const rawAddressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
+    const rawIssuerName = localStorage.getItem("pdf_mail_merge_receipt_issuer") || "奉納事業実行委員会";
+    const rawIssuerAddress = localStorage.getItem("pdf_mail_merge_receipt_issuer_address") || "";
+
+    const nameInput = expandCompatChars(rawNameInput);
+    const amountInput = expandCompatChars(rawAmountInput);
+    const addressInput = expandCompatChars(rawAddressInput);
+    const issuerName = expandCompatChars(rawIssuerName);
+    const issuerAddress = expandCompatChars(rawIssuerAddress);
 
     if (!nameInput) {
         showToast("奉納者氏名を入力してください", "error");
