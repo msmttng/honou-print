@@ -1032,24 +1032,67 @@ function initDesignSettings() {
     updatePaperSizeUI();
 }
 
-// 縦書き用組文字スタンプ対象マッピング（㍿ のみ除く）
-const KUMI_STAMP_MAP = {
-    "㈱": "（株）",
-    "㈲": "（有）",
-    "㈳": "（社）",
-    "㈶": "（財）",
-    "㈴": "（名）",
-    "㈾": "（資）",
-    "㈿": "（協）",
-    "㊑": "（有）",
-    "㊒": "（株）"
-};
+// 縦書き描画用トークン分割（（株）(株) ㈱ （有） (有) ㈲ （代） などの括弧囲み漢字1文字を1マススタンプ化）
+function tokenizeVertical(s) {
+    if (!s) return [];
+
+    // 1. ㍿ は従来どおり「株式会社」4文字の char トークンに展開
+    let text = s.replace(/㍿/g, "株式会社");
+
+    const tokens = [];
+    // 括弧（全角/半角） + CJK漢字1文字 + 閉じ括弧（全角/半角） または 1文字組文字 (㈱ ㈲ 等)
+    const regex = /([（\(][\u4E00-\u9FFF\u3400-\u4DBF][）\)])|([㈱㈲㈳㈶㈴㈾㈿㊑㊒])/g;
+
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            const preStr = text.substring(lastIndex, match.index);
+            for (const c of preStr) {
+                tokens.push({ type: "char", ch: c });
+            }
+        }
+
+        const matchedStr = match[0];
+        let innerChar = "";
+
+        if (match[1]) {
+            // (株) や （有） や （代） の形式
+            innerChar = matchedStr.charAt(1);
+        } else if (match[2]) {
+            // ㈱ や ㈲ の形式
+            const map = {
+                "㈱": "株", "㈲": "有", "㈳": "社", "㈶": "財",
+                "㈴": "名", "㈾": "資", "㈿": "協", "㊑": "有", "㊒": "株"
+            };
+            innerChar = map[matchedStr] || "株";
+        }
+
+        tokens.push({
+            type: "stamp",
+            innerChar: innerChar,
+            displayLabel: `（${innerChar}）`
+        });
+
+        lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+        const postStr = text.substring(lastIndex);
+        for (const c of postStr) {
+            tokens.push({ type: "char", ch: c });
+        }
+    }
+
+    return tokens;
+}
 
 const kumiStampCache = {};
 
-async function getKumiStampPngBytes(pdfDoc, ch, fontKey, fontSize) {
-    const text = KUMI_STAMP_MAP[ch] || ch;
-    const cacheKey = `${ch}_${fontKey}_${Math.round(fontSize)}`;
+async function getKumiStampPngBytes(pdfDoc, innerChar, fontKey, fontSize) {
+    const text = `（${innerChar}）`;
+    const cacheKey = `${innerChar}_${fontKey}_${Math.round(fontSize)}`;
     if (kumiStampCache[cacheKey]) {
         return kumiStampCache[cacheKey];
     }
