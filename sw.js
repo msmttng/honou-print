@@ -73,7 +73,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ローカルリソースはキャッシュ優先、なければネットワーク
+  // HTMLドキュメント（index.html等）はネットワーク優先で最新を取得（オフライン時はキャッシュ）
+  if (event.request.mode === 'navigate' || (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // その他の静的ローカルリソースはキャッシュ優先、なければネットワーク
   event.respondWith(
     caches.match(event.request).then((cached) => {
       return cached || fetch(event.request).then((response) => {
