@@ -1765,23 +1765,11 @@ async function generatePDF(isPrinting = false, override = null) {
             const showBoundingBox = document.getElementById("showBoundingBox") && document.getElementById("showBoundingBox").checked;
 
             if (isVertical) {
-                // 縦書きの描画処理（(株) ㈱ (有) ㈲ やカッコ類を縦書き表記へ自動最適化）
+                // 縦書きの描画処理
+                // 1. 前処理: 半角 () [] を全角 （） に正規化（縦書きに半角括弧は使わない）
                 let normText = textValue
-                    .replace(/㈱/g, "︵株︶")
-                    .replace(/㈲/g, "︵有︶")
-                    .replace(/\(株\)/gi, "︵株︶")
-                    .replace(/（株）/g, "︵株︶")
-                    .replace(/\[株\]/g, "︵株︶")
-                    .replace(/\(有\)/gi, "︵有︶")
-                    .replace(/（有）/g, "︵有︶")
-                    .replace(/\[有\]/g, "︵有︶")
-                    .replace(/\(社\)/gi, "︵社︶")
-                    .replace(/（社）/g, "︵社︶")
-                    .replace(/\(財\)/gi, "︵財︶")
-                    .replace(/（財）/g, "︵財︶")
-                    .replace(/\(/g, "︵").replace(/\)/g, "︶")
-                    .replace(/\[/g, "︵").replace(/\]/g, "︶")
-                    .replace(/（/g, "︵").replace(/）/g, "︶");
+                    .replace(/\(/g, "（").replace(/\)/g, "）")
+                    .replace(/\[/g, "（").replace(/\]/g, "）");
 
                 let chars = Array.from(normText);
                 let honorificChars = [];
@@ -1793,25 +1781,14 @@ async function generatePDF(isPrinting = false, override = null) {
                     honorificSpacingPt = mmToPt(nameSettings.honorific_spacing || 0.0);
                 }
                 
-                // 括弧記号 "︵" "︶" は実質高さが小さいため高さを0.45文字分として換算
-                let effectiveCharCount = 0;
-                chars.forEach(c => {
-                    if (c === "︵" || c === "︶") {
-                        effectiveCharCount += 0.45;
-                    } else {
-                        effectiveCharCount += 1.0;
-                    }
-                });
-                effectiveCharCount += honorificChars.length;
-
                 const totalCharsCount = chars.length + honorificChars.length;
                 const charSpacingPt = mmToPt(fieldVal.char_spacing || 0.0);
                 
-                // 枠の高さに収まるようにフォントサイズを縮小（換算文字数 effectiveCharCount を使用して潰れを防止）
-                let currentHeight_pt = effectiveCharCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                // 枠の高さに収まるようにフォントサイズを縮小（すべての文字で文字送りを維持）
+                let currentHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
                 if (currentHeight_pt > height_pt) {
-                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (effectiveCharCount * 1.02);
-                    const minAllowedSize = Math.max(14, baseFontSize * 0.6); // 潰れ防止の下限ガード
+                    currentFontSize = (height_pt - (totalCharsCount - 1) * charSpacingPt - honorificSpacingPt) / (totalCharsCount * 1.02);
+                    const minAllowedSize = Math.max(14, baseFontSize * 0.6); // 下限ガード
                     if (currentFontSize < minAllowedSize) currentFontSize = minAllowedSize;
                 }
                 // 枠の幅（1文字の横幅）にも収まるように縮小
@@ -1819,7 +1796,7 @@ async function generatePDF(isPrinting = false, override = null) {
                     currentFontSize = width_pt;
                 }
 
-                // ボックスの上端を計算（元々のフォントサイズを基準に固定）
+                // ボックスの上端を計算
                 const boxTop = y_pt + baseFontSize;
 
                 // 枠線の描画
@@ -1835,7 +1812,7 @@ async function generatePDF(isPrinting = false, override = null) {
                 }
 
                 // テキストの上端が boxTop に合うように最初の文字の baseline を設定
-                const finalHeight_pt = effectiveCharCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
+                const finalHeight_pt = totalCharsCount * (currentFontSize * 1.02) + (totalCharsCount - 1) * charSpacingPt + honorificSpacingPt;
                 const spacing = currentFontSize * 1.02 + charSpacingPt;
                 
                 let currentY = boxTop - currentFontSize;
@@ -1860,9 +1837,7 @@ async function generatePDF(isPrinting = false, override = null) {
                         currentY -= honorificSpacingPt; // 敬称スペースの適用
                     }
                     
-                    const isBracket = (item.char === "︵" || item.char === "︶");
-                    const drawFontSize = isBracket ? currentFontSize * 0.75 : currentFontSize;
-                    const charWidth = fontToUse.widthOfTextAtSize(item.char, drawFontSize);
+                    const charWidth = fontToUse.widthOfTextAtSize(item.char, currentFontSize);
                     
                     let drawX = x_pt;
                     if (alignment === "center") {
@@ -1872,32 +1847,57 @@ async function generatePDF(isPrinting = false, override = null) {
                     }
                     
                     let charToDraw = item.char;
-                    if ("ー─―-～〜~".includes(item.char)) {
-                        charToDraw = "丨";
-                    } else if ("（([".includes(item.char)) {
-                        charToDraw = "︵";
-                    } else if ("）)]".includes(item.char)) {
-                        charToDraw = "︶";
-                    }
-                    
-                    const drawOptions = {
+                    const rotateTargetChars = "（）「」『』【】〔〕ー〜～-―─・";
+                    const isRotateChar = rotateTargetChars.includes(charToDraw);
+
+                    const baseDrawOptions = {
                         x: drawX,
-                        y: isBracket ? currentY + (currentFontSize * 0.1) : currentY,
-                        size: drawFontSize,
+                        y: currentY,
+                        size: currentFontSize,
                         font: fontToUse,
                         color: PDFLib.rgb(0.1, 0.1, 0.1)
                     };
                     
-                    firstPage.drawText(charToDraw, drawOptions);
-                    // 疑似太字（重ね描き）
-                    if (fieldVal.bold) {
-                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3 });
-                        firstPage.drawText(charToDraw, { ...drawOptions, y: drawOptions.y + 0.3 });
-                        firstPage.drawText(charToDraw, { ...drawOptions, x: drawX + 0.3, y: drawOptions.y + 0.3 });
+                    if (isRotateChar) {
+                        // 方式b: 該当文字を中心軸で90度回転(rotate: -90deg)描画
+                        let rotX = drawX + (currentFontSize * 0.82);
+                        let rotY = currentY + (currentFontSize * 0.15);
+
+                        // 括弧・記号ごとの微細位置補正
+                        if (charToDraw === "（" || charToDraw === "「" || charToDraw === "『" || charToDraw === "【" || charToDraw === "〔") {
+                            rotY += currentFontSize * 0.06;
+                            rotX -= currentFontSize * 0.04;
+                        } else if (charToDraw === "）" || charToDraw === "」" || charToDraw === "』" || charToDraw === "】" || charToDraw === "〕") {
+                            rotY -= currentFontSize * 0.06;
+                            rotX += currentFontSize * 0.04;
+                        } else if ("ー〜～-―─".includes(charToDraw)) {
+                            rotX = drawX + (currentFontSize * 0.78);
+                        }
+
+                        const rotDrawOptions = {
+                            ...baseDrawOptions,
+                            x: rotX,
+                            y: rotY,
+                            rotate: PDFLib.degrees(-90)
+                        };
+
+                        firstPage.drawText(charToDraw, rotDrawOptions);
+                        if (fieldVal.bold) {
+                            firstPage.drawText(charToDraw, { ...rotDrawOptions, x: rotX + 0.3 });
+                            firstPage.drawText(charToDraw, { ...rotDrawOptions, y: rotY + 0.3 });
+                            firstPage.drawText(charToDraw, { ...rotDrawOptions, x: rotX + 0.3, y: rotY + 0.3 });
+                        }
+                    } else {
+                        firstPage.drawText(charToDraw, baseDrawOptions);
+                        if (fieldVal.bold) {
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3 });
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, y: baseDrawOptions.y + 0.3 });
+                            firstPage.drawText(charToDraw, { ...baseDrawOptions, x: drawX + 0.3, y: baseDrawOptions.y + 0.3 });
+                        }
                     }
                     
-                    const stepY = isBracket ? (currentFontSize * 0.45 + charSpacingPt) : spacing;
-                    currentY -= stepY;
+                    // 1文字分の縦高さを均等維持
+                    currentY -= spacing;
                 }
             } else {
                 // 通常の横書き描画処理（字間と重ね描きを反映）
