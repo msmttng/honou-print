@@ -57,6 +57,7 @@ gas_deploy/.clasp.json
 
 # 開発メモ・デプロイ用バッチ（GitHub Pages に置く必要がない）
 app_functions.txt
+letter組み込み指示書.md
 *.bat
 _dev/
 
