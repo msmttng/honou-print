@@ -49,6 +49,10 @@
   .recipient-item .addr { color: var(--muted); font-size: 11px; }
   .count-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
+  /* 絞り込みバナー */
+  .filter-notice { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #fdf2f4; border: 1px solid var(--primary); color: var(--primary-dark); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-bottom: 8px; }
+  .filter-notice a { color: var(--primary); font-weight: 700; text-decoration: underline; cursor: pointer; white-space: nowrap; }
+
   /* ===== はがきプレビュー ===== */
   .preview-wrap { display: flex; flex-wrap: wrap; gap: 16px; }
   .hagaki {
@@ -184,6 +188,7 @@
         <button class="btn btn-secondary btn-sm" onclick="loadFromGAS()">☁ スプレッドシートから取得</button>
       </div>
       <div class="count-note" id="gasStatus" style="margin: 0 0 8px;"></div>
+      <div class="filter-notice" id="letterFilterNotice" style="display:none;"></div>
       <input type="text" id="recipientSearch" placeholder="氏名で検索..." oninput="renderRecipients()" style="margin-bottom:8px;">
       <div class="recipient-list" id="recipientList"></div>
       <div class="count-note"><span id="selCount">0</span> 名選択中（住所未登録の方は宛名面の住所が空欄になります）</div>
@@ -273,6 +278,55 @@ function openDB() {
     req.onerror = () => reject(req.error);
   });
 }
+// ================= URLパラメータによる絞り込み =================
+function getUrlFilterInfo() {
+  const params = new URLSearchParams(location.search);
+  const idsParam = params.get("ids");
+  if (idsParam) {
+    const idSet = new Set(idsParam.split(",").map(s => s.trim()).filter(Boolean));
+    return { active: true, type: "ids", idSet };
+  }
+  const filterParam = params.get("filter");
+  if (filterParam === "today" || filterParam === "month" || filterParam === "year") {
+    return { active: true, type: filterParam };
+  }
+  return { active: false };
+}
+function applyUrlFilter(list) {
+  const info = getUrlFilterInfo();
+  if (!info.active) return list;
+  if (info.type === "ids") {
+    return list.filter(r => r && info.idSet.has(String(r.id)));
+  }
+  const now = new Date();
+  let start;
+  if (info.type === "today") start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  else if (info.type === "month") start = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (info.type === "year") start = new Date(now.getFullYear(), 0, 1);
+  return list.filter(r => {
+    if (!r) return false;
+    const d = new Date(r.date);
+    if (isNaN(d.getTime())) return false;
+    return d.getTime() >= start.getTime();
+  });
+}
+function renderFilterNotice() {
+  const el = document.getElementById("letterFilterNotice");
+  if (!el) return;
+  const info = getUrlFilterInfo();
+  if (!info.active) { el.style.display = "none"; el.innerHTML = ""; return; }
+  const labels = { today: "今日", month: "今月", year: "今年", ids: "選択した" };
+  const label = labels[info.type] || "";
+  const count = dbRecords.length;
+  el.style.display = "flex";
+  if (count === 0) {
+    const zeroMsg = info.type === "ids" ? "選択された宛先のデータが見つかりません" : `${label}登録されたデータはありません`;
+    el.innerHTML = `<span>${zeroMsg}</span><a onclick="location.href='letter.html'">全件表示</a>`;
+    return;
+  }
+  const msg = info.type === "ids" ? `${label}${count}件に絞り込み中` : `${label}登録の${count}件に絞り込み中`;
+  el.innerHTML = `<span>${msg}</span><a onclick="location.href='letter.html'">全件表示</a>`;
+}
 function mergeRecords(list) {
   // 氏名で重複排除。住所が入っている方を優先して残す
   const map = new Map();
@@ -291,12 +345,17 @@ async function loadRecords() {
       const req = tx.objectStore("records").getAll();
       req.onsuccess = () => {
         const all = (req.result || []).filter(r => r.sync !== "pending_delete");
-        mergeRecords(all);
+        mergeRecords(applyUrlFilter(all));
         resolve();
       };
       req.onerror = () => resolve();
     });
   } catch (e) { console.warn("端末名簿の読み込みに失敗:", e); }
+  const urlFilterInfo = getUrlFilterInfo();
+  if (urlFilterInfo.active && dbRecords.length > 0) {
+    dbRecords.forEach(r => selectedIds.add(r.id));
+  }
+  renderFilterNotice();
   renderRecipients();
   renderAll();
 }

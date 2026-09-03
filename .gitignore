@@ -49,3 +49,23 @@ template_preview.png
 *_centered.pdf
 *_clean.pdf
 
+
+# --- v84 で追記 ---
+# GASのスクリプトIDが入るため公開しない
+.clasp.json
+gas_deploy/.clasp.json
+
+# 開発メモ・デプロイ用バッチ（GitHub Pages に置く必要がない）
+app_functions.txt
+*.bat
+_dev/
+
+# 未使用の旧テンプレートPDF（実行時に使うのは 奉納ビラ0602.pdf のみ）
+奉納テンプレート.pdf
+奉納ビラフリー.pdf
+奉納ビラ縦.pdf
+奉納ビラ縦阡.pdf
+
+# テストの成果物
+test-results/
+playwright-report/

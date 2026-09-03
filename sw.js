@@ -1,10 +1,16 @@
 // Service Worker - 奉納ビラ印刷＆名簿管理システム
-// 注意: リリース時は index.html の app.js?v= と、この CACHE_NAME のバージョンを必ず揃えること
-const CACHE_NAME = 'honou-print-v83';
+// 注意: リリース時は APP_VERSION（app.js） / CACHE_NAME（この下） /
+// ASSETS_TO_CACHE 内の app.js?v=（この下） / index.html の <script src="app.js?v="> /
+// index.html フッターの表示バージョン の5箇所を必ず揃えること。
+// 揃えないと、端末に古いGASコード（gas_script.js）が配られ続ける事故になる。
+const CACHE_NAME = 'honou-print-v84';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './app.js?v=83',
+  './app.js?v=84',
+  './letter.html',
+  './gas_script.js',
+  './templates_config.json',
   './hgs_gyoshotai.ttf',
   './奉納ビラ0602.pdf',
   './manifest.json',
@@ -17,7 +23,8 @@ const ASSETS_TO_CACHE = [
   './lib/pdf.worker.min.js',
   './lib/all.min.css',
   './lib/webfonts/fa-solid-900.woff2',
-  './lib/webfonts/fa-solid-900.ttf'
+  './lib/webfonts/fa-regular-400.woff2',
+  './lib/webfonts/fa-brands-400.woff2'
 ];
 
 // オフラインでもUIフォントを保てるよう、成功レスポンスをキャッシュする外部オリジン
@@ -34,7 +41,6 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
 // アクティベート時に古いキャッシュを削除
@@ -47,6 +53,11 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+// クライアントからの更新指示（新SWをすぐにactivateさせる）
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // フェッチ戦略: ローカルはキャッシュ優先、外部はネットワーク優先
@@ -88,8 +99,14 @@ self.addEventListener('fetch', (event) => {
   }
 
   // その他の静的ローカルリソースはキャッシュ優先、なければネットワーク
+  // ignoreSearch: true が必要。ASSETS_TO_CACHE のキー（例: './gas_script.js'）と
+  // 実際のリクエストURL（例: './gas_script.js?v=84'）はクエリの有無が食い違っており、
+  // これが無いとprecacheエントリに一度もヒットせず、オフライン時は常にキャッシュミスになる
+  // （gas_script.js の場合、オフライン時に「GASコードをコピー」が機能しなくなる）。
+  // 注意: ignoreSearch はクエリ違いを同一視するため、./app.js?v=84 と ?v=83 も同一視されるが、
+  // CACHE_NAME が上がれば activate で古いキャッシュごと削除されるため実害はない。
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
       return cached || fetch(event.request).then((response) => {
         // エラー応答（404等）をキャッシュに固定化しない
         if (response.ok) {

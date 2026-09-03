@@ -98,8 +98,8 @@ function renderLogList() {
                 <div style="font-weight: bold; color: ${color}; display: flex; justify-content: space-between;">
                     <span>[${log.type.toUpperCase()}] ${log.time}</span>
                 </div>
-                <div style="margin-top: 4px; color: #1e293b; white-space: pre-wrap;">${escapeHtml(log.message)}</div>
-                ${log.stack ? `<div style="margin-top: 4px; color: #64748b; font-size: 10px; white-space: pre-wrap; background: rgba(0,0,0,0.03); padding: 4px; border-radius: 2px;">${escapeHtml(log.stack)}</div>` : ''}
+                <div style="margin-top: 4px; color: #1e293b; white-space: pre-wrap;">${escapeHTML(log.message)}</div>
+                ${log.stack ? `<div style="margin-top: 4px; color: #64748b; font-size: 10px; white-space: pre-wrap; background: rgba(0,0,0,0.03); padding: 4px; border-radius: 2px;">${escapeHTML(log.stack)}</div>` : ''}
             </div>
         `;
     });
@@ -141,14 +141,61 @@ function clearAppLogs() {
 }
 
 // --- Service Worker 登録（PWA対応） ---
+let gasCodeCache = null;
+let swUpdatePrompted = false;
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then(reg => {
       console.log('Service Worker registered:', reg.scope);
+      setupServiceWorkerUpdateFlow(reg);
     }).catch(err => {
       console.warn('Service Worker registration failed:', err);
     });
+
+    // 「GASコードをコピー」ボタンでの同期clipboard呼び出しに間に合わせるため、
+    // ここで非同期プリフェッチしてキャッシュしておく（クリックハンドラをawaitで待たせない）
+    fetch("./gas_script.js?v=" + APP_VERSION)
+      .then(r => r.ok ? r.text() : null)
+      .then(t => { gasCodeCache = t; })
+      .catch(() => {});
   });
+
+  // 新SWがactivateしてcontrollerが切り替わったらリロード（ガード必須。無いとリロードループになる）
+  // hadController はリスナー登録前（＝このタイミング）で評価すること。
+  // 未登録端末の初回インストールでは誰もSKIP_WAITINGを押していなくても
+  // install→activate→clients.claim()でcontrollerchangeが発火するため、
+  // 「元々controllerが居たか」を見ないと初回セットアップ中に強制リロードされてしまう。
+  let reloading = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+}
+
+// SWの更新検知・通知フロー（前回訪問時からの待機中 / 新規発見 / 定期チェック）
+function setupServiceWorkerUpdateFlow(reg) {
+    if (reg.waiting) promptSwUpdate(reg);
+
+    reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) promptSwUpdate(reg);
+        });
+    });
+
+    setInterval(() => reg.update(), 30 * 60 * 1000);
+}
+
+// 更新通知トーストを表示（多重表示防止のガード付き。印刷作業中に見逃さないよう自動消滅させない）
+function promptSwUpdate(reg) {
+    if (swUpdatePrompted) return;
+    swUpdatePrompted = true;
+    showToastWithAction("新しいバージョンがあります", "再読み込み", () => {
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }, 0);
 }
 
 // --- エラー収集ロジック ---
@@ -188,7 +235,8 @@ if (pdfjsLib) {
 
 // --- 定数・グローバル変数 ---
 const FONT_URL = "hgs_gyoshotai.ttf"; // HGS行書体（TTCから抽出したTTF形式）を使用
-// 注: templates_config.json は参照用。実行時の設定は getFallbackConfig() が正。
+const APP_VERSION = "84"; // index.html の <script src="app.js?v=XX"> と同期させること
+// 注: templates_config.json が実行時設定の正本。取得失敗時のみ app.js の getFallbackConfig() にフォールバックする。
 
 let currentTemplate = "10000en";
 let templatePageSizes = {};    // テンプレートPDF原本のページサイズキャッシュ {tmpl: {w, h}} (pt)
@@ -395,9 +443,19 @@ function kanaNormalize(str) {
 }
 
 // アクションボタン付きカスタムトースト
+// duration=0（常駐表示）のトーストは、後から別のトーストに上書きされて消えても
+// 「二度と表示されない」状態にならないよう、上書きしたトーストが消えた時点で復元する。
+let pendingPersistentToastRestore = null;
 function showToastWithAction(message, actionLabel, actionCallback, duration = 5000) {
     const existing = document.getElementById("customToast");
-    if (existing) existing.remove();
+    if (existing) {
+        // これから作る新しいトーストが、既存の常駐トーストとは別物の場合のみ復元予約する
+        // （同一の常駐トースト自身を作り直すケース＝復元処理そのものでは予約しない）
+        if (existing._persistentRestore && duration > 0) {
+            pendingPersistentToastRestore = existing._persistentRestore;
+        }
+        existing.remove();
+    }
 
     const toast = document.createElement("div");
     toast.id = "customToast";
@@ -425,12 +483,28 @@ function showToastWithAction(message, actionLabel, actionCallback, duration = 50
     msgSpan.textContent = message;
     toast.appendChild(msgSpan);
 
+    // このトースト自身が常駐（duration=0）の場合、自分を復元する関数を持たせておく
+    // （他のトーストに上書きされた際、そのトーストの表示が終わったら再表示できるようにする）
+    if (duration === 0) {
+        toast._persistentRestore = () => showToastWithAction(message, actionLabel, actionCallback, duration);
+    }
+
+    // このトーストの表示が終わった後、上書きしてしまった常駐トーストがあれば復元する
+    const restorePendingPersistentToast = () => {
+        if (pendingPersistentToastRestore) {
+            const restore = pendingPersistentToastRestore;
+            pendingPersistentToastRestore = null;
+            restore();
+        }
+    };
+
     if (actionLabel && actionCallback) {
         const btn = document.createElement("button");
         btn.className = "toast-action-btn";
         btn.textContent = actionLabel;
         btn.onclick = () => {
             toast.remove();
+            if (duration > 0) restorePendingPersistentToast();
             actionCallback();
         };
         toast.appendChild(btn);
@@ -438,13 +512,15 @@ function showToastWithAction(message, actionLabel, actionCallback, duration = 50
 
     document.body.appendChild(toast);
 
-    setTimeout(() => {
-        if (toast.parentNode) {
-            toast.style.opacity = "0";
-            toast.style.transform = "translateX(-50%) translateY(10px)";
-            setTimeout(() => toast.remove(), 300);
-        }
-    }, duration);
+    if (duration > 0) {
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.opacity = "0";
+                toast.style.transform = "translateX(-50%) translateY(10px)";
+                setTimeout(() => { toast.remove(); restorePendingPersistentToast(); }, 300);
+            }
+        }, duration);
+    }
 }
 
 // 「金額集計に含めない」スタイル更新
@@ -466,6 +542,7 @@ function clearFormNonDestructive() {
         name: document.getElementById("nameInput") ? document.getElementById("nameInput").value : "",
         bagNo: document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "",
         address: document.getElementById("addressInput") ? document.getElementById("addressInput").value : "",
+        kana: document.getElementById("kanaInput") ? document.getElementById("kanaInput").value : "",
         amount: document.getElementById("amountInput") ? document.getElementById("amountInput").value : "",
         honorific: document.getElementById("honorificSelect") ? document.getElementById("honorificSelect").value : "殿",
         emptyCheck: document.getElementById("emptyCheck") ? document.getElementById("emptyCheck").checked : false,
@@ -479,6 +556,7 @@ function clearFormNonDestructive() {
             if (document.getElementById("nameInput")) document.getElementById("nameInput").value = lastClearedFormData.name;
             if (document.getElementById("bagNoInput")) document.getElementById("bagNoInput").value = lastClearedFormData.bagNo;
             if (document.getElementById("addressInput")) document.getElementById("addressInput").value = lastClearedFormData.address;
+            if (document.getElementById("kanaInput")) document.getElementById("kanaInput").value = lastClearedFormData.kana;
             if (document.getElementById("amountInput")) document.getElementById("amountInput").value = lastClearedFormData.amount;
             if (document.getElementById("honorificSelect")) document.getElementById("honorificSelect").value = lastClearedFormData.honorific;
             if (document.getElementById("emptyCheck")) {
@@ -645,6 +723,10 @@ function loadMoreRecords() {
 
 // --- スプレッドシート連携（GAS） ---
 let gasUrl = "https://script.google.com/macros/s/AKfycbxVFWGyZTgPPVDo430RzF3QCjuS7qYHGtjifv_KK6clkVUB0zVHYd5d-k9Gw9nGNcNc/exec"; // GAS ウェブアプリの URL (LocalStorage保存用・デフォルト値あり)
+let gasSharedToken = ""; // GAS共有トークン（IndexedDB保存・秘密情報のためlocalStorageは使わない）
+let gasAuthBlocked = false; // 認証エラー発生中は同期を止める（トークン修正まで無駄なリクエストを送らない）
+let gasSettingsLoaded = false; // loadGasSettings完了フラグ（未ロード中の送信を保留する）
+let gasTokenSaveTimer = null; // トークン保存のデバウンス用タイマー
 let suggestData = {            // スプレッドシート（GAS）から取得したサジェストデータ
     "names": [],
     "items": []
@@ -677,8 +759,38 @@ function saveGasUrl() {
     }
 }
 
+// GAS共有トークンの入力時保存（秘密情報のためIndexedDBに保存する。localStorageはDevToolsで一覧されやすいため避ける）
+// 1文字ごとの未完成なトークンでpushPendingRecords()を走らせないよう、保存のみをデバウンスして行う。
+// 実際の送信再開はcommitGasToken()（onchange＝確定時）でのみ行う。
+function saveGasToken() {
+    const input = document.getElementById("gasTokenInput");
+    if (!input) return;
+    const v = input.value.trim();
+    if (gasTokenSaveTimer) clearTimeout(gasTokenSaveTimer);
+    gasTokenSaveTimer = setTimeout(async () => {
+        await idbKvSet("gas_shared_token", v);
+        gasSharedToken = v;
+    }, 500);
+}
+
+// GAS共有トークンの確定時処理（onchange＝blur時や候補選択時）
+// ここで初めて認証ブロックを解除し、未送信分の送信を再開する。
+async function commitGasToken() {
+    const input = document.getElementById("gasTokenInput");
+    if (!input) return;
+    if (gasTokenSaveTimer) {
+        clearTimeout(gasTokenSaveTimer);
+        gasTokenSaveTimer = null;
+    }
+    const v = input.value.trim();
+    await idbKvSet("gas_shared_token", v);
+    gasSharedToken = v;
+    gasAuthBlocked = false; // トークンを直したら未送信分がすぐ流れるようにリセット
+    pushPendingRecords();
+}
+
 // 起動時のGAS設定とキャッシュの読み込み
-function loadGasSettings() {
+async function loadGasSettings() {
     try {
         // GAS URL of recovery
         const savedUrl = localStorage.getItem("pdf_mail_merge_gas_url");
@@ -687,6 +799,11 @@ function loadGasSettings() {
         }
         const input = document.getElementById("gasUrlInput");
         if (input) input.value = gasUrl;
+
+        // GAS共有トークンの復元（IndexedDBのkvストア）
+        gasSharedToken = (await idbKvGet("gas_shared_token")) || "";
+        const tokenInput = document.getElementById("gasTokenInput");
+        if (tokenInput) tokenInput.value = gasSharedToken;
 
         // サジェストデータのキャッシュ復元と新方式への自動コンバート
         const cachedSuggests = localStorage.getItem("pdf_mail_merge_suggests");
@@ -707,10 +824,42 @@ function loadGasSettings() {
         console.error("GAS設定の復元失敗:", e);
     }
 
+    gasSettingsLoaded = true;
+
     // GAS URLが設定されていれば、バックグラウンドで同期を実行
     if (gasUrl) {
         syncFromGAS(true).catch(() => {});
     }
+}
+
+// 共有トークン入力欄の表示/非表示切り替え
+function toggleGasTokenVisibility() {
+    const input = document.getElementById("gasTokenInput");
+    const btn = document.getElementById("btnToggleGasToken");
+    if (!input) return;
+    const icon = btn ? btn.querySelector("i") : null;
+    if (input.type === "password") {
+        input.type = "text";
+        if (icon) icon.className = "fa-solid fa-eye-slash";
+    } else {
+        input.type = "password";
+        if (icon) icon.className = "fa-solid fa-eye";
+    }
+}
+
+// 共有トークンのランダム生成（英大小文字+数字32文字。記号なし＝GAS側への転記トラブル回避）
+function generateGasToken() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const arr = new Uint32Array(32);
+    crypto.getRandomValues(arr);
+    let token = "";
+    for (let i = 0; i < arr.length; i++) {
+        token += chars[arr[i] % chars.length];
+    }
+    const input = document.getElementById("gasTokenInput");
+    if (input) input.value = token;
+    commitGasToken();
+    showToast("GASのスクリプトプロパティ SHARED_TOKEN にも同じ値を設定してください");
 }
 
 // --- IndexedDB ストレージ管理 ---
@@ -901,7 +1050,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     // file:// プロトコルの警告は起動用ブラウザ（--allow-file-access-from-files）を使用することで回避するため削除
 
     showStatus("システム初期化中...", true);
-    
+
+    // 同期ステータス表示の初期化（相対時刻表示が固まらないよう定期更新もする）
+    renderSyncStatus();
+    setInterval(renderSyncStatus, 60000);
+
     // 0. 永続ストレージの要求とマイグレーション
     await requestPersistentStorage();
     await migrateFromLocalStorage();
@@ -909,6 +1062,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     // 1. デザイン設定および名簿DBの復元
     // （loadDbRecordsは非同期。awaitしないと空の名簿でrenderTableされてしまう）
     loadDesignSettings();
+
+    // 集計期間の選択状態を復元（renderTable内のupdateDashboardStatsより先に反映させる）
+    const savedStatsPeriod = localStorage.getItem("pdf_mail_merge_stats_period");
+    if (savedStatsPeriod) statsPeriod = savedStatsPeriod;
+    const customWrap = document.getElementById("statsCustomRange");
+    if (customWrap) customWrap.style.display = (statsPeriod === "custom") ? "flex" : "none";
+    document.querySelectorAll(".stats-period-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.id === "statsPeriod" + statsPeriod.charAt(0).toUpperCase() + statsPeriod.slice(1));
+    });
+
     await loadDbRecords();
     renderTable();
     setDefaultBagNo(true);
@@ -934,8 +1097,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     loadReceiptPaperSettings();
 
-    // 2. 設定ファイルの読み込み (ローカル設定をハードコードで使用)
-    config = getFallbackConfig();
+    // 2. 設定ファイルの読み込み (templates_config.json が正本。失敗時はフォールバック)
+    config = await loadTemplatesConfig();
 
     // 3. バージョンチェックによるLocalStorageキャッシュクリア (新設定強制適用)
     const currentVersion = config.config_version || 1;
@@ -971,7 +1134,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     updateDpadUI();
     
     // 5. GAS設定の復元
-    loadGasSettings();
+    // トークンがIndexedDBから入るまでの間にvisibilitychangeでpushPendingRecords()が走ると
+    // gasSharedToken===""のまま送信されてunauthorizedになりgasAuthBlockedが立ってしまうため、
+    // 完了を待ってから後続処理を進める。
+    await loadGasSettings();
 
     // --- ここからローカルファイルチェッカー ---
     showStatus("ローカルファイル確認中...", true);
@@ -986,14 +1152,37 @@ window.addEventListener("DOMContentLoaded", async () => {
         showStatus("初回セットアップ中...（通信環境により数秒かかります）", true);
         const placeholder = document.getElementById("previewPlaceholder");
         if (placeholder) {
-            placeholder.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i><p>初期ファイルをダウンロードしています...<br>少々お待ちください</p><p style="font-size:11px;opacity:0.7">（初回のみ8MB程度の通信が発生します）</p>';
+            placeholder.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i><p>初期ファイルをダウンロードしています...<br>少々お待ちください</p><p style="font-size:11px;opacity:0.7">（初回のみ5MB程度の通信が発生します）</p>';
         }
         try {
-            const fetchFile = async (url, key) => {
-                const response = await fetch(encodeURI(url));
-                if (!response.ok) throw new Error(`ファイルが見つかりません: ${url}`);
-                const buffer = await response.arrayBuffer();
-                await saveFileToDB(key, buffer);
+            // 初回DLは合計5MB前後あり、通信が不安定だと1回の失敗で
+            // 手動セットアップ画面に落ちてしまう。指数バックオフで3回まで再試行する。
+            const fetchFile = async (url, key, attempt = 0) => {
+                const MAX_ATTEMPTS = 3;
+                // fetch はネットワークが不安定なとき「失敗」せず無応答のまま止まることがある。
+                // タイムアウトを付けないと「初回セットアップ中...」から永久に進まなくなるため、
+                // AbortController で必ず打ち切って再試行に回す。
+                const TIMEOUT_MS = 45000;
+                const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+                let timer = null;
+                try {
+                    if (ac) timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+                    const response = await fetch(encodeURI(url), ac ? { cache: "no-store", signal: ac.signal } : { cache: "no-store" });
+                    if (!response.ok) throw new Error(`ファイルが見つかりません: ${url} (${response.status})`);
+                    const buffer = await response.arrayBuffer();
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    if (!buffer || buffer.byteLength === 0) throw new Error(`空のファイルを受信しました: ${url}`);
+                    await saveFileToDB(key, buffer);
+                } catch (e) {
+                    if (timer) clearTimeout(timer);
+                    if (e && e.name === "AbortError") e = new Error(`応答がありません（${TIMEOUT_MS / 1000}秒でタイムアウト）: ${url}`);
+                    if (attempt + 1 >= MAX_ATTEMPTS) throw e;
+                    const waitMs = 800 * Math.pow(2, attempt); // 800ms, 1600ms
+                    addAppLog("warn", `初回DL再試行 ${attempt + 1}/${MAX_ATTEMPTS - 1}: ${url} (${e.message})`);
+                    showStatus(`初回セットアップ中...（再試行 ${attempt + 1} 回目）`, true);
+                    await new Promise(r => setTimeout(r, waitMs));
+                    return fetchFile(url, key, attempt + 1);
+                }
             };
 
             const promises = [];
@@ -1139,10 +1328,6 @@ function tokenizeVertical(s) {
     return tokens;
 }
 
-function onFontChange(fontValue) {
-    triggerAutoUpdate();
-}
-
 async function handleSetupFiles(files, status) {
     for (const file of files) {
         const name = file.name.toLowerCase();
@@ -1162,6 +1347,22 @@ async function handleSetupFiles(files, status) {
         }
     }
     updateSetupUI(status);
+}
+
+// --- 設定ファイルの読み込み (templates_config.json が正本。取得失敗時のみフォールバック) ---
+async function loadTemplatesConfig() {
+    try {
+        const res = await fetch("./templates_config.json?v=" + APP_VERSION);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = await res.json();
+        if (!json || typeof json !== "object" || !json.templates || !json.config_version) {
+            throw new Error("templates_config.json の形式が不正です");
+        }
+        return json;
+    } catch (e) {
+        console.warn("templates_config.json の読み込みに失敗したため、フォールバック設定を使用します:", e);
+        return getFallbackConfig();
+    }
 }
 
 // --- フォールバック設定 (config.jsonがない場合のデフォルト定義) ---
@@ -1445,7 +1646,10 @@ async function getTemplateBytes(templateKey) {
     
     const bytes = await response.arrayBuffer();
     loadedTemplateBytes[templateKey] = bytes; // オンメモリキャッシュ
-    showStatus("準備完了", false);
+    // 起動処理の途中で呼ばれることがあるため、アプリがまだ準備できていない段階で
+    // 「準備完了」と表示しない（初回セットアップ中に一瞬だけ完了表示が出て、
+    // 利用者が印刷を押せると誤解する問題があった）。
+    if (isAppReady) showStatus("準備完了", false);
     return bytes;
 }
 
@@ -1873,12 +2077,14 @@ function mmToPt(mm) {
 // ==========================================
 
 // 「[空]」タグの検出と除去（表示・印刷経路では必ず剥がす）
+// GAS側は全角「［空］」も有効なタグとして扱うため、半角・全角どちらの括弧にも対応する。
+const EMPTY_TAG_RE = /\s*[\[［]\s*空\s*[\]］]\s*/g;
 function hasEmptyTag(str) {
-    return typeof str === "string" && str.includes("[空]");
+    return typeof str === "string" && /[\[［]\s*空\s*[\]］]/.test(str);
 }
 function stripEmptyTag(str) {
     if (typeof str !== "string") return str;
-    return str.replace(/\s*\[空\]\s*/g, "").trim();
+    return str.replace(EMPTY_TAG_RE, "").trim();
 }
 
 // 保存済みamount（例: "金五萬圓也"）からフォーム入力値（例: "五"）を復元
@@ -1912,6 +2118,14 @@ function parseFlexibleDate(value) {
     return null;
 }
 
+// レコードの日付解決を1箇所に集約するヘルパー。
+// date が本来の登録日時、timestamp は表示・互換用のため date を優先する。
+// 解決できなければ null を返す（呼び出し側で0埋めやフォールバックを個別実装しないこと）。
+function recordDate(r) {
+    if (!r) return null;
+    return parseFlexibleDate(r.date || r.timestamp);
+}
+
 // 一覧表示用の日時フォーマット（パース不能なら原文を返す）
 function formatDateForDisplay(value) {
     const d = parseFlexibleDate(value);
@@ -1929,17 +2143,30 @@ function stableIdFromRow(timestamp, name, amount, bagNo = "", address = "", idx 
     return "rec_res_" + hash.toString(36);
 }
 
+// GET用: URLに auth= を付与する。トークン未設定なら無加工（GAS側の「未設定=素通し」と噛み合わせる）
+function withAuthParam(url) {
+    if (!gasSharedToken) return url;
+    return url + (url.includes("?") ? "&" : "?") + "auth=" + encodeURIComponent(gasSharedToken);
+}
+// POST用: payloadに auth を足す。トークン未設定なら足さない
+function withAuthPayload(obj) {
+    if (!gasSharedToken) return obj;
+    return Object.assign({}, obj, { auth: gasSharedToken });
+}
+
 // GASへのPOST送信（CORSで応答を検証する。失敗時は例外）
 // ※ Content-Typeヘッダを付けない = 単純リクエストとなりプリフライト不要
 async function postToGas(payload) {
     const res = await fetch(gasUrl, {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(withAuthPayload(payload))
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.result !== "success") {
-        throw new Error(data.message || "GAS側でエラーが返されました");
+        const err = new Error(data.message || "GAS側でエラーが返されました");
+        err.code = data.code || "";
+        throw err;
     }
     return data;
 }
@@ -2008,12 +2235,15 @@ async function generatePDF(isPrinting = false, override = null) {
             firstPage = pdfDoc.addPage([newWidthPt, newHeightPt]);
         }
         
-        // 3. 日本語フォントの読み込みと埋め込み (subset: false で fontkit サブセット化の重い計算をスキップし高速化)
+        // 3. 日本語フォントの読み込みと埋め込み
+        // subset: true で使用グリフのみを埋め込む（4.5MBのフォント全体を毎回埋め込むと
+        // 一括印刷でマージPDFのサイズが件数に完全比例して肥大化し、iPad Safariが落ちるため）。
+        // 実測: 10件マージ時 subset:false=28.17MB → subset:true=3.12MB（レンダリング結果は同一と確認済み）
         let fontToUse = null;
         if (loadedFontBytes) {
             try {
                 pdfDoc.registerFontkit(window.fontkit);
-                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: false });
+                fontToUse = await pdfDoc.embedFont(new Uint8Array(loadedFontBytes), { subset: true });
             } catch (fontError) {
                 console.error("フォントの埋め込みに失敗しました。標準フォントにフォールバックします:", fontError);
                 fontToUse = await pdfDoc.embedStandardFont(PDFLib.StandardFonts.Helvetica);
@@ -2289,22 +2519,57 @@ let previewZoomMode = "fit";
 
 function setPreviewZoom(mode) {
     previewZoomMode = mode;
-    const btnFit = document.getElementById("btnPreviewFit");
-    const btn100 = document.getElementById("btnPreviewZoom100");
-    if (btnFit && btn100) {
-        if (mode === "fit") {
-            btnFit.style.background = "#4f46e5";
-            btnFit.style.color = "white";
-            btn100.style.background = "transparent";
-            btn100.style.color = "#475569";
+    // fit / 100 / field:name / field:amount の4ボタンのアクティブ表示を切り替える
+    const map = { "fit": "btnPreviewFit", "100": "btnPreviewZoom100", "field:name": "btnPreviewZoomName", "field:amount": "btnPreviewZoomAmount" };
+    Object.keys(map).forEach(key => {
+        const btn = document.getElementById(map[key]);
+        if (!btn) return;
+        if (key === mode) {
+            btn.style.background = "#4f46e5";
+            btn.style.color = "white";
         } else {
-            btn100.style.background = "#4f46e5";
-            btn100.style.color = "white";
-            btnFit.style.background = "transparent";
-            btnFit.style.color = "#475569";
+            btn.style.background = "transparent";
+            btn.style.color = "#475569";
         }
+    });
+
+    // #previewViewport は通常 justify-content: center だが、
+    // fieldモードでは scrollLeft/scrollTop によるスクロール位置指定がずれてしまうため flex-start にする
+    const viewport = document.getElementById("previewViewport");
+    if (viewport) {
+        viewport.style.justifyContent = mode.startsWith("field:") ? "flex-start" : "center";
     }
+
     applyPreviewDisplaySize();
+}
+
+// 指定フィールド（name / amount）のキャンバス上矩形（pt, 左上原点）を返す。未設定時はnull。
+function computeFieldRectPt(fieldKey) {
+    const s = designSettings[currentTemplate] && designSettings[currentTemplate][fieldKey];
+    if (!s) return null;
+    const w = mmToPt(s.width_mm || 30), h = mmToPt(s.height_mm || 150);
+
+    // generatePDF内と同じシフト条件・計算式（背景を含めない場合のみオフセットを加算する）
+    // ここで条件分岐やshiftの式をgeneratePDFと違えると、背景OFF＋原本サイズ≠設定サイズの
+    // 組み合わせでズーム位置が実際の印字位置とずれる。
+    let x_pt = mmToPt(s.x);
+    let y_pt = mmToPt(s.y);
+    const includeBackground = document.getElementById("includeBackground") ? document.getElementById("includeBackground").checked : true;
+    if (!includeBackground && templatePageSizes[currentTemplate]) {
+        const origWidthPt = templatePageSizes[currentTemplate].w;
+        const origHeightPt = templatePageSizes[currentTemplate].h;
+        const newWidthPt = mmToPt(paperSizeSettings.width);
+        const newHeightPt = mmToPt(paperSizeSettings.height);
+        const shiftXPt = (newWidthPt - origWidthPt) / 2;
+        const shiftYPt = (newHeightPt - origHeightPt) / 2;
+        x_pt += shiftXPt;
+        y_pt += shiftYPt;
+    }
+
+    // generatePDF内の縦書き描画式 boxTop = y_pt + baseFontSize と完全に同一にすること
+    const boxTop = y_pt + s.font_size;
+    const pageH = mmToPt(paperSizeSettings.height);
+    return { left: x_pt - w / 2, top: pageH - boxTop, width: w, height: h };
 }
 
 function applyPreviewDisplaySize() {
@@ -2330,7 +2595,7 @@ function applyPreviewDisplaySize() {
         pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
         pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
         viewport.style.overflow = "hidden";
-    } else {
+    } else if (previewZoomMode === "100") {
         // 100% 拡大表示（細部確認用、スクロール枠表示）
         const containerW = Math.max(100, viewport.clientWidth - 24);
         const displayScale = Math.max(0.6, containerW / unscaledW);
@@ -2338,6 +2603,56 @@ function applyPreviewDisplaySize() {
         pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
         pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
         viewport.style.overflow = "auto";
+    } else if (previewZoomMode.startsWith("field:")) {
+        // 氏名欄／金額欄のみを拡大表示（校正確認用）
+        const fieldKey = previewZoomMode.split(":")[1];
+        const rect = computeFieldRectPt(fieldKey);
+
+        if (!rect) {
+            // フィールド未設定時は fit 相当にフォールバック
+            const containerW = Math.max(100, viewport.clientWidth - 24);
+            const containerH = Math.max(100, viewport.clientHeight - 24);
+            const scaleW = containerW / unscaledW;
+            const scaleH = containerH / unscaledH;
+            let displayScale = Math.min(scaleW, scaleH);
+            if (!Number.isFinite(displayScale) || displayScale <= 0) displayScale = 0.5;
+
+            pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
+            pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
+            viewport.style.overflow = "hidden";
+            return;
+        }
+
+        const containerW = Math.max(100, viewport.clientWidth - 24);
+        const containerH = Math.max(100, viewport.clientHeight - 24);
+        const pxPerPt = unscaledW / mmToPt(paperSizeSettings.width);
+
+        const pad = 12; // pt
+        const padded = {
+            left: rect.left - pad,
+            top: rect.top - pad,
+            width: rect.width + pad * 2,
+            height: rect.height + pad * 2
+        };
+
+        let displayScale = Math.min(containerW / (padded.width * pxPerPt), containerH / (padded.height * pxPerPt));
+        if (!Number.isFinite(displayScale) || displayScale <= 0) displayScale = 1;
+        displayScale = Math.min(displayScale, 4.0);
+
+        // pdfCanvasには transition: width/height 0.2s ease が設定されているため、
+        // アニメーション途中でスクロール量を計算すると scrollHeight がまだ小さく scrollTop が正しく反映されない。
+        // fieldモードではサイズ変更を即時反映させ、スクロール適用後に元のtransitionへ戻す。
+        const prevTransition = pdfCanvas.style.transition;
+        pdfCanvas.style.transition = "none";
+        pdfCanvas.style.width = Math.floor(unscaledW * displayScale) + "px";
+        pdfCanvas.style.height = Math.floor(unscaledH * displayScale) + "px";
+        viewport.style.overflow = "auto";
+
+        requestAnimationFrame(() => {
+            viewport.scrollLeft = padded.left * pxPerPt * displayScale;
+            viewport.scrollTop = padded.top * pxPerPt * displayScale;
+            pdfCanvas.style.transition = prevTransition;
+        });
     }
 }
 
@@ -2406,7 +2721,9 @@ async function updatePreview() {
             pdfCanvas.style.display = "none";
             previewPlaceholder.style.display = "flex";
         }
-        showStatus("準備完了", false);
+        // 起動処理の途中（初回セットアップ中など）に呼ばれることがあるため、
+        // まだ準備できていない段階で「準備完了」と表示しない。
+        if (isAppReady) showStatus("準備完了", false);
     }
 }
 
@@ -2544,6 +2861,7 @@ function saveRecord(showNotice = true) {
     let amountInput = currentTemplate === "free" ? document.getElementById("amountInput").value.trim() : (amountSelect ? amountSelect.value : document.getElementById("amountInput").value.trim());
     const bagNoInput = (document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value : "").trim();
     const addressInput = (document.getElementById("addressInput") ? document.getElementById("addressInput").value : "").trim();
+    const kanaInput = (document.getElementById("kanaInput") ? document.getElementById("kanaInput").value : "").trim();
 
     const emptyCheck = document.getElementById("emptyCheck");
     const isEmpty = !!(emptyCheck && emptyCheck.checked && amountInput !== "");
@@ -2583,6 +2901,7 @@ function saveRecord(showNotice = true) {
             dbRecords[idx].template = currentTemplate;
             dbRecords[idx].bagNo = bagNoInput;
             dbRecords[idx].address = addressInput;
+            dbRecords[idx].kana = kanaInput;
             dbRecords[idx].sync = "pending";
             dbRecords[idx].date = new Date().toISOString();
             
@@ -2608,6 +2927,7 @@ function saveRecord(showNotice = true) {
             amount: dbAmount,
             bagNo: bagNoInput,
             address: addressInput,
+            kana: kanaInput,
             sync: "pending" // IndexedDB Outbox パターン
         };
 
@@ -2634,6 +2954,7 @@ async function saveRecordSilent() {
 
     const bagNoInput = document.getElementById("bagNoInput") ? document.getElementById("bagNoInput").value.trim() : "";
     const addressInput = document.getElementById("addressInput") ? document.getElementById("addressInput").value.trim() : "";
+    const kanaInput = document.getElementById("kanaInput") ? document.getElementById("kanaInput").value.trim() : "";
     const rawAmount = document.getElementById("amountInput") ? document.getElementById("amountInput").value.trim() : "";
     const emptyCheck = document.getElementById("emptyCheck") ? document.getElementById("emptyCheck").checked : false;
 
@@ -2659,6 +2980,7 @@ async function saveRecordSilent() {
         amount: dbAmount,
         bagNo: bagNoInput || getNextBagNo().toString(),
         address: addressInput,
+        kana: kanaInput,
         sync: "pending"
     };
 
@@ -2710,6 +3032,7 @@ function loadRecordToForm(id) {
     document.getElementById("nameInput").value = record.name;
     if (document.getElementById("bagNoInput")) document.getElementById("bagNoInput").value = (record.bagNo || "").toString();
     if (document.getElementById("addressInput")) document.getElementById("addressInput").value = record.address || "";
+    if (document.getElementById("kanaInput")) document.getElementById("kanaInput").value = String(record.kana ?? "");
 
     const val = parseAmountForForm(record); // "金五萬圓也 [空]" → "五" など
     if (record.template === "10000en" || record.template === "1000en") {
@@ -2756,7 +3079,14 @@ function renderTable() {
         console.error("renderTable: tbody not found (recordsTbody)");
         return;
     }
-    
+
+    // 再描画前に選択中のレコードIDを退避し、行の再生成後も選択状態を維持する。
+    // フィルタや表示件数の都合で再描画後に存在しない行のIDは、単に再生成されないため
+    // 自然と選択から外れる（見えない行が選択されたままにはならない）。
+    const checkedIdsBeforeRender = new Set(
+        Array.from(document.querySelectorAll('.record-checkbox:checked')).map(cb => cb.value)
+    );
+
     tbody.innerHTML = "";
 
     // 明らかな壊れた旧データをスキップ
@@ -2773,11 +3103,13 @@ function renderTable() {
             const addrNorm = kanaNormalize(r.address);
             const amtNorm  = kanaNormalize(r.amount);
             const bagNorm  = kanaNormalize(r.bagNo || r.bag_no);
+            const kanaNorm = kanaNormalize(r.kana);
 
             return nameNorm.includes(normSearch) ||
                    addrNorm.includes(normSearch) ||
                    amtNorm.includes(normSearch)  ||
-                   bagNorm.includes(normSearch);
+                   bagNorm.includes(normSearch)  ||
+                   kanaNorm.includes(normSearch);
         });
     }
 
@@ -2811,7 +3143,7 @@ function renderTable() {
     }
 
     // 3. 並び替え (デフォルト: 日時の新しい順 date_desc)
-    const dateVal = r => { const d = parseFlexibleDate(r.timestamp || r.date); return d ? d.getTime() : 0; };
+    const dateVal = r => { const d = recordDate(r); return d ? d.getTime() : 0; };
     const bagVal  = r => { const b = parseInt(r.bagNo || r.bag_no || 0, 10); return isNaN(b) ? 0 : b; };
     const amtVal  = r => parseKanjiNumber(r.amount);
 
@@ -2830,9 +3162,12 @@ function renderTable() {
     });
 
     if (validRecords.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="no-data" style="text-align: center; padding: 24px; color: #94a3b8;">条件に一致する名簿データがありません。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="no-data" style="text-align: center; padding: 24px; color: #94a3b8;">条件に一致する名簿データがありません。</td></tr>`;
         const btnMore = document.getElementById("btnLoadMore");
         if (btnMore) btnMore.style.display = "none";
+        const selectAllCb = document.getElementById("selectAllCheckbox");
+        if (selectAllCb) selectAllCb.checked = false;
+        updateBatchCount();
         return;
     }
 
@@ -2847,16 +3182,22 @@ function renderTable() {
         const amountStr = String(r.amount ?? "");
         const addressStr = String(r.address ?? "");
 
+        const isChecked = checkedIdsBeforeRender.has(String(r.id));
+
         tr.innerHTML = `
-            <td data-label="日時" style="white-space: nowrap; font-size: 13px; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(dateStr)}</td>
-            <td data-label="袋番号" style="font-weight: 600; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(bagNoStr)}</td>
-            <td data-label="氏名" style="font-weight: bold; color: #1e293b; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(String(r.name ?? ""))}</td>
-            <td data-label="住所" style="font-size: 13px; color: #475569; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(addressStr)}</td>
-            <td data-label="金額/物品" style="padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHtml(amountStr)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: center;"><input type="checkbox" class="record-checkbox" value="${escapeHTML(String(r.id))}" ${isChecked ? "checked" : ""} onchange="updateBatchCount()"></td>
+            <td data-label="日時" style="white-space: nowrap; font-size: 13px; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHTML(dateStr)}</td>
+            <td data-label="袋番号" style="font-weight: 600; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHTML(bagNoStr)}</td>
+            <td data-label="氏名" style="font-weight: bold; color: #1e293b; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHTML(String(r.name ?? ""))}</td>
+            <td data-label="住所" style="font-size: 13px; color: #475569; padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHTML(addressStr)}</td>
+            <td data-label="金額/物品" style="padding: 10px; border-bottom: 1px solid #f1f5f9;">${escapeHTML(amountStr)}</td>
             <td data-label="操作" style="text-align: center; padding: 10px; border-bottom: 1px solid #f1f5f9; position: sticky; right: 0; background: #ffffff;">
                 <div class="action-btns" style="white-space: nowrap; display: flex; gap: 4px; justify-content: center;">
                     <button class="btn-table btn-table-edit" style="padding: 4px 8px; font-size: 12px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 4px; cursor: pointer;">
                         <i class="fa-solid fa-arrows-spin"></i> 呼出
+                    </button>
+                    <button class="btn-table btn-table-reprint" data-reprint-id="${escapeHTML(String(r.id))}" title="現在のデザイン設定で再生成します" style="padding: 4px 8px; font-size: 12px; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; border-radius: 4px; cursor: pointer;">
+                        <i class="fa-solid fa-print"></i> 再印刷
                     </button>
                     <button class="btn-table btn-table-del" style="padding: 4px 8px; font-size: 12px; background: #fff5f5; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer;">
                         <i class="fa-solid fa-trash-can"></i> 削除
@@ -2880,12 +3221,66 @@ function renderTable() {
             btnMore.style.display = "none";
         }
     }
+
+    // ヘッダーの全選択チェックは「表示中の全行が選択されているか」で状態を決める
+    const selectAllCb = document.getElementById("selectAllCheckbox");
+    if (selectAllCb) {
+        const rowCheckboxes = document.querySelectorAll('.record-checkbox');
+        selectAllCb.checked = rowCheckboxes.length > 0 &&
+            document.querySelectorAll('.record-checkbox:checked').length === rowCheckboxes.length;
+    }
+    updateBatchCount();
+}
+
+// 再印刷ボタンのイベント委譲（行ごとにaddEventListenerせず、tbodyに1度だけ張る）
+(function setupReprintDelegation() {
+    document.addEventListener("DOMContentLoaded", () => {
+        const tbody = document.getElementById("recordsTbody");
+        if (!tbody) return;
+        tbody.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-reprint-id]");
+            if (!btn) return;
+            reprintRecord(btn.getAttribute("data-reprint-id"));
+        });
+    });
+})();
+
+// 名簿からの再印刷: 当時のdesignSettingsは保存していないため、現在のデザイン設定で再生成する
+// （designSettingsは端末・プリンタごとのキャリブレーション値であり、レコードごとの意図ではないため）
+async function reprintRecord(id) {
+    const record = dbRecords.find(r => String(r.id) === String(id));
+    if (!record) {
+        showToast("レコードが見つかりません", "error");
+        return;
+    }
+
+    showStatus("再印刷用のPDFを生成中...", true);
+    try {
+        const blob = await generatePDF(true, {
+            template: record.template,
+            name: record.name,
+            amount: parseAmountForForm(record)
+        });
+        if (!blob) {
+            showToast("PDFの生成に失敗しました", "error");
+            showStatus("準備完了", false);
+            return;
+        }
+        const filename = `奉納ビラ_${record.name || "無題"}.pdf`;
+        openPdfForPrint(blob, filename);
+        showToast(`「${record.name}」を再印刷します`);
+        showStatus("再印刷準備完了", false);
+    } catch (e) {
+        console.error("再印刷エラー:", e);
+        showToast("再印刷に失敗しました: " + e.message, "error");
+        showStatus("準備完了", false);
+    }
 }
 
 // --- CSVエクスポート機能 ---
 function buildCsvContent(records) {
     let csvContent = "\ufeff"; // Excelでの文字化けを防ぐためのBOM付きUTF-8
-    csvContent += "日時,テンプレート種類,奉納袋番号,奉納者氏名,住所,金額/物品名\n";
+    csvContent += "日時,テンプレート種類,奉納袋番号,奉納者氏名,読み仮名,住所,金額/物品名\n";
 
     records.forEach(r => {
         const dateStr = formatDateForDisplay(r.date);
@@ -2893,11 +3288,12 @@ function buildCsvContent(records) {
 
         // カンマやダブルクォーテーションのエスケープ
         const escapedName = `"${(r.name || "").replace(/"/g, '""')}"`;
+        const escapedKana = `"${String(r.kana ?? "").replace(/"/g, '""')}"`;
         const escapedAmount = `"${(r.amount || "").replace(/"/g, '""')}"`;
         const escapedBagNo = `"${(r.bagNo || "").toString().replace(/"/g, '""')}"`;
         const escapedAddress = `"${(r.address || "").replace(/"/g, '""')}"`;
 
-        csvContent += `${dateStr},${templateStr},${escapedBagNo},${escapedName},${escapedAddress},${escapedAmount}\n`;
+        csvContent += `${dateStr},${templateStr},${escapedBagNo},${escapedName},${escapedKana},${escapedAddress},${escapedAmount}\n`;
     });
     return csvContent;
 }
@@ -3119,6 +3515,7 @@ function clearForm() {
     document.getElementById("nameInput").value = "";
     document.getElementById("amountInput").value = "";
     if (document.getElementById("addressInput")) document.getElementById("addressInput").value = "";
+    if (document.getElementById("kanaInput")) document.getElementById("kanaInput").value = "";
     setDefaultBagNo(true);
     const amountSelect = document.getElementById("amountSelect");
     if (amountSelect) amountSelect.value = "壱";
@@ -3138,10 +3535,6 @@ function escapeHTML(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
-function escapeHtml(str) {
-    return escapeHTML(str);
-}
-
 // --- トースト通知の表示 ---
 function showToast(message, type = "success") {
     const toast = document.getElementById("toast");
@@ -3179,11 +3572,15 @@ async function syncFromGAS(isBackground = false) {
     }
 
     try {
-        const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "t=" + Date.now();
+        const fetchUrl = withAuthParam(gasUrl + (gasUrl.includes("?") ? "&" : "?") + "t=" + Date.now());
         const response = await fetch(fetchUrl, { method: "GET", mode: "cors" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        if (data.error) throw new Error(data.error);
+        if (data.error) {
+            const err = new Error(data.error);
+            err.code = data.code || "";
+            throw err;
+        }
 
         const rawNames = data.names || [
             ...(data["10000en_names"] || []),
@@ -3198,6 +3595,7 @@ async function syncFromGAS(isBackground = false) {
         
         await idbKvSet("cloud_suggests", cloudData);
         await buildSuggestData(); // 再構築
+        await markSynced();
 
         if (!isBackground) {
             const totalCount = cloudData.names.length + cloudData.items.length;
@@ -3205,6 +3603,7 @@ async function syncFromGAS(isBackground = false) {
         }
     } catch (e) {
         console.error("GAS同期エラー:", e);
+        if (e.code === "unauthorized") handleGasAuthError();
         if (!isBackground) showToast("サジェストデータの同期に失敗しました: " + e.message, "error");
     } finally {
         if (btn) {
@@ -3240,7 +3639,7 @@ async function buildSuggestData() {
 //   （旧実装の no-cors は失敗検知ができず、静かなデータ欠損の原因だった）
 let isPushingPendings = false; // 多重実行ガード (online/visibilitychange の同時発火対策)
 async function pushPendingRecords() {
-    if (!navigator.onLine || !gasUrl || isPushingPendings) return;
+    if (!navigator.onLine || !gasUrl || isPushingPendings || gasAuthBlocked || !gasSettingsLoaded) return;
     isPushingPendings = true;
 
     try {
@@ -3253,6 +3652,7 @@ async function pushPendingRecords() {
         console.log(`未送信データ ${pendings.length}件 / 削除待ち ${pendingDeletes.length}件 を同期開始...`);
         const token = await idbKvGet("api_token") || "GUEST_TOKEN_" + Math.random().toString(36).substr(2);
         await idbKvSet("api_token", token);
+        let successCount = 0;
 
         // 1. 登録・更新の送信
         for (const record of pendings) {
@@ -3269,6 +3669,7 @@ async function pushPendingRecords() {
                 amount: record.amount,
                 bagNo: record.bagNo || "",
                 address: record.address || "",
+                kana: record.kana || "",
                 token: token
             };
 
@@ -3279,8 +3680,10 @@ async function pushPendingRecords() {
 
                 const memRec = dbRecords.find(r => r.id === record.id);
                 if (memRec) memRec.sync = "synced";
+                successCount++;
             } catch (e) {
                 console.warn("GAS同期に失敗しました。レコードは未送信のまま保持し、以降は中断します:", e);
+                if (e.code === "unauthorized") { handleGasAuthError(); break; }
                 break;
             }
         }
@@ -3290,8 +3693,10 @@ async function pushPendingRecords() {
             try {
                 await postToGas({ id: record.id, action: "delete", token: token });
                 await idbDeleteRecord(record.id);
+                successCount++;
             } catch (e) {
                 console.warn("GAS削除同期に失敗しました。墓標は保持し、以降は中断します:", e);
+                if (e.code === "unauthorized") { handleGasAuthError(); break; }
                 break;
             }
         }
@@ -3300,8 +3705,33 @@ async function pushPendingRecords() {
         const remainingDeletes = await idbGetPendingDeletes();
         updateSyncBadge(remaining.length + remainingDeletes.length);
         renderTable(); // バッジ表示などを更新
+        if (successCount > 0) await markSynced();
     } finally {
         isPushingPendings = false;
+    }
+}
+
+// GAS認証エラー発生時の処理：以降の同期を止め、トークン修正を促す
+function handleGasAuthError() {
+    gasAuthBlocked = true;
+    showToastWithAction("スプレッドシートの認証に失敗しました。アクセストークンを確認してください", "設定を開く", () => {
+        openSettingsAndFocusToken();
+    }, 8000);
+    showStatus("同期停止中（認証エラー）", false);
+}
+
+// 設定アコーディオンを開いてトークン入力欄にフォーカスする
+function openSettingsAndFocusToken() {
+    const accordion = document.getElementById("gasAccordion");
+    const arrow = document.getElementById("gasAccordionArrow");
+    if (accordion && !accordion.classList.contains("open")) {
+        accordion.classList.add("open");
+        if (arrow) arrow.className = "fa-solid fa-chevron-up";
+    }
+    const tokenInput = document.getElementById("gasTokenInput");
+    if (tokenInput) {
+        tokenInput.focus();
+        tokenInput.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 }
 
@@ -3322,18 +3752,78 @@ function updateSyncBadge(count) {
         badge.onclick = () => {
             openQueueModal();
         };
+        const syncBar = document.getElementById("syncStatusBar");
         const header = document.querySelector("header");
-        if (header) header.appendChild(badge);
+        if (syncBar) syncBar.appendChild(badge);
+        else if (header) header.appendChild(badge);
     }
-    
+
     badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> 未送信 ${count}件`;
     badge.style.display = "inline-flex";
+}
+
+// 最終同期時刻の記録（成功時のみ呼ぶこと。失敗時に呼ぶと表示の意味が壊れる）
+async function markSynced() {
+    await idbKvSet("last_sync_at", new Date().toISOString());
+    renderSyncStatus();
+}
+
+// 相対時刻表示（60秒未満→たった今 / 60分未満→N分前 / 24時間未満→N時間前 / それ以上→M/D HH:mm）
+function formatRelativeTime(iso) {
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return "--";
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return "たった今";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}分前`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}時間前`;
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${m}/${d} ${hh}:${mm}`;
+}
+
+// 同期ステータス表示の更新（最終同期時刻・未送信件数・オフライン表示）
+async function renderSyncStatus() {
+    const syncLastAt = document.getElementById("syncLastAt");
+    const syncPendingCount = document.getElementById("syncPendingCount");
+
+    if (syncLastAt) {
+        const lastSyncAt = await idbKvGet("last_sync_at");
+        const offlinePrefix = !navigator.onLine ? '<span style="color:#dc2626;font-weight:600;">オフライン</span> ' : "";
+        if (lastSyncAt) {
+            syncLastAt.innerHTML = offlinePrefix + "最終同期: " + formatRelativeTime(lastSyncAt);
+            syncLastAt.title = new Date(lastSyncAt).toLocaleString("ja-JP");
+        } else {
+            syncLastAt.innerHTML = offlinePrefix + "最終同期: --";
+            syncLastAt.title = "";
+        }
+    }
+
+    if (syncPendingCount) {
+        try {
+            const [pendings, pendingDeletes] = await Promise.all([idbGetPendingRecords(), idbGetPendingDeletes()]);
+            const total = pendings.length + pendingDeletes.length;
+            if (total > 0) {
+                syncPendingCount.textContent = `未送信 ${total}件`;
+                syncPendingCount.style.display = "inline";
+            } else {
+                syncPendingCount.style.display = "none";
+            }
+        } catch (e) {
+            syncPendingCount.style.display = "none";
+        }
+    }
 }
 
 // イベントリスナー登録 (オンライン復帰、表示時)
 window.addEventListener("online", () => {
     showToast("オンラインに復帰しました。未送信データを同期します。");
     pushPendingRecords();
+    renderSyncStatus();
 });
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
@@ -3395,16 +3885,43 @@ async function restoreFromGAS() {
     const btn = document.getElementById("btnRestoreGAS");
     if (btn) btn.innerHTML = "復元中...";
     try {
-        const fetchUrl = gasUrl + (gasUrl.includes("?") ? "&" : "?") + "mode=restore&t=" + Date.now();
+        const fetchUrl = withAuthParam(gasUrl + (gasUrl.includes("?") ? "&" : "?") + "mode=restore&t=" + Date.now());
         const response = await fetch(fetchUrl);
         const data = await response.json();
-        if (data.error) throw new Error(data.error);
+        if (data.error) {
+            const err = new Error(data.error);
+            err.code = data.code || "";
+            throw err;
+        }
+
+        const records = data.records || [];
+
+        // ガード1: スプレッドシートから0件が返った場合、シート名変更や空シートで
+        // ローカルの名簿を全消失させる事故を防ぐため確認する
+        if (records.length === 0 && dbRecords.length > 0) {
+            const proceedEmpty = confirm(`スプレッドシートから0件が返りました。このまま実行するとローカルの名簿 ${dbRecords.length}件がすべて消えます。続行しますか？`);
+            if (!proceedEmpty) {
+                showToast("復元を中止しました", "error");
+                return;
+            }
+        }
+
+        // ガード2: スプレッドシートに「読み仮名」列が無い場合、GAS側は kana: "" を返すため、
+        // 端末に入力済みの読み仮名が全件消えてしまう。事前に警告する
+        const localKanaCount = dbRecords.filter(r => String(r.kana || "").trim() !== "").length;
+        const gasHasAnyKana = records.some(r => String(r.kana ?? "").trim() !== "");
+        if (localKanaCount > 0 && !gasHasAnyKana) {
+            const proceedKana = confirm(`スプレッドシートに『読み仮名』列が無いため、この端末に入力済みの読み仮名 ${localKanaCount}件がすべて消えます。先にスプレッドシートへ列を追加することをおすすめします。このまま復元しますか？`);
+            if (!proceedKana) {
+                showToast("復元を中止しました", "error");
+                return;
+            }
+        }
 
         // 名簿フル復元時は、端末側の旧データ・旧削除墓標も含めて全クリアし、クラウドの正解データで100%上書きする
         await idbClearAllRecords();
 
         let count = 0;
-        const records = data.records || [];
         for (let i = 0; i < records.length; i++) {
             const r = records[i];
             const nm = String(r.name ?? "").trim();
@@ -3424,6 +3941,7 @@ async function restoreFromGAS() {
                 amount: amt,
                 bagNo: bag,
                 address: addr,
+                kana: String(r.kana ?? ""),
                 sync: "synced"
             };
             await idbPutRecord(record);
@@ -3431,8 +3949,10 @@ async function restoreFromGAS() {
         }
         await loadDbRecords();
         renderTable();
+        await markSynced();
         showToast(`クラウドから ${count}件の名簿全件を完全復元しました`);
     } catch (e) {
+        if (e.code === "unauthorized") handleGasAuthError();
         showToast("復元失敗: " + e.message, "error");
     } finally {
         if (btn) btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-down"></i> 名簿フル復元`;
@@ -3605,10 +4125,10 @@ function renderSheetList() {
         div.innerHTML = `
             <div style="flex: 1; display: flex; flex-direction: column;">
                 <div style="display: flex; align-items: center;">
-                    <span style="font-size: 15px; font-weight: 600; color: #1e293b;">${escapeHtml(item.value)}</span>
+                    <span style="font-size: 15px; font-weight: 600; color: #1e293b;">${escapeHTML(item.value)}</span>
                     <span class="badge-source ${badgeClass}">${badgeLabel}</span>
                 </div>
-                ${item.subText ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${escapeHtml(item.subText)}</div>` : ''}
+                ${item.subText ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${escapeHTML(item.subText)}</div>` : ''}
             </div>
             <i class="fa-solid fa-chevron-right" style="color: #cbd5e1; font-size: 13px;"></i>
         `;
@@ -3685,6 +4205,64 @@ function confirmNewSheetInput() {
 // ==========================================
 // 一括印刷機能
 // ==========================================
+let batchPrintAbort = false;
+let batchPrintRunning = false;
+
+// 進捗バー表示
+function showBatchProgress(total) {
+    const wrap = document.getElementById("batchProgressWrap");
+    const label = document.getElementById("batchProgressLabel");
+    const bar = document.getElementById("batchProgressBar");
+    const btnAbort = document.getElementById("btnBatchAbort");
+    if (wrap) wrap.style.display = "block";
+    if (label) label.textContent = `0 / ${total} 件`;
+    if (bar) bar.style.width = "0%";
+    if (btnAbort) btnAbort.disabled = false;
+}
+
+function updateBatchProgress(done, total) {
+    const label = document.getElementById("batchProgressLabel");
+    const bar = document.getElementById("batchProgressBar");
+    if (label) label.textContent = `${done} / ${total} 件`;
+    if (bar) bar.style.width = (total > 0 ? (done / total * 100) : 0) + "%";
+}
+
+function hideBatchProgress() {
+    const wrap = document.getElementById("batchProgressWrap");
+    if (wrap) wrap.style.display = "none";
+}
+
+function abortBatchPrint() {
+    batchPrintAbort = true;
+    const btnAbort = document.getElementById("btnBatchAbort");
+    const label = document.getElementById("batchProgressLabel");
+    if (btnAbort) btnAbort.disabled = true;
+    if (label) label.textContent = "中断しています…";
+}
+
+// PDF BlobをウィンドウでprintするorダウンロードするorFallback
+function openPdfForPrint(blob, filename) {
+    const url = URL.createObjectURL(blob);
+
+    // 印刷 or ダウンロード
+    const newWindow = window.open(url, '_blank');
+    if (newWindow) {
+        let printCalled = false;
+        const triggerPrint = () => {
+            if (printCalled) return;
+            printCalled = true;
+            try { newWindow.print(); } catch (e) { /* noop */ }
+        };
+        newWindow.onload = triggerPrint;
+        setTimeout(triggerPrint, 2000);
+    } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000); // メモリリーク防止
+}
 
 // 一括選択/解除
 function toggleSelectAll(checked) {
@@ -3696,8 +4274,11 @@ function toggleSelectAll(checked) {
 function updateBatchCount() {
     const count = document.querySelectorAll('.record-checkbox:checked').length;
     const countSpan = document.getElementById('batchCount');
-    if (countSpan) countSpan.textContent = count;
-    // 一括印刷・選択分CSV・選択削除の3ボタンをまとめて表示制御
+    if (countSpan) countSpan.textContent = `${count}件選択中`;
+    // 選択0件のときはツールバーごと非表示、1件以上で表示
+    const toolbar = document.getElementById('batchToolbar');
+    if (toolbar) toolbar.style.display = count > 0 ? 'flex' : 'none';
+    // 一括印刷・選択分CSV・選択削除の3ボタンをまとめて表示制御（ツールバー内なので常に表示でよいが、既存コードとの互換のため残す）
     for (const id of ['btnBatchPrint', 'btnBatchExport', 'btnBatchDelete']) {
         const btn = document.getElementById(id);
         if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
@@ -3706,24 +4287,36 @@ function updateBatchCount() {
 
 // 一括印刷
 async function batchPrint() {
+    if (batchPrintRunning) return;
+
     const checkedBoxes = document.querySelectorAll('.record-checkbox:checked');
     const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
-    
+
     if (selectedIds.length === 0) {
         showToast('印刷するレコードを選択してください', 'error');
         return;
     }
-    
+
+    batchPrintRunning = true;
+    batchPrintAbort = false;
+    showBatchProgress(selectedIds.length);
     showStatus(`一括印刷: ${selectedIds.length}件のPDFを生成中...`, true);
 
+    let generatedCount = 0;
     try {
         const mergedPdf = await PDFLib.PDFDocument.create();
 
         for (let i = 0; i < selectedIds.length; i++) {
+            if (batchPrintAbort) break;
+
             const record = dbRecords.find(r => r.id === selectedIds[i]);
             if (!record) continue;
 
             showStatus(`一括印刷: ${i + 1}/${selectedIds.length} 件目を処理中...`, true);
+
+            // イベントループにマクロタスクとして制御を戻し、中断ボタンのクリックを処理できるようにする
+            // （generatePDF内のawaitはマイクロタスクのため、これが無いと中断が効かない）
+            await new Promise(r => setTimeout(r, 0));
 
             // generatePDFのoverride引数でレコードデータを直接渡す
             // （フォームDOMを書き換えないため、画面のチラつきや状態復元漏れが起きない）
@@ -3738,7 +4331,10 @@ async function batchPrint() {
                 const srcDoc = await PDFLib.PDFDocument.load(pdfBytes);
                 const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
                 copiedPages.forEach(page => mergedPdf.addPage(page));
+                generatedCount++;
             }
+
+            updateBatchProgress(i + 1, selectedIds.length);
         }
 
         if (mergedPdf.getPageCount() === 0) {
@@ -3747,30 +4343,20 @@ async function batchPrint() {
             return;
         }
 
+        if (batchPrintAbort) {
+            const proceed = confirm(`中断しました。ここまでの ${generatedCount} 件を印刷しますか？`);
+            if (!proceed) {
+                showToast('一括印刷を中断しました', 'error');
+                showStatus('準備完了', false);
+                return;
+            }
+        }
+
         const mergedBytes = await mergedPdf.save();
         const blob = new Blob([mergedBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-
-        // 印刷 or ダウンロード
-        const newWindow = window.open(url, '_blank');
-        if (newWindow) {
-            let printCalled = false;
-            const triggerPrint = () => {
-                if (printCalled) return;
-                printCalled = true;
-                try { newWindow.print(); } catch (e) { /* noop */ }
-            };
-            newWindow.onload = triggerPrint;
-            setTimeout(triggerPrint, 2000);
-            showToast(`${selectedIds.length}件のPDFを一括印刷します`);
-        } else {
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `奉納ビラ一括_${selectedIds.length}件_${new Date().toISOString().slice(0,10)}.pdf`;
-            link.click();
-            showToast(`${selectedIds.length}件のPDFをダウンロードしました`);
-        }
-        setTimeout(() => URL.revokeObjectURL(url), 60000); // メモリリーク防止
+        const filename = `奉納ビラ一括_${generatedCount}件_${new Date().toISOString().slice(0,10)}.pdf`;
+        openPdfForPrint(blob, filename);
+        showToast(`${generatedCount}件のPDFを一括印刷します`);
 
         showStatus('一括印刷完了', false);
 
@@ -3778,6 +4364,9 @@ async function batchPrint() {
         console.error('一括印刷エラー:', e);
         showToast('一括印刷に失敗しました: ' + e.message, 'error');
         showStatus('準備完了', false);
+    } finally {
+        batchPrintRunning = false;
+        hideBatchProgress();
     }
 }
 
@@ -3795,6 +4384,10 @@ function updateDirectValue(param, value) {
             settings[targetKey][param] = parsed;
             saveDesignSettings();
             triggerAutoUpdate();
+            // fieldズームモード中は矩形が動くため、表示サイズ・スクロール位置を即座に追従させる
+            if (previewZoomMode.startsWith("field:")) {
+                applyPreviewDisplaySize();
+            }
         }
     }
 }
@@ -3832,7 +4425,7 @@ function parseKanjiNumber(str) {
 
     // 5. 漢数字をパース
     const numMap = {'一':1, '壱':1, '二':2, '弐':2, '三':3, '参':3, '四':4, '五':5, '伍':5, '六':6, '七':7, '八':8, '九':9};
-    const smallUnitMap = {'阡':1000, '千':1000, '百':100, '十':10};
+    const smallUnitMap = {'阡':1000, '千':1000, '陌':100, '佰':100, '百':100, '拾':10, '什':10, '十':10};
     const bigUnitMap = {'萬':10000, '万':10000, '億':100000000};
 
     const chars = Array.from(halfStr).filter(c =>
@@ -3860,14 +4453,23 @@ function parseKanjiNumber(str) {
     return total + section + digit;
 }
 
-function updateDashboardStats() {
+// ==========================================
+// 集計の期間切替・前年同期比較
+// ==========================================
+let statsPeriod = "all"; // "today"|"month"|"year"|"all"|"custom"
+let statsCustomFrom = null;
+let statsCustomTo = null;
+
+// 選択期間の集計値を計算する（既存 updateDashboardStats のループ本体をそのまま切り出したもの）
+// 祭礼ごとの集計などを将来追加する際は、絞り込み済みのrecords配列を渡すだけで再利用できる
+function computeStats(records) {
     let totalMoney = 0;
     let emptyTotalMoney = 0;
     let moneyCount = 0;
     let itemCount = 0;
     let validRecords = [];
 
-    for (let r of dbRecords) {
+    for (let r of records) {
         const nameStr = String(r.name ?? "").trim();
         // 明らかな誤データ（氏名欄に金額や「合計金額」が入っている壊れたレコード）はスキップ
         if (nameStr.startsWith("¥") || nameStr.startsWith("\\") || nameStr.startsWith("合計") || nameStr.startsWith("物品まとめ")) {
@@ -3877,7 +4479,7 @@ function updateDashboardStats() {
 
         const _amt = String(r.amount ?? "").trim();
         const hasEmptyTag = _amt.includes('[空]') || _amt.includes('［空］') || _amt.includes('空');
-        
+
         if (hasEmptyTag) {
             // [空] タグが含まれている場合は、数字のみを取り出して[空]合計金に合算
             const emptyNum = parseKanjiNumber(_amt);
@@ -3896,21 +4498,158 @@ function updateDashboardStats() {
         }
     }
 
+    return {
+        totalMoney,
+        emptyTotalMoney,
+        count: validRecords.length,
+        moneyCount,
+        itemCount
+    };
+}
+
+// 期間指定から {from, to, label} を返す。"all" の場合は null（絞り込み無し）
+function getStatsRange(period) {
+    const now = new Date();
+    if (period === "today") {
+        const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        return { from, to, label: "今日" };
+    }
+    if (period === "month") {
+        const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { from, to, label: "今月" };
+    }
+    if (period === "year") {
+        const from = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+        const to = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        return { from, to, label: "今年" };
+    }
+    if (period === "custom") {
+        if (!statsCustomFrom || !statsCustomTo) return null;
+        const from = new Date(statsCustomFrom + "T00:00:00");
+        const to = new Date(statsCustomTo + "T23:59:59.999");
+        if (isNaN(from) || isNaN(to)) return null;
+        return { from, to, label: "期間指定" };
+    }
+    // "all"
+    return null;
+}
+
+// 指定rangeの前年同期rangeを返す（2/29は2/28に丸める）
+function shiftRangeOneYear(range) {
+    if (!range) return null;
+    const shiftYear = (d) => {
+        const y = d.getFullYear() - 1;
+        const m = d.getMonth();
+        const day = d.getDate();
+        const shifted = new Date(d.getTime());
+        shifted.setFullYear(y, m, day);
+        // 2/29→2/28への丸め対策（setFullYearで3/1にずれてしまうケースを補正）
+        if (shifted.getMonth() !== m) {
+            shifted.setFullYear(y, m + 1, 0);
+        }
+        return shifted;
+    };
+    return {
+        from: shiftYear(range.from),
+        to: shiftYear(range.to),
+        label: range.label + "（前年同期）"
+    };
+}
+
+// rangeでレコードを絞り込む。range が null なら全件。
+// パース失敗レコードは range が null（全期間）のときのみ含める（現状の集計値を壊さないため）
+function filterRecordsByRange(records, range) {
+    if (!range) return records;
+    return records.filter(r => {
+        const d = recordDate(r);
+        if (!d) return false;
+        return d.getTime() >= range.from.getTime() && d.getTime() <= range.to.getTime();
+    });
+}
+
+function setStatsPeriod(p) {
+    statsPeriod = p;
+    try { localStorage.setItem("pdf_mail_merge_stats_period", p); } catch (e) { /* noop */ }
+    const customWrap = document.getElementById("statsCustomRange");
+    if (customWrap) customWrap.style.display = (p === "custom") ? "flex" : "none";
+    document.querySelectorAll(".stats-period-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.id === "statsPeriod" + p.charAt(0).toUpperCase() + p.slice(1));
+    });
+    updateDashboardStats();
+}
+
+function applyStatsCustomRange() {
+    const from = document.getElementById("statsDateFrom");
+    const to = document.getElementById("statsDateTo");
+    statsCustomFrom = from && from.value ? from.value : null;
+    statsCustomTo = to && to.value ? to.value : null;
+    if (statsPeriod === "custom") updateDashboardStats();
+}
+
+function updateDashboardStats() {
+    const range = getStatsRange(statsPeriod);
+    const filtered = filterRecordsByRange(dbRecords, range);
+    const stats = computeStats(filtered);
+
     // カンマ区切りでフォーマット
     const elTotalMoney = document.getElementById("statTotalMoney");
-    if (elTotalMoney) elTotalMoney.textContent = totalMoney.toLocaleString();
+    if (elTotalMoney) elTotalMoney.textContent = stats.totalMoney.toLocaleString();
 
     const elEmptyMoney = document.getElementById("statEmptyMoney");
-    if (elEmptyMoney) elEmptyMoney.textContent = emptyTotalMoney.toLocaleString();
+    if (elEmptyMoney) elEmptyMoney.textContent = stats.emptyTotalMoney.toLocaleString();
 
     const elTotalCount = document.getElementById("statCountTotal");
-    if (elTotalCount) elTotalCount.textContent = validRecords.length.toLocaleString();
+    if (elTotalCount) elTotalCount.textContent = stats.count.toLocaleString();
 
     const elMoneyCount = document.getElementById("statMoneyCount");
-    if (elMoneyCount) elMoneyCount.textContent = moneyCount.toLocaleString();
+    if (elMoneyCount) elMoneyCount.textContent = stats.moneyCount.toLocaleString();
 
     const elItemCount = document.getElementById("statItemCount");
-    if (elItemCount) elItemCount.textContent = itemCount.toLocaleString();
+    if (elItemCount) elItemCount.textContent = stats.itemCount.toLocaleString();
+
+    // 期間キャプション
+    const caption = document.getElementById("statsPeriodCaption");
+    if (caption) caption.textContent = range ? `${range.label}: ${formatDateForDisplay(range.from)} 〜 ${formatDateForDisplay(range.to)}` : "全期間";
+
+    // 前年同期比較（"all" のときは比較対象が無いので非表示）
+    const compareWrap = document.getElementById("statsCompareWrap");
+    if (range) {
+        const prevRange = shiftRangeOneYear(range);
+        const prevFiltered = filterRecordsByRange(dbRecords, prevRange);
+        const prevStats = computeStats(prevFiltered);
+
+        const pct = (curr, prev) => {
+            if (prev === 0) return curr === 0 ? null : Infinity;
+            return ((curr - prev) / prev) * 100;
+        };
+        const formatDelta = (curr, prev) => {
+            const p = pct(curr, prev);
+            if (p === null) return "±0%";
+            if (p === Infinity) return "+∞%";
+            return (p >= 0 ? "+" : "") + p.toFixed(1) + "%";
+        };
+        const setDelta = (id, curr, prev) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const p = pct(curr, prev);
+            el.textContent = formatDelta(curr, prev);
+            el.style.color = (p !== null && p < 0) ? "#dc2626" : "#16a34a";
+        };
+
+        const elPrevMoney = document.getElementById("statTotalMoneyPrev");
+        if (elPrevMoney) elPrevMoney.textContent = prevStats.totalMoney.toLocaleString();
+        setDelta("statTotalMoneyDelta", stats.totalMoney, prevStats.totalMoney);
+
+        const elPrevCount = document.getElementById("statCountTotalPrev");
+        if (elPrevCount) elPrevCount.textContent = prevStats.count.toLocaleString();
+        setDelta("statCountTotalDelta", stats.count, prevStats.count);
+
+        if (compareWrap) compareWrap.style.display = "flex";
+    } else {
+        if (compareWrap) compareWrap.style.display = "none";
+    }
 }
 
 
@@ -4125,228 +4864,51 @@ async function flushOfflineQueueFromModal() {
 // =================================-------------------
 
 // 1. GASコードをワンクリックでクリップボードへコピー
+// 注: GASコードの実体は gas_script.js（リポジトリ直下の実ファイル）。
+// 起動時にプリフェッチした gasCodeCache を使う。iPad Safari ではクリック直後の
+// clipboard.writeText でないとユーザージェスチャ文脈が切れて拒否されるため、この関数は async にしない。
 function copyGasCodeToClipboard() {
-    const gasCodeText = `/**
- * 奉納ビラ 印刷＆名簿管理システム 用 Google Apps Script
- */
-function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (e.parameter && e.parameter.mode === "restore") {
-    let records = [];
-    const sheet = ss.getSheetByName("履歴");
-    if (sheet) {
-      const hLastRow = getRealLastRow(sheet);
-      if (hLastRow >= 2) {
-        const historyData = sheet.getRange(2, 1, hLastRow - 1, 8).getValues();
-        for (let r = 0; r < historyData.length; r++) {
-          const row = historyData[r];
-          if (row[0] === "" && row[1] === "" && row[2] === "") continue;
-          records.push({ timestamp: row[0], name: row[1], amount: row[2] || row[3] || "", bagNo: row[4] || "", address: row[5] || "", id: row[6] || "", token: row[7] || "" });
-        }
-      }
+    if (!gasCodeCache) {
+        alert("コードを取得中です。数秒後にもう一度お試しください");
+        return;
     }
-    return ContentService.createTextOutput(JSON.stringify({ records: records })).setMimeType(ContentService.MimeType.JSON);
-  }
-  const data = { "names": [], "items": [] };
-  const allSheets = ss.getSheets();
-  for (let i = 0; i < allSheets.length; i++) {
-    const s = allSheets[i];
-    if (s.getName().startsWith("履歴")) {
-      const hLastRow = getRealLastRow(s);
-      if (hLastRow >= 2) {
-        const historyData = s.getRange(2, 2, hLastRow - 1, 3).getValues();
-        for (let r = 0; r < historyData.length; r++) {
-          const hName = historyData[r][0];
-          if (hName) data.names.push(hName.toString().trim());
-          const hAmount = historyData[r][1], hItem = historyData[r][2];
-          [hAmount, hItem].forEach(val => {
-            if (val) {
-              const str = val.toString().trim();
-              if (!/^[¥\\0-9,]+$/.test(str) && !str.includes("合計")) data.items.push(str);
-            }
-          });
-        }
-      }
+    const gasCodeText = gasCodeCache;
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        openGasCodeFallbackModal(gasCodeText);
+        return;
     }
-  }
-  data.names = data.names.filter((v, i, a) => a.indexOf(v) === i);
-  data.items = data.items.filter((v, i, a) => a.indexOf(v) === i);
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  const lock = LockService.getScriptLock();
-  try {
-    if (!lock.tryLock(10000)) return ContentService.createTextOutput(JSON.stringify({ result: "error", message: "System busy." })).setMimeType(ContentService.MimeType.JSON);
-    const params = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName("履歴") || ss.insertSheet("履歴");
-    setupHeaders(sheet);
-    const timestamp = params.timestamp || new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
-    const name = params.name || "", rawAmount = (params.amount || "").toString().trim(), reqId = params.id || "", token = params.token || "", bagNo = params.bagNo || "", address = params.address || "";
-    const isKuu = rawAmount.includes("[空]") || rawAmount.includes("空"), parsedAmount = parseAmount(rawAmount);
-    let amountVal = "", itemVal = "";
-    if (isKuu || parsedAmount === null) itemVal = rawAmount; else amountVal = parsedAmount;
-
-    if (params.action === "delete" && reqId) {
-      const dataLastRow = getRealDataLastRow(sheet);
-      if (dataLastRow >= 2) {
-        const idVals = sheet.getRange(2, 7, dataLastRow - 1, 1).getValues();
-        for (let i = 0; i < idVals.length; i++) {
-          if (idVals[i][0] === reqId) { sheet.deleteRow(i + 2); applyFormattingAndSummary(sheet); updateDashboardSheet(ss); return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "deleted" })).setMimeType(ContentService.MimeType.JSON); }
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "not_found" })).setMimeType(ContentService.MimeType.JSON);
-    }
-    const realDataLastRow = getRealDataLastRow(sheet);
-    let targetRow = realDataLastRow + 1;
-    if (reqId && realDataLastRow >= 2) {
-      const idVals = sheet.getRange(2, 7, realDataLastRow - 1, 1).getValues();
-      for (let i = 0; i < idVals.length; i++) {
-        if (idVals[i][0] === reqId) { targetRow = i + 2; break; }
-      }
-    }
-    sheet.getRange(targetRow, 1, 1, 8).setValues([[timestamp, name, amountVal, itemVal, bagNo, address, reqId, token]]);
-    applyFormattingAndSummary(sheet);
-    updateDashboardSheet(ss);
-    return ContentService.createTextOutput(JSON.stringify({ result: "success", action: "processed" })).setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ result: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
-  } finally { lock.releaseLock(); }
-}
-
-function setupHeaders(sheet) {
-  sheet.getRange(1, 1, 1, 8).setValues([["日時", "奉納者氏名", "金額", "物品 / [空]", "奉納袋番号", "住所", "ID", "Token"]]);
-}
-
-function parseAmount(valStr) {
-  if (!valStr || valStr.includes("空")) return null;
-  let cleaned = valStr.replace(/[¥\\,円金也\s]/g, "");
-  if (/^\d+$/.test(cleaned)) return "¥" + parseInt(cleaned, 10).toLocaleString("ja-JP");
-  const kanjiMap = { '零':0, '一':1, '二':2, '三':3, '四':4, '五':5, '伍':5, '六':6, '七':7, '八':8, '九':9, '壱':1, '弐':2, '参':3 };
-  const unitMap = { '十':10, '拾':10, '百':100, '佰':100, '千':1000, '阡':1000, '万':10000, '萬':10000 };
-  let total = 0, section = 0, number = 0;
-  for (let i = 0; i < cleaned.length; i++) {
-    const char = cleaned[i];
-    if (kanjiMap[char] !== undefined) number = kanjiMap[char];
-    else if (/\d/.test(char)) number = parseInt(char, 10);
-    else if (unitMap[char] !== undefined) {
-      const unit = unitMap[char];
-      if (unit === 10000) { section = (section + number) * unit; total += section; section = 0; }
-      else section += (number === 0 ? 1 : number) * unit;
-      number = 0;
-    }
-  }
-  total += section + number;
-  return total > 0 ? "¥" + total.toLocaleString("ja-JP") : null;
-}
-
-function getRealDataLastRow(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return 1;
-  const values = sheet.getRange(1, 1, lastRow, 8).getValues();
-  let dataLast = 1;
-  for (let r = 1; r < lastRow; r++) {
-    if (values[r][1] === "合計金額" || (values[r][2] && values[r][2].toString().startsWith("合計金額")) || (values[r][3] && values[r][3].toString().startsWith("物品まとめ"))) break;
-    if (values[r][0] || values[r][1] || values[r][2] || values[r][3] || values[r][4] || values[r][5] || values[r][6] || values[r][7]) dataLast = r + 1;
-  }
-  return dataLast;
-}
-function getRealLastRow(sheet) { return sheet.getLastRow(); }
-
-function applyFormattingAndSummary(sheet) {
-  const dataLastRow = getRealDataLastRow(sheet), maxRow = sheet.getLastRow();
-  if (maxRow > dataLastRow) sheet.getRange(dataLastRow + 1, 1, maxRow - dataLastRow, 8).clearContent().clearFormat();
-  sheet.getRange(1, 1, 1, 8).setBackground("#4A1C1D").setFontColor("#FFFFFF").setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
-  if (dataLastRow >= 2) {
-    sheet.getRange(2, 1, dataLastRow - 1, 8).setFontColor("#1E293B").setFontWeight("normal").setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
-    for (let r = 2; r <= dataLastRow; r++) sheet.getRange(r, 1, 1, 8).setBackground(r % 2 === 0 ? "#FFFFFF" : "#FDF2F4");
-    sheet.getRange(2, 1, dataLastRow - 1, 1).setHorizontalAlignment("center");
-    sheet.getRange(2, 2, dataLastRow - 1, 1).setHorizontalAlignment("left");
-    sheet.getRange(2, 3, dataLastRow - 1, 1).setHorizontalAlignment("right");
-    sheet.getRange(2, 4, dataLastRow - 1, 1).setHorizontalAlignment("left");
-    sheet.getRange(2, 5, dataLastRow - 1, 1).setHorizontalAlignment("center");
-    sheet.getRange(2, 6, dataLastRow - 1, 2).setHorizontalAlignment("left");
-    let totalAmount = 0, itemsList = [];
-    const cData = sheet.getRange(2, 3, dataLastRow - 1, 2).getValues();
-    for (let i = 0; i < cData.length; i++) {
-      if (cData[i][0]) { const num = parseInt(cData[i][0].toString().replace(/[¥\\,]/g, ""), 10); if (!isNaN(num)) totalAmount += num; }
-      if (cData[i][1] && cData[i][1].toString().trim() !== "") itemsList.push(cData[i][1].toString().trim());
-    }
-    const summaryRow1 = dataLastRow + 3, summaryRow2 = summaryRow1 + 1;
-    sheet.getRange(summaryRow1, 2).setValue("合計金額").setFontWeight("bold").setHorizontalAlignment("right");
-    sheet.getRange(summaryRow1, 3).setValue("¥" + totalAmount.toLocaleString("ja-JP")).setFontWeight("bold").setHorizontalAlignment("right");
-    sheet.getRange(summaryRow1, 1, 1, 8).setBackground("#EAD7DA").setBorder(true, false, false, false, false, false, "#4A1C1D", SpreadsheetApp.BorderStyle.DOUBLE);
-    const itemsSummaryStr = itemsList.length > 0 ? "物品まとめ (" + itemsList.length + "件): " + itemsList.join(" / ") : "物品まとめ: なし";
-    sheet.getRange(summaryRow2, 2).setValue("物品まとめ").setFontWeight("bold").setHorizontalAlignment("right");
-    sheet.getRange(summaryRow2, 4).setValue(itemsSummaryStr).setFontWeight("bold").setHorizontalAlignment("left");
-    sheet.getRange(summaryRow2, 1, 1, 8).setBackground("#FDF2F4");
-  }
-}
-
-function updateDashboardSheet(ss) {
-  let dSheet = ss.getSheetByName("集計") || ss.insertSheet("集計", 0);
-  dSheet.clear();
-  const historySheet = ss.getSheetByName("履歴");
-  if (!historySheet) return;
-  const dataLastRow = getRealDataLastRow(historySheet);
-  const now = new Date(), todayStr = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/M/d"), monthStr = Utilities.formatDate(now, "Asia/Tokyo", "yyyy/M");
-  let todayTotal = 0, todayCount = 0, todayItemsCount = 0, monthTotal = 0, monthCount = 0, allTotal = 0, allCount = 0, allItemsCount = 0;
-  let breakdown = { "10,000円": { count: 0, sum: 0 }, "5,000円": { count: 0, sum: 0 }, "3,000円": { count: 0, sum: 0 }, "その他（1,000円等）": { count: 0, sum: 0 }, "物品（[空]等）": { count: 0, sum: 0 } };
-  if (dataLastRow >= 2) {
-    const rawData = historySheet.getRange(2, 1, dataLastRow - 1, 4).getValues();
-    for (let r = 0; r < rawData.length; r++) {
-      const dateVal = rawData[r][0] ? rawData[r][0].toString() : "", amtVal = rawData[r][2] ? rawData[r][2].toString() : "", itemVal = rawData[r][3] ? rawData[r][3].toString() : "";
-      const num = parseInt(amtVal.replace(/[¥\\,]/g, ""), 10), isNum = !isNaN(num) && num > 0;
-      allCount++;
-      if (isNum) {
-        allTotal += num;
-        if (num === 10000) { breakdown["10,000円"].count++; breakdown["10,000円"].sum += num; }
-        else if (num === 5000) { breakdown["5,000円"].count++; breakdown["5,000円"].sum += num; }
-        else if (num === 3000) { breakdown["3,000円"].count++; breakdown["3,000円"].sum += num; }
-        else { breakdown["その他（1,000円等）"].count++; breakdown["その他（1,000円等）"].sum += num; }
-      } else if (itemVal !== "") { allItemsCount++; breakdown["物品（[空]等）"].count++; }
-      if (dateVal.includes(todayStr)) { todayCount++; if (isNum) todayTotal += num; if (itemVal !== "") todayItemsCount++; }
-      if (dateVal.includes(monthStr)) { monthCount++; if (isNum) monthTotal += num; }
-    }
-  }
-  dSheet.getRange("A1:F2").merge().setValue("奉納会計・集計ダッシュボード").setBackground("#4A1C1D").setFontColor("#FFFFFF").setFontSize(18).setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
-  dSheet.getRange("A4:F4").merge().setValue("最終更新日時: " + Utilities.formatDate(now, "Asia/Tokyo", "yyyy年MM月dd日 HH:mm:ss")).setFontColor("#64748B").setFontSize(10).setHorizontalAlignment("right");
-  dSheet.getRange("A6:B6").merge().setValue("☀️ 本日の奉納").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("A7:B7").merge().setValue("¥" + todayTotal.toLocaleString("ja-JP")).setBackground("#FDF2F4").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("A8:B8").merge().setValue("奉納件数: " + todayCount + "件 (物品: " + todayItemsCount + "件)").setBackground("#FDF2F4").setFontSize(10).setHorizontalAlignment("center");
-  dSheet.getRange("C6:D6").merge().setValue("📅 今月の奉納 (" + monthStr + ")").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("C7:D7").merge().setValue("¥" + monthTotal.toLocaleString("ja-JP")).setBackground("#FDF2F4").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("C8:D8").merge().setValue("奉納件数: " + monthCount + "件").setBackground("#FDF2F4").setFontSize(10).setHorizontalAlignment("center");
-  dSheet.getRange("E6:F6").merge().setValue("🏆 全 累 計").setBackground("#4A1C1D").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("E7:F7").merge().setValue("¥" + allTotal.toLocaleString("ja-JP")).setBackground("#F7E8EC").setFontSize(16).setFontWeight("bold").setHorizontalAlignment("center");
-  dSheet.getRange("E8:F8").merge().setValue("全件数: " + allCount + "件 (物品: " + allItemsCount + "件)").setBackground("#F7E8EC").setFontSize(10).setHorizontalAlignment("center");
-  dSheet.getRange("A10:F10").merge().setValue("📊 金額・金種別 内訳集計").setBackground("#8C2D38").setFontColor("#FFF").setFontWeight("bold").setHorizontalAlignment("left");
-  dSheet.getRange("A11:D11").setValues([["区分・金種", "件数", "小計 (金額)", "構成比"]]).setBackground("#EAD7DA").setFontWeight("bold").setHorizontalAlignment("center");
-  let rowIdx = 12;
-  ["10,000円", "5,000円", "3,000円", "その他（1,000円等）", "物品（[空]等）"].forEach(cat => {
-    const item = breakdown[cat];
-    const ratio = allCount > 0 ? (item.count / allCount * 100).toFixed(1) + "%" : "0.0%";
-    const sumStr = cat.includes("物品") ? "-" : "¥" + item.sum.toLocaleString("ja-JP");
-    dSheet.getRange(rowIdx, 1, 1, 4).setValues([[cat, item.count + " 件", sumStr, ratio]]);
-    dSheet.getRange(rowIdx, 1).setHorizontalAlignment("left");
-    dSheet.getRange(rowIdx, 2, 1, 3).setHorizontalAlignment("right");
-    rowIdx++;
-  });
-  dSheet.getRange(rowIdx, 1, 1, 4).setValues([["総合計", allCount + " 件", "¥" + allTotal.toLocaleString("ja-JP"), "100.0%"]]).setFontWeight("bold").setBackground("#EAD7DA");
-  dSheet.getRange(rowIdx, 1).setHorizontalAlignment("left");
-  dSheet.getRange(rowIdx, 2, 1, 3).setHorizontalAlignment("right");
-  dSheet.getRange("A6:F8").setBorder(true, true, true, true, true, true, "#8C2D38", SpreadsheetApp.BorderStyle.SOLID);
-  dSheet.getRange("A11:D" + rowIdx).setBorder(true, true, true, true, true, true, "#CBD5E1", SpreadsheetApp.BorderStyle.SOLID);
-  dSheet.setColumnWidth(1, 160); dSheet.setColumnWidth(2, 100); dSheet.setColumnWidth(3, 140); dSheet.setColumnWidth(4, 100); dSheet.setColumnWidth(5, 140); dSheet.setColumnWidth(6, 140);
-}`;
-
     navigator.clipboard.writeText(gasCodeText).then(() => {
         alert("📋 配布用 GASコードをクリップボードにコピーしました！\n\n【次の手順】\n1. 自分のGoogleスプレッドシートを開きます\n2. メニュー「拡張機能」 ➡️ 「Apps Script」を開きます\n3. コードを全消去して Ctrl + V で貼り付けます\n4. 「デプロイ」 ➡️ 「新しいデプロイ」 (アクセス権: 全員) を実行してください。");
     }).catch(err => {
-        alert("コピーに失敗しました。手動でコピーしてください。");
+        openGasCodeFallbackModal(gasCodeText);
     });
 }
+
+// クリップボードが使えない環境向けのフォールバック（手動選択コピー用モーダル）
+function openGasCodeFallbackModal(text) {
+    const overlay = document.getElementById('gasCodeFallbackModalOverlay');
+    const modal = document.getElementById('gasCodeFallbackModal');
+    const textarea = document.getElementById('gasCodeFallbackText');
+    if (!overlay || !modal || !textarea) {
+        alert("コピーに失敗しました。手動でコピーしてください。");
+        return;
+    }
+    textarea.value = text;
+    overlay.classList.add('active');
+    modal.classList.add('active');
+    textarea.focus();
+    textarea.select();
+}
+
+function closeGasCodeFallbackModal() {
+    const overlay = document.getElementById('gasCodeFallbackModalOverlay');
+    const modal = document.getElementById('gasCodeFallbackModal');
+    if (overlay && modal) {
+        overlay.classList.remove('active');
+        modal.classList.remove('active');
+    }
+}
+
 
 // 2. 用紙サイズプリセット設定
 function onPaperPresetChange(val) {
@@ -4480,6 +5042,10 @@ function parseAndPreviewCsv(text) {
     let amountIdx = headers.findIndex(h => h.includes("金額") || h.includes("物品") || h.includes("初穂料"));
     let bagNoIdx = headers.findIndex(h => h.includes("番号") || h.includes("袋"));
     let addressIdx = headers.findIndex(h => h.includes("住所"));
+    // 「読み仮名」列が無いCSV（従来形式）も引き続き読めるよう、見つからなければ -1 のまま空文字扱いにする
+    let kanaIdx = headers.findIndex(h => h.includes("読み仮名") || h.includes("ふりがな") || h.includes("フリガナ"));
+    // 「日時」列（本アプリのCSVエクスポート形式）があれば取込時にそのまま登録日として使う
+    let dateIdx = headers.findIndex(h => h.includes("日時") || h.includes("日付") || h.includes("登録日"));
 
     if (nameIdx === -1) nameIdx = 0;
     if (amountIdx === -1) amountIdx = 1;
@@ -4492,9 +5058,11 @@ function parseAndPreviewCsv(text) {
         const amount = amountIdx !== -1 && cols[amountIdx] ? cols[amountIdx] : "";
         const bagNo = bagNoIdx !== -1 && cols[bagNoIdx] ? cols[bagNoIdx] : "";
         const address = addressIdx !== -1 && cols[addressIdx] ? cols[addressIdx] : "";
+        const kana = kanaIdx !== -1 && cols[kanaIdx] ? cols[kanaIdx] : "";
+        const csvDate = dateIdx !== -1 && cols[dateIdx] ? cols[dateIdx] : "";
 
         if (name) {
-            parsedCsvRecords.push({ name, amount, bagNo, address, templateType: String(amount).includes("萬") ? "10000en" : "free" });
+            parsedCsvRecords.push({ name, amount, bagNo, address, kana, date: csvDate, templateType: String(amount).includes("萬") ? "10000en" : "free" });
         }
     }
 
@@ -4536,15 +5104,21 @@ async function executeCsvImport() {
 
     for (const rec of parsedCsvRecords) {
         const id = "rec_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+        const importTimestamp = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+        // 登録日(date)は、CSVに日付列があればその値を、無ければ取込時刻を使う。
+        // timestampは常に取込時刻（表示・互換用）とし、date（本来の登録日時）と役割を分ける。
+        const recordDateValue = rec.date && parseFlexibleDate(rec.date) ? rec.date : importTimestamp;
         const recordData = {
             id: id,
-            timestamp: new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }),
+            date: recordDateValue,
+            timestamp: importTimestamp,
             templateType: rec.templateType,
             name: rec.name,
             honorific: "様",
             amount: rec.amount,
             bagNo: rec.bagNo,
             address: rec.address,
+            kana: rec.kana || "",
             sync: "pending"
         };
         await idbPutRecord(recordData);
@@ -4700,7 +5274,7 @@ async function printReceiptSingle() {
         <html>
         <head>
             <meta charset="utf-8">
-            <title>奉納受領証 - ${escapeHtml(nameInput)} 様</title>
+            <title>奉納受領証 - ${escapeHTML(nameInput)} 様</title>
             <style>
                 @page {
                     size: ${W}mm ${H}mm;
@@ -4755,14 +5329,14 @@ async function printReceiptSingle() {
                             <div class="title">奉 納 受 領 証</div>
                         </div>
                         <div class="date-no">
-                            <div>No. ${escapeHtml(bagNoInput) || '----'}</div>
+                            <div>No. ${escapeHTML(bagNoInput) || '----'}</div>
                             <div>日付: ${todayStr}</div>
                         </div>
                         <div class="name-box">
-                            ${escapeHtml(nameInput)} 様
+                            ${escapeHTML(nameInput)} 様
                         </div>
                         <div class="amount-box">
-                            金額 / 奉納: ${escapeHtml(displayAmount)}
+                            金額 / 奉納: ${escapeHTML(displayAmount)}
                         </div>
                         <div class="proviso">
                             但し 奉納金（初穂料）として、正に受領いたしました。
@@ -4774,9 +5348,9 @@ async function printReceiptSingle() {
                                 非課税<br>(印紙不要)
                             </div>
                             <div class="issuer">
-                                ${escapeHtml(issuerName)}
-                                ${issuerAddress ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #334155; margin-top: 2px;">${escapeHtml(issuerAddress)}</div>` : ''}
-                                ${addressInput ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #475569; margin-top: 2px;">（奉納者住所: ${escapeHtml(addressInput)}）</div>` : ''}
+                                ${escapeHTML(issuerName)}
+                                ${issuerAddress ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #334155; margin-top: 2px;">${escapeHTML(issuerAddress)}</div>` : ''}
+                                ${addressInput ? `<div style="font-size: ${fontSubAddr}px; font-weight: normal; color: #475569; margin-top: 2px;">（奉納者住所: ${escapeHTML(addressInput)}）</div>` : ''}
                             </div>
                         </div>
                         <div class="note">

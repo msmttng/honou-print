@@ -25,10 +25,11 @@ var COL_ALIASES = {
   token:  ["Token", "token", "トークン"],
   bag:    ["奉納袋番号", "袋番号", "番号"],
   addr:   ["住所"],
-  disp:   ["表示用金額", "数値化金額"]
+  disp:   ["表示用金額", "数値化金額"],
+  kana:   ["読み仮名", "ふりがな", "カナ", "よみ"]
 };
 // 標準配置 (1始まりの列番号)
-var COL_FALLBACK = { ts:1, name:2, amount:3, id:4, token:5, bag:6, addr:7, disp:8, item:0 };
+var COL_FALLBACK = { ts:1, name:2, amount:3, id:4, token:5, bag:6, addr:7, disp:8, item:0, kana:0 };
 
 function normHeader(s) {
   return (s === null || s === undefined) ? "" : s.toString().replace(/[\s　]/g, "").toLowerCase();
@@ -36,7 +37,7 @@ function normHeader(s) {
 
 /** ヘッダー行から列番号(1始まり)を解決。見つからない項目は 0。 */
 function resolveCols(sheet) {
-  var cols = { ts:0, name:0, amount:0, item:0, id:0, token:0, bag:0, addr:0, disp:0 };
+  var cols = { ts:0, name:0, amount:0, item:0, id:0, token:0, bag:0, addr:0, disp:0, kana:0 };
   var lastCol = sheet.getLastColumn();
   var found = 0;
   if (lastCol >= 1) {
@@ -68,10 +69,31 @@ function pick(row, colIdx) {
   return (v === null || v === undefined) ? "" : v;
 }
 
+/**
+ * 共有トークンを検証する。
+ * スクリプトプロパティ SHARED_TOKEN が未設定の場合は検証をスキップする（移行期間の互換性）。
+ * @param {string} provided - リクエストが提示したトークン
+ * @return {ContentService.TextOutput|null} 失敗時はエラー応答、成功または検証不要なら null
+ */
+function authFail(provided) {
+  var expected = PropertiesService.getScriptProperties().getProperty("SHARED_TOKEN");
+  if (!expected) return null;              // 未設定なら素通し（既存端末を壊さない）
+  if (String(provided || "") === expected) return null;
+  return ContentService.createTextOutput(JSON.stringify({
+    result: "error",
+    code: "unauthorized",
+    // GET側の既存分岐が data.error を見ているため error にも同じ文言を入れる
+    error: "アクセストークンが正しくありません",
+    message: "アクセストークンが正しくありません"
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
 // GETリクエスト: サジェストデータの取得、およびリストア
 function doGet(e) {
+  var ng = authFail(e && e.parameter ? e.parameter.auth : "");
+  if (ng) return ng;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
+
   // mode=restore の場合は全履歴を返す (既存互換: tokenは含めない)
   if (e.parameter && e.parameter.mode === "restore") {
     let records = [];
@@ -96,7 +118,8 @@ function doGet(e) {
             amount: amt,
             id: pick(row, C.id),
             bagNo: pick(row, C.bag),
-            address: pick(row, C.addr)
+            address: pick(row, C.addr),
+            kana: C.kana ? pick(row, C.kana) : ""
           });
         }
       }
@@ -162,6 +185,8 @@ function doPost(e) {
     }
 
     const params = JSON.parse(e.postData.contents);
+    var ng = authFail(params.auth);
+    if (ng) return ng;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName("履歴");
     
@@ -180,6 +205,7 @@ function doPost(e) {
     const token = params.token || "";
     const bagNo = params.bagNo || "";
     const address = params.address || "";
+    const kana = params.kana || "";
     
     // 表示専用の数値化金額 (I列用)
     const formattedAmount = parseAmountToDisplay(rawAmount);
@@ -234,7 +260,7 @@ function doPost(e) {
       [C.ts, timestamp], [C.name, name], [C.amount, amountCell],
       [C.item, itemCell],
       [C.id, reqId], [C.token, token], [C.bag, bagNo],
-      [C.addr, address], [C.disp, formattedAmount]
+      [C.addr, address], [C.disp, formattedAmount], [C.kana, kana]
     ];
     for (let w = 0; w < writeMap.length; w++) {
       const colIdx = writeMap[w][0];

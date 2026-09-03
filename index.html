@@ -1167,6 +1167,28 @@
             border-color: #0284c7;
         }
 
+        /* 集計の期間切替ボタン */
+        .stats-period-btn {
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .stats-period-btn:hover {
+            background: #e2e8f0;
+        }
+        .stats-period-btn.active {
+            background: #4f46e5;
+            color: #ffffff;
+            border-color: #4f46e5;
+        }
+
         /* 出所バッジ (ボトムシート) */
         .badge-source {
             font-size: 10px;
@@ -1252,10 +1274,17 @@
                 <a href="letter.html" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px;">
                     <i class="fa-solid fa-envelope-open-text"></i> 案内状・御礼状 作成
                 </a>
+                <a href="letter.html?filter=today" class="btn btn-secondary" id="btnLetterToday" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px;">
+                    <i class="fa-solid fa-envelope"></i> 今日の分に御礼状
+                </a>
             </div>
             <div id="loadingStatus" class="status">
                 <i class="fa-solid fa-circle-notch"></i>
                 <span id="statusText">フォント読み込み中...</span>
+            </div>
+            <div id="syncStatusBar" style="display:flex; justify-content:center; align-items:center; gap:10px; font-size:12px; color:#64748b; margin-top:4px; flex-wrap:wrap;">
+                <span id="syncLastAt" title="">最終同期: --</span>
+                <span id="syncPendingCount" style="display:none;"></span>
             </div>
         </header>
 
@@ -1300,6 +1329,11 @@
                         <input type="text" id="nameInput" class="form-control" placeholder="タップして選択・入力..." readonly onclick="openBottomSheet('name')" onfocus="openBottomSheet('name')" style="cursor: pointer; background: #fff;">
                         <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none;"></i>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="kanaInput">読み仮名（任意）</label>
+                    <input type="text" id="kanaInput" class="form-control" placeholder="マルヤマ タロウ">
                 </div>
 
                 <div class="form-group" style="display: grid; grid-template-columns: 0.6fr 1.4fr; gap: 12px;">
@@ -1536,6 +1570,15 @@
                             <label for="gasUrlInput">GAS ウェブアプリの URL</label>
                             <input type="text" id="gasUrlInput" class="form-control" placeholder="https://script.google.com/macros/s/.../exec" oninput="saveGasUrl()" autocomplete="off">
                         </div>
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label for="gasTokenInput">共有トークン（GASのアクセス制限用）</label>
+                            <div style="display:flex; gap:6px;">
+                                <input type="password" id="gasTokenInput" class="form-control" placeholder="未設定（GAS側も未設定なら不要）" oninput="saveGasToken()" onchange="commitGasToken()" autocomplete="off">
+                                <button type="button" id="btnToggleGasToken" onclick="toggleGasTokenVisibility()" title="表示/非表示" style="font-size: 14px; padding: 10px 14px; background: #fff; border: 1px solid #cbd5e1; color: #334155; border-radius: 8px; cursor: pointer; font-weight: 600;"><i class="fa-solid fa-eye"></i></button>
+                                <button type="button" id="btnGenGasToken" onclick="generateGasToken()" title="ランダム生成" style="font-size: 14px; padding: 10px 14px; background: #fff; border: 1px solid #cbd5e1; color: #334155; border-radius: 8px; cursor: pointer; font-weight: 600;"><i class="fa-solid fa-dice"></i></button>
+                            </div>
+                            <small style="color:#64748b; font-size:11px;">スプレッドシートへの書き込みを、このトークンを知る端末だけに制限します。GAS側のスクリプトプロパティ SHARED_TOKEN と同じ値を入れてください。</small>
+                        </div>
                         <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
                             <button type="button" class="btn btn-primary" id="btnCopyGAS" onclick="copyGasCodeToClipboard()" style="flex: 100%; font-size: 14px; padding: 10px 14px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; text-align: center;">
                                 <i class="fa-solid fa-copy"></i> 📋 配布用 GASコードをコピー
@@ -1652,6 +1695,8 @@
                         <div style="display: inline-flex; align-items: center; gap: 2px; background: #f1f5f9; padding: 2px; border-radius: 8px; border: 1px solid #cbd5e1;">
                             <button type="button" id="btnPreviewFit" onclick="setPreviewZoom('fit')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer;">全体</button>
                             <button type="button" id="btnPreviewZoom100" onclick="setPreviewZoom('100')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: transparent; color: #475569; border: none; border-radius: 6px; cursor: pointer;">100% (拡大)</button>
+                            <button type="button" id="btnPreviewZoomName" onclick="setPreviewZoom('field:name')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: transparent; color: #475569; border: none; border-radius: 6px; cursor: pointer;">氏名</button>
+                            <button type="button" id="btnPreviewZoomAmount" onclick="setPreviewZoom('field:amount')" style="padding: 2px 8px; font-size: 11px; font-weight: bold; background: transparent; color: #475569; border: none; border-radius: 6px; cursor: pointer;">金額</button>
                         </div>
                     </div>
                     <div>
@@ -1690,6 +1735,22 @@
                     <span><i class="fa-solid fa-chart-pie"></i> 印刷・奉納集計（この端末の履歴）</span>
                 </div>
             </div>
+
+            <!-- 集計期間切替 -->
+            <div id="statsPeriodBar" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+                <button type="button" class="stats-period-btn" id="statsPeriodToday"  onclick="setStatsPeriod('today')">今日</button>
+                <button type="button" class="stats-period-btn" id="statsPeriodMonth"  onclick="setStatsPeriod('month')">今月</button>
+                <button type="button" class="stats-period-btn" id="statsPeriodYear"   onclick="setStatsPeriod('year')">今年</button>
+                <button type="button" class="stats-period-btn" id="statsPeriodAll"    onclick="setStatsPeriod('all')">全期間</button>
+                <button type="button" class="stats-period-btn" id="statsPeriodCustom" onclick="setStatsPeriod('custom')">期間指定</button>
+            </div>
+            <div id="statsCustomRange" style="display:none; gap:8px; align-items:center; margin-bottom:10px;">
+                <input type="date" id="statsDateFrom" onchange="applyStatsCustomRange()">
+                <span>〜</span>
+                <input type="date" id="statsDateTo" onchange="applyStatsCustomRange()">
+            </div>
+            <div id="statsPeriodCaption" style="font-size: 12px; color: #64748b; margin-bottom: 8px;"></div>
+
             <div style="display: flex; flex-wrap: wrap; gap: 16px;">
                 <!-- 総合計エリア -->
                 <div style="flex: 1; min-width: 200px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -1710,6 +1771,12 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 前年同期比較（全期間表示のときは比較対象が無いため非表示） -->
+            <div id="statsCompareWrap" style="display:none; margin-top: 10px; font-size: 12px; color: #475569; flex-wrap: wrap; gap: 16px;">
+                <div>前年同期 奉納金合計: <span id="statTotalMoneyPrev">0</span> 円 <span id="statTotalMoneyDelta" style="font-weight: 700;"></span></div>
+                <div>前年同期 件数: <span id="statCountTotalPrev">0</span> 件 <span id="statCountTotalDelta" style="font-weight: 700;"></span></div>
+            </div>
         </div>
 
         <!-- データベース（名簿一覧）カード (v55 6列・recordsTbody統一) -->
@@ -1729,6 +1796,31 @@
                 </div>
             </div>
 
+            <!-- 一括操作バー（チェックボックスが1件以上選択されているときのみ表示） -->
+            <div id="batchToolbar" style="display:none; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                <span id="batchCount" style="font-size:13px; font-weight:600;">0件選択中</span>
+                <button type="button" id="btnBatchPrint" onclick="batchPrint()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; font-weight: 600;">
+                    <i class="fa-solid fa-print"></i> 選択分を一括印刷
+                </button>
+                <button type="button" id="btnBatchExport" onclick="batchExportCSV()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; font-weight: 600;">
+                    <i class="fa-solid fa-file-csv"></i> 選択分CSV
+                </button>
+                <button type="button" id="btnBatchDelete" onclick="batchDeleteRecords()" style="padding: 6px 12px; font-size: 12px; height: auto; background: #fff5f5; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                    <i class="fa-solid fa-trash-can"></i> 選択削除
+                </button>
+            </div>
+
+            <!-- 一括印刷の進捗バー・中断ボタン（batchPrint()実行中のみ表示） -->
+            <div id="batchProgressWrap" style="display:none; margin-top:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span id="batchProgressLabel" style="font-size:13px; font-weight:600;">0 / 0 件</span>
+                    <button type="button" id="btnBatchAbort" onclick="abortBatchPrint()" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px; border-radius: 6px; font-weight: 600;">中断</button>
+                </div>
+                <div id="batchProgressTrack" style="height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden;">
+                    <div id="batchProgressBar" style="height:100%; width:0%; background:#4f46e5; transition:width .15s;"></div>
+                </div>
+            </div>
+
             <!-- 絞り込みチップ -->
             <div class="filter-chips" id="filterChipsContainer" style="margin-bottom: 14px;">
                 <button type="button" class="chip active" data-chip="all" onclick="setFilterChip('all')">全て</button>
@@ -1744,6 +1836,7 @@
                 <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
                     <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 10; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <tr>
+                            <th style="width:36px; padding: 12px 6px; border-bottom: 2px solid #cbd5e1;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)"></th>
                             <th onclick="toggleSort('date')" style="cursor: pointer; white-space: nowrap; padding: 12px 10px; border-bottom: 2px solid #cbd5e1;">日時 <span id="sort-icon-date" style="color: #b91c1c;">▼</span></th>
                             <th onclick="toggleSort('bag')" style="cursor: pointer; white-space: nowrap; padding: 12px 10px; border-bottom: 2px solid #cbd5e1;">袋番号 <span id="sort-icon-bag"></span></th>
                             <th onclick="toggleSort('name')" style="cursor: pointer; white-space: nowrap; padding: 12px 10px; border-bottom: 2px solid #cbd5e1;">奉納者氏名 <span id="sort-icon-name"></span></th>
@@ -1776,7 +1869,7 @@
         </div>
 
         <footer style="text-align: center; padding: 20px 0; font-size: 13px; color: #94a3b8; border-top: 1px solid #e2e8f0; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px;">
-            <span>奉納ビラシステム v83 (2026/07/29 更新)</span>
+            <span>奉納ビラシステム v84 (2026/09/03 更新)</span>
             <button type="button" class="btn" onclick="openLogModal()" style="padding: 3px 10px; font-size: 11px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;">
                 <i class="fa-solid fa-list-check"></i> ログ
                 <span id="logBadge" style="background: #94a3b8; color: white; border-radius: 10px; padding: 1px 6px; font-size: 10px; font-weight: bold;">0</span>
@@ -1875,6 +1968,29 @@
         </div>
     </div>
 
+    <!-- GASコード コピー失敗時のフォールバックモーダル -->
+    <div class="bottom-sheet-overlay" id="gasCodeFallbackModalOverlay" onclick="closeGasCodeFallbackModal()"></div>
+    <div class="bottom-sheet" id="gasCodeFallbackModal" style="height: 75vh;">
+        <div class="sheet-header">
+            <div class="sheet-handle"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 18px; font-weight: bold; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-code" style="color: #0284c7;"></i> GASコード（手動コピー）
+                </h3>
+                <button class="btn-close" onclick="closeGasCodeFallbackModal()"><i class="fa-solid fa-circle-xmark"></i></button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+                お使いの環境では自動コピーができませんでした。下のテキストを全選択（Ctrl/⌘+A）してコピーしてください。
+            </p>
+        </div>
+        <div class="sheet-content" style="padding: 10px 16px;">
+            <textarea id="gasCodeFallbackText" readonly style="width:100%; height: 100%; min-height: 300px; font-family: monospace; font-size: 11px; box-sizing: border-box; padding: 10px;"></textarea>
+        </div>
+        <div style="padding: 16px; display: flex; gap: 10px; background: #fff; border-top: 1px solid #e2e8f0;">
+            <button class="btn btn-secondary" onclick="closeGasCodeFallbackModal()" style="padding: 12px 20px; flex: 1;">閉じる</button>
+        </div>
+    </div>
+
     <!-- CSV一括インポートモーダル -->
     <div class="bottom-sheet-overlay" id="csvImportModalOverlay" onclick="closeCsvImportModal()"></div>
     <div class="bottom-sheet" id="csvImportModal" style="height: 80vh;">
@@ -1912,7 +2028,7 @@
     </div>
 
     <!-- 差し込み印刷制御JavaScript (キャッシュ回避用パラメータ付与) -->
-    <script src="app.js?v=83"></script>
+    <script src="app.js?v=84"></script>
 
 </body>
 </html>
